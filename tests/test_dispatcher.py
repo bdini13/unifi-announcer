@@ -471,6 +471,7 @@ async def test_capacity_upload_error_evicts_one_and_retries_once(tmp_path):
     )
     upload = AsyncMock(side_effect=[RingtoneCapacityError("full"), {}])
     reconciler = SimpleNamespace(
+        max_total=1,
         ensure_capacity=AsyncMock(side_effect=[[], [{"nvr_delete": "deleted"}]]),
         evict_to_limit=AsyncMock(return_value=[]),
     )
@@ -489,9 +490,42 @@ async def test_capacity_upload_error_evicts_one_and_retries_once(tmp_path):
 
     assert result.disposition == "played"
     assert upload.await_count == 2
-    assert reconciler.ensure_capacity.await_args_list[-1].kwargs == {"needed": 2}
+    assert reconciler.ensure_capacity.await_args_list[-1].kwargs == {"needed": 1}
     index.force_refresh.assert_awaited_once()
     assert ("ringtone_capacity_retries", 1) in metrics.counters
+
+
+@pytest.mark.asyncio
+async def test_empty_400_does_not_evict_or_retry_below_verified_capacity(tmp_path):
+    from app.tracks import RingtoneCapacityError, TrackRegistry
+
+    target = SimpleNamespace(
+        desc=SimpleNamespace(name="one", chime_id="id-one"),
+        queue=SimpleNamespace(submit=lambda request: request.run()),
+    )
+    upload = AsyncMock(side_effect=RingtoneCapacityError("invalid media"))
+    reconciler = SimpleNamespace(
+        max_total=6, ensure_capacity=AsyncMock(return_value=[]),
+        evict_to_limit=AsyncMock(return_value=[]),
+    )
+    dispatcher = AnnouncementDispatcher(
+        protect=SimpleNamespace(play=AsyncMock()),
+        ringtone_backend=SimpleNamespace(list_ringtones=AsyncMock(return_value=[{"id": "one"}])),
+        chime=SimpleNamespace(upload_ringtone=upload),
+        ringtone_index=SimpleNamespace(get=lambda key: None, loaded=True),
+        synthesize=AsyncMock(return_value=b"mp3"), slug=lambda text: "key",
+        resolve_preset=AsyncMock(), resolve_targets=lambda selected: [target],
+        profile=lambda values: values, quiet=lambda: False, metrics=_Metrics(),
+        volume_default=50, repeat_default=1,
+        track_registry=TrackRegistry(tmp_path / "tracks.json"),
+        track_reconciler=reconciler,
+    )
+
+    with pytest.raises(RingtoneCapacityError, match="invalid media"):
+        await dispatcher.dispatch(AnnouncementCommand(action="announce", text="hello"))
+
+    assert upload.await_count == 1
+    assert reconciler.ensure_capacity.await_count == 1
 
 
 @pytest.mark.asyncio

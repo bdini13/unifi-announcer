@@ -280,9 +280,11 @@ class AnnouncementDispatcher:
                         if (self.track_reconciler is None
                                 or not hasattr(self.track_reconciler, "ensure_capacity")):
                             raise
-                        self.metrics.inc("ringtone_capacity_retries")
                         snapshot = await self.ringtone_backend.list_ringtones()
-                        evicted = await self.track_reconciler.ensure_capacity(snapshot, needed=2)
+                        if len(snapshot) < self.track_reconciler.max_total:
+                            raise
+                        self.metrics.inc("ringtone_capacity_retries")
+                        evicted = await self.track_reconciler.ensure_capacity(snapshot, needed=1)
                         if not any(item.get("nvr_delete") == "deleted" for item in evicted):
                             raise
                         await self.index.force_refresh()

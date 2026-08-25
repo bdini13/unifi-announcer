@@ -1042,12 +1042,12 @@ async def create_or_update_preset(
         name: str, mp3: bytes, force: bool = False
 ) -> str:
     """Upload a preset tone if missing (or force=True to replace); returns its ID."""
-    existing = ringtone_index.get(name)
-    if not existing and not ringtone_index.loaded:
-        existing = await ringtone_index.resolve_or_refresh(name)
-    if existing and not force:
-        return existing["id"]
     async with ringtone_upload_lock:
+        existing = ringtone_index.get(name)
+        if not existing:
+            existing = await ringtone_index.resolve_or_refresh(name)
+        if existing and not force:
+            return existing["id"]
         if existing and force:
             await protect.delete_ringtone(existing["id"])
             ringtone_index.invalidate(name)
@@ -1059,9 +1059,11 @@ async def create_or_update_preset(
         try:
             await chime_client.upload_ringtone(name, mp3)
         except RingtoneCapacityError:
-            metrics.inc("ringtone_capacity_retries")
             snapshot = await protect_backends.ringtone.list_ringtones()
-            await track_reconciler.ensure_capacity(snapshot, needed=2)
+            if len(snapshot) < track_reconciler.max_total:
+                raise
+            metrics.inc("ringtone_capacity_retries")
+            await track_reconciler.ensure_capacity(snapshot, needed=1)
             await ringtone_index.force_refresh()
             await chime_client.upload_ringtone(name, mp3)
     # Resolve the NVR ringtone ID via the RAM index (one refresh fallback).
