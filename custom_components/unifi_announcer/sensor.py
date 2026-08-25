@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from homeassistant.components.sensor import SensorEntity
 
+from .const import INTEGRATION_VERSION
 from .entity import UniFiAnnouncerEntity, configured_targets
 
 
@@ -13,10 +14,17 @@ async def async_setup_entry(hass, entry, async_add_entities) -> None:
         UniFiAnnouncerServiceSensor(entry, coordinator, "version"),
     ]
     for target, chime_id, is_group in configured_targets(coordinator):
-        entities.extend([
-            UniFiAnnouncerTargetSensor(entry, coordinator, target, chime_id, is_group, "queue_depth"),
-            UniFiAnnouncerTargetSensor(entry, coordinator, target, chime_id, is_group, "last_disposition"),
-        ])
+        if not is_group:
+            entities.append(
+                UniFiAnnouncerTargetSensor(
+                    entry, coordinator, target, chime_id, is_group, "queue_depth"
+                )
+            )
+        entities.append(
+            UniFiAnnouncerTargetSensor(
+                entry, coordinator, target, chime_id, is_group, "last_disposition"
+            )
+        )
     async_add_entities(entities)
 
 
@@ -33,9 +41,18 @@ class UniFiAnnouncerServiceSensor(UniFiAnnouncerEntity, SensorEntity):
     @property
     def native_value(self):
         if self.kind == "version":
-            return self.runtime.version.get("git_sha") or self.runtime.version.get("service")
+            return self.runtime.version.get("version") or INTEGRATION_VERSION
         health = (self.coordinator.data or {}).get("health", {})
         return health.get("status", "unknown")
+
+    @property
+    def extra_state_attributes(self):
+        if self.kind != "version":
+            return None
+        return {
+            "git_sha": self.runtime.version.get("git_sha", "unknown"),
+            "service": self.runtime.version.get("service", "unifi-announcer"),
+        }
 
 
 class UniFiAnnouncerTargetSensor(UniFiAnnouncerEntity, SensorEntity):
@@ -44,15 +61,15 @@ class UniFiAnnouncerTargetSensor(UniFiAnnouncerEntity, SensorEntity):
     def __init__(self, entry, coordinator, target, chime_id, is_group, kind: str) -> None:
         super().__init__(entry, coordinator, target, chime_id, is_group)
         self.kind = kind
-        self._attr_unique_id = f"{entry.entry_id}_{target}_{kind}"
+        self._attr_unique_id = f"{entry.entry_id}_{self.entity_key}_{kind}"
         self._attr_translation_key = kind
-        self._attr_name = target
+        self._attr_name = None
 
     @property
     def native_value(self):
         if self.kind == "last_disposition":
             return self.runtime.last_disposition.get(self.target, "unknown")
         for item in (self.coordinator.data or {}).get("chimes", {}).get("chimes", []):
-            if item.get("name") == self.target:
+            if item.get("id") == self.chime_id or item.get("name") == self.target:
                 return item.get("queue_depth", 0)
-        return 0
+        return None

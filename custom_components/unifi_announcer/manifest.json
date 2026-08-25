@@ -1,11 +1,12 @@
 {
   "domain": "unifi_announcer",
   "name": "UniFi Announcer",
-  "version": "2.1.0",
+  "codeowners": ["@bdini13"],
   "config_flow": true,
   "documentation": "https://github.com/bdini13/unifi-announcer",
-  "issue_tracker": "https://github.com/bdini13/unifi-announcer/issues",
-  "codeowners": ["@bdini13"],
+  "integration_type": "hub",
   "iot_class": "local_polling",
-  "integration_type": "hub"
+  "issue_tracker": "https://github.com/bdini13/unifi-announcer/issues",
+  "single_config_entry": true,
+  "version": "2.1.0-beta.2"
 }

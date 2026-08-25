@@ -8,11 +8,11 @@ import voluptuous as vol
 
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import PlaybackFailed, UniFiAnnouncerClient
+from .api import AuthenticationError, CannotConnect, PlaybackFailed, UniFiAnnouncerClient
 from .const import (
     CONF_API_KEY,
     CONF_DEFAULT_REPEAT,
@@ -45,7 +45,14 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
         entry.data[CONF_URL],
         entry.data.get(CONF_API_KEY, ""),
     )
-    version = await client.async_get_version()
+    try:
+        await client.async_check_auth()
+        version = await client.async_get_version()
+    except AuthenticationError as exc:
+        raise ConfigEntryAuthFailed("UniFi Announcer rejected the configured API key") from exc
+    except CannotConnect as exc:
+        raise ConfigEntryNotReady("Cannot connect to UniFi Announcer") from exc
+
     coordinator = UniFiAnnouncerCoordinator(
         hass,
         client,
@@ -60,7 +67,10 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry) -> bool:
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok and hass.services.has_service(DOMAIN, "announce"):
+        hass.services.async_remove(DOMAIN, "announce")
+    return unload_ok
 
 
 async def _async_options_updated(hass: HomeAssistant, entry) -> None:

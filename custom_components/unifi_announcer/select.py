@@ -22,7 +22,7 @@ class UniFiAnnouncerPresetSelect(UniFiAnnouncerEntity, SelectEntity):
 
     def __init__(self, entry, coordinator, target, chime_id, is_group) -> None:
         super().__init__(entry, coordinator, target, chime_id, is_group)
-        self._attr_unique_id = f"{entry.entry_id}_{target}_preset_select"
+        self._attr_unique_id = f"{entry.entry_id}_{self.entity_key}_preset_select"
 
     @property
     def options(self) -> list[str]:

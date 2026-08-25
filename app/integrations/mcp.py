@@ -44,11 +44,12 @@ class _BearerAuthASGI:
 
 
 def build_mcp_runtime(
-    services: Callable[[], Any], *, api_key: str, allowed_hosts: list[str]
+    services: Callable[[], Any], *, api_key: str, allowed_hosts: list[str],
+    groups: Callable[[], dict[str, list[str]]] | None = None,
 ) -> MCPRuntime:
     """Build a mountable MCP v2 server.
 
-    `streamable_http_path="/"` is intentional: the parent FastAPI app mounts
+    `streamable_http_path="/"` is intentional: the parent application mounts
     this ASGI application at `/mcp`, making the public endpoint exactly `/mcp`.
     The parent lifespan must enter `server.session_manager.run()`.
     """
@@ -88,7 +89,7 @@ def build_mcp_runtime(
                  "capability_state": runtime.capability_state}
                 for name, runtime in svc.chime_runtimes.items()
             ],
-            "groups": getattr(svc.dispatcher, "groups", None),
+            "groups": groups() if groups is not None else {},
         }
 
     @server.tool()

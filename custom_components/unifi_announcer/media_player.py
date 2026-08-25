@@ -23,11 +23,11 @@ class UniFiAnnouncerMediaPlayer(UniFiAnnouncerEntity, MediaPlayerEntity):
     _attr_supported_features = MediaPlayerEntityFeature.PLAY_MEDIA
     _attr_state = STATE_IDLE
     _attr_translation_key = "speaker"
+    _attr_name = None
 
     def __init__(self, entry, coordinator, target, chime_id, is_group) -> None:
         super().__init__(entry, coordinator, target, chime_id, is_group)
-        self._attr_unique_id = f"{entry.entry_id}_{target}_media_player"
-        self._attr_name = target
+        self._attr_unique_id = f"{entry.entry_id}_{self.entity_key}_media_player"
 
     async def async_play_media(self, media_type: str, media_id: str, **kwargs) -> None:
         try:

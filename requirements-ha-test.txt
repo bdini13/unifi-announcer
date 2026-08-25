@@ -1,0 +1,4 @@
+# Generated test helpers aligned with a published Home Assistant 2026.3 release.
+# Kept separate from runtime requirements to avoid coupling the Docker service
+# to Home Assistant's dependency graph.
+pytest-homeassistant-custom-component==0.13.318

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from homeassistant.components.diagnostics import async_redact_data
 
+from .const import INTEGRATION_VERSION
+
 TO_REDACT = {"api_key", "password", "token", "authorization"}
 
 
@@ -13,7 +15,7 @@ async def async_get_config_entry_diagnostics(hass, entry) -> dict:
     return {
         "config_entry": safe_entry,
         "options": dict(entry.options),
-        "integration_version": "2.1.0",
+        "integration_version": INTEGRATION_VERSION,
         "announcer_version": runtime.version,
         "health": data.get("health", {}),
         "chimes": [
