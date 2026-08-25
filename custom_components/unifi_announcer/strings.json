@@ -12,7 +12,7 @@
           "instance_name": "Instance name"
         },
         "data_description": {
-          "url": "Base URL of the UniFi Announcer service, for example http://announcer.local:8095.",
+          "url": "Base URL of the local UniFi Announcer service, including scheme, host, and port.",
           "api_key": "APP_API_KEY configured on the Announcer service. Leave empty when the service intentionally runs in trusted-LAN open mode.",
           "verify_ssl": "Verify the TLS certificate when using an HTTPS Announcer URL.",
           "instance_name": "Display name for the Announcer service in Home Assistant."
