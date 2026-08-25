@@ -12,6 +12,6 @@ services:
     ports:
       - "${HOST_PORT}:8095"
     volumes:
-      - ${DATA_ROOT:-/opt/docker}/unifi-announcer/data:/data
+      - ${DATA_PATH:-./data}:/data
     labels:
       - "com.centurylinklabs.watchtower.enable=true"

@@ -142,6 +142,11 @@ docker compose up -d --build
 docker compose logs -f unifi-announcer
 ```
 
+Persistent files are stored in `./data` beside `docker-compose.yml`; that
+directory is ignored by Git. To use a NAS or another bind-mount location, set an
+absolute host path in `.env`, for example `DATA_PATH=/srv/unifi-announcer/data`,
+before starting the service.
+
 Set the URL to the address of the machine running this container:
 
 ```bash
@@ -366,6 +371,7 @@ See [`.env.example`](.env.example) for every option.
 | `PIPER_SYNTH_TIMEOUT` | `15` | Timeout in seconds for each Piper attempt |
 | `APP_API_KEY` | empty | Protect write routes with `X-API-Key` |
 | `HOST_PORT` | `8095` | Port exposed on the Docker host |
+| `DATA_PATH` | `./data` | Host path mounted at `/data`; may be an absolute NAS/server path |
 | `VOLUME_DEFAULT` | `50` | Default volume when the request does not specify one |
 | `REPEAT_DEFAULT` | `1` | Default repeat count |
 | `QUIET_HOURS` | empty | Suppression window such as `22:00-06:30` |
