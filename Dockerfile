@@ -14,11 +14,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the package, not only main.py: command adapters, dispatcher, cache,
-# protocol boundaries, and observability are runtime dependencies.
+# protocol boundaries, observability, and optional MCP composition are runtime dependencies.
 COPY app /app/app
 
 RUN useradd -m -u 1000 announcer && mkdir -p /data && chown announcer:announcer /data
 USER announcer
 
 EXPOSE 8095
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8095", "--workers", "1"]
+CMD ["uvicorn", "app.server:app", "--host", "0.0.0.0", "--port", "8095", "--workers", "1"]

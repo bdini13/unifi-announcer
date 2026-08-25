@@ -21,4 +21,7 @@ jobs:
           UNIFI_HOST: "https://unifi.invalid"
           CHIME_DIRECT_IP: "192.0.2.10"
       - run: ruff check .
+      - run: python -m compileall -q app custom_components
+      - run: python -m json.tool custom_components/unifi_announcer/manifest.json >/dev/null
+      - run: python -m json.tool hacs.json >/dev/null
       - run: docker build --build-arg GIT_SHA=${{ github.sha }} .
