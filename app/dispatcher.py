@@ -8,7 +8,7 @@ from typing import Any, Awaitable, Callable, Literal
 
 from app.observability import AnnouncementTiming
 from app.playback.arbitration import PlaybackRequest, QueueDisposition, QueueResult
-from app.tracks import TrackRecord
+from app.tracks import RingtoneCapacityError, TrackRecord
 
 Action = Literal["announce", "buzzer", "play_default", "play_preset"]
 
@@ -69,8 +69,11 @@ class AnnouncementDispatcher:
                  debug_timings: bool = False,
                  playback_policy: Any | None = None,
                  track_registry: Any | None = None,
-                 track_reconciler: Any | None = None) -> None:
+                 track_reconciler: Any | None = None,
+                 ringtone_backend: Any | None = None,
+                 upload_lock: asyncio.Lock | None = None) -> None:
         self.protect = protect
+        self.ringtone_backend = ringtone_backend or protect
         self.chime = chime
         self.index = ringtone_index
         self.synthesize = synthesize
@@ -88,6 +91,7 @@ class AnnouncementDispatcher:
         self.track_reconciler = track_reconciler
         self._creation_locks: dict[str, asyncio.Lock] = {}
         self._creation_lock_users: dict[str, int] = {}
+        self._upload_lock = upload_lock or asyncio.Lock()
 
     async def dispatch(self, command: AnnouncementCommand) -> DispatchResult:
         total_started = perf_counter_ns()
@@ -262,25 +266,43 @@ class AnnouncementDispatcher:
                     timing.set("encode", encode_ms)
                 direct_clients = [target.direct_client for target in targets
                                   if getattr(target, "direct_client", None) is not None]
-                await self._timed(timing, "upload", self.chime.upload_ringtone(
-                    key, mp3, direct_clients=direct_clients))
-                tone = await self.index.resolve_or_refresh(key)
-                if not tone:
-                    raise RuntimeError("upload succeeded but tone not found on NVR")
-                self.index.put(tone)
-                if self.track_registry is not None:
-                    self.track_registry.put(TrackRecord(
-                        logical_key=key,
-                        kind="dynamic_tts",
-                        owner="unifi_announcer",
-                        nvr_ringtone_id=tone["id"],
-                        nvr_ringtone_name=tone.get("name", key),
-                    ))
-                if self.track_reconciler is not None:
-                    evicted = await self.track_reconciler.evict_to_limit()
-                    if any(item.get("nvr_delete") == "deleted" for item in evicted):
+                async with self._upload_lock:
+                    if (self.track_reconciler is not None
+                            and hasattr(self.track_reconciler, "ensure_capacity")):
+                        snapshot = await self.ringtone_backend.list_ringtones()
+                        evicted = await self.track_reconciler.ensure_capacity(snapshot, needed=1)
+                        if any(item.get("nvr_delete") == "deleted" for item in evicted):
+                            await self.index.force_refresh()
+                    try:
+                        await self._timed(timing, "upload", self.chime.upload_ringtone(
+                            key, mp3, direct_clients=direct_clients))
+                    except RingtoneCapacityError:
+                        if (self.track_reconciler is None
+                                or not hasattr(self.track_reconciler, "ensure_capacity")):
+                            raise
+                        self.metrics.inc("ringtone_capacity_retries")
+                        snapshot = await self.ringtone_backend.list_ringtones()
+                        evicted = await self.track_reconciler.ensure_capacity(snapshot, needed=2)
+                        if not any(item.get("nvr_delete") == "deleted" for item in evicted):
+                            raise
                         await self.index.force_refresh()
-                return tone["id"]
+                        await self._timed(timing, "upload", self.chime.upload_ringtone(
+                            key, mp3, direct_clients=direct_clients))
+                    tone = await self.index.resolve_or_refresh(key)
+                    if not tone:
+                        raise RuntimeError("upload succeeded but tone not found on NVR")
+                    self.index.put(tone)
+                    if self.track_registry is not None:
+                        self.track_registry.put(TrackRecord(
+                            logical_key=key, kind="dynamic_tts", owner="unifi_announcer",
+                            nvr_ringtone_id=tone["id"],
+                            nvr_ringtone_name=tone.get("name", key),
+                        ))
+                    if self.track_reconciler is not None:
+                        evicted = await self.track_reconciler.evict_to_limit()
+                        if any(item.get("nvr_delete") == "deleted" for item in evicted):
+                            await self.index.force_refresh()
+                    return tone["id"]
         finally:
             users = self._creation_lock_users[key] - 1
             if users:

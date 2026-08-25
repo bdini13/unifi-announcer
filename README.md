@@ -380,6 +380,7 @@ See [`.env.example`](.env.example) for every option.
 | `QUIET_HOURS` | empty | Suppression window such as `22:00-06:30` |
 | `VOLUME_PROFILES` | `{}` | Named volume/repeat profiles as JSON |
 | `MAX_DYNAMIC_TRACKS` | `32` | Maximum service-owned dynamic TTS records |
+| `MAX_TOTAL_RINGTONES` | `6` | Conservative total Protect ringtone ceiling; evicts owned dynamic TTS before upload |
 | `PLAY_QUEUE_MAX_DEPTH` | `16` | Per-chime playback queue limit |
 | `EVENTS_ENABLED` | `true` | Enable the Protect WebSocket listener |
 | `EVENTS_BUFFER_MAX` | `100` | Number of recent events kept in memory |
@@ -439,6 +440,7 @@ When direct access fails, supported operations fall back to Protect. Destructive
 - Ringtone IDs live in one in-memory `RingtoneIndex`.
 - Simultaneous first requests for the same phrase share ringtone creation.
 - Dynamic TTS records are bounded by `MAX_DYNAMIC_TRACKS` and evicted by recent use.
+- Before creating a ringtone, the service reserves headroom under `MAX_TOTAL_RINGTONES` and retries one capacity-style HTTP 400 after one safe LRU eviction.
 - Cleanup only targets unpinned records owned by `unifi_announcer`.
 - Presets, built-ins, and user-created tones are not dynamic cleanup candidates.
 - Device flash is not deleted because its deletion semantics have not been proven safe.

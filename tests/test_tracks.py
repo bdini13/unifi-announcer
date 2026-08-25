@@ -2,7 +2,9 @@ import json
 
 import pytest
 
-from app.tracks import SERVICE_OWNER, TrackRecord, TrackRegistry, TrackReconciler
+from app.tracks import (
+    RingtoneCapacityError, SERVICE_OWNER, TrackRecord, TrackRegistry, TrackReconciler,
+)
 
 
 def test_track_record_round_trip_has_all_identities(tmp_path):
@@ -147,3 +149,88 @@ async def test_gc_runs_are_serialized(tmp_path):
     await asyncio.gather(reconciler.evict_to_limit(), reconciler.evict_to_limit())
 
     assert peak == 1
+
+
+@pytest.mark.asyncio
+async def test_total_capacity_evicts_oldest_owned_dynamic_before_upload(tmp_path):
+    registry = TrackRegistry(tmp_path / "registry.json", max_dynamic=32)
+    registry.put(TrackRecord("old", nvr_ringtone_id="owned-old", last_used_at=1.0))
+    registry.put(TrackRecord("new", nvr_ringtone_id="owned-new", last_used_at=2.0))
+    registry.put(TrackRecord("pinned", nvr_ringtone_id="owned-pinned",
+                             last_used_at=0.0, pinned=True))
+    deleted = []
+    reconciler = TrackReconciler(
+        registry, delete_nvr=lambda rid: _record(deleted, rid), max_total=5,
+    )
+    snapshot = [
+        {"id": "preset", "name": "preset"},
+        {"id": "foreign", "name": "foreign"},
+        {"id": "owned-old", "name": "old"},
+        {"id": "owned-new", "name": "new"},
+        {"id": "owned-pinned", "name": "pinned"},
+    ]
+
+    report = await reconciler.ensure_capacity(snapshot, needed=1)
+
+    assert deleted == ["owned-old"]
+    assert report[0]["reason"] == "total-capacity"
+    assert "old" not in registry.records
+    assert set(registry.records) == {"new", "pinned"}
+
+
+@pytest.mark.asyncio
+async def test_total_capacity_never_deletes_pinned_or_foreign_tracks(tmp_path):
+    registry = TrackRegistry(tmp_path / "registry.json", max_dynamic=32)
+    registry.put(TrackRecord("pinned", nvr_ringtone_id="owned-pinned", pinned=True))
+    deleted = []
+    reconciler = TrackReconciler(
+        registry, delete_nvr=lambda rid: _record(deleted, rid), max_total=2,
+    )
+
+    with pytest.raises(RingtoneCapacityError, match="no safe owned dynamic"):
+        await reconciler.ensure_capacity([
+            {"id": "foreign", "name": "foreign"},
+            {"id": "owned-pinned", "name": "pinned"},
+        ], needed=1)
+
+    assert deleted == []
+    assert "pinned" in registry.records
+
+
+@pytest.mark.asyncio
+async def test_total_capacity_skips_failed_delete_and_uses_next_lru(tmp_path):
+    registry = TrackRegistry(tmp_path / "registry.json", max_dynamic=32)
+    registry.put(TrackRecord("first", nvr_ringtone_id="fails", last_used_at=1.0))
+    registry.put(TrackRecord("second", nvr_ringtone_id="works", last_used_at=2.0))
+    attempted = []
+
+    async def delete(ringtone_id):
+        attempted.append(ringtone_id)
+        return ringtone_id == "works"
+
+    reconciler = TrackReconciler(registry, delete_nvr=delete, max_total=2)
+    report = await reconciler.ensure_capacity([
+        {"id": "fails"}, {"id": "works"},
+    ], needed=1)
+
+    assert attempted == ["fails", "works"]
+    assert [item["nvr_delete"] for item in report] == ["failed", "deleted"]
+    assert "first" in registry.records
+    assert "second" not in registry.records
+
+
+@pytest.mark.asyncio
+async def test_total_capacity_ignores_stale_registry_ids_not_in_snapshot(tmp_path):
+    registry = TrackRegistry(tmp_path / "registry.json", max_dynamic=32)
+    registry.put(TrackRecord("stale", nvr_ringtone_id="gone", last_used_at=1.0))
+    registry.put(TrackRecord("present", nvr_ringtone_id="present", last_used_at=2.0))
+    deleted = []
+    reconciler = TrackReconciler(
+        registry, delete_nvr=lambda rid: _record(deleted, rid), max_total=1,
+    )
+
+    await reconciler.ensure_capacity([{"id": "present"}], needed=1)
+
+    assert deleted == ["present"]
+    assert "stale" in registry.records
+    assert "present" not in registry.records

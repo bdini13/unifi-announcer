@@ -254,6 +254,9 @@ class ProtectClient:
         files = {"file": (f"{name}.mp3", mp3, "audio/mpeg")}
         r = await self._do("POST", "/proxy/protect/api/ringtones",
                            files=files, data={"name": name})
+        if r.status_code == 400 and not r.text.strip():
+            raise RingtoneCapacityError(
+                "Protect rejected ringtone upload at practical capacity: HTTP 400")
         if r.status_code != 200:
             raise RuntimeError(f"Ringtone upload failed: HTTP {r.status_code}: {r.text[:200]}")
         return r.json()
@@ -792,11 +795,13 @@ ringtone_index = ModularRingtoneIndex()
 # persisted to /data so restarts don't lose the mapping.
 # ---------------------------------------------------------------------------
 
-from app.tracks import TrackRecord, TrackRegistry, TrackReconciler
+from app.tracks import RingtoneCapacityError, TrackRecord, TrackRegistry, TrackReconciler
 
 MAX_DYNAMIC_TRACKS = int(os.getenv("MAX_DYNAMIC_TRACKS", "32"))
 track_registry = TrackRegistry(max_dynamic=MAX_DYNAMIC_TRACKS)
-track_reconciler = TrackReconciler(track_registry)
+MAX_TOTAL_RINGTONES = int(os.getenv("MAX_TOTAL_RINGTONES", "6"))
+track_reconciler = TrackReconciler(track_registry, max_total=MAX_TOTAL_RINGTONES)
+ringtone_upload_lock = asyncio.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -1042,11 +1047,23 @@ async def create_or_update_preset(
         existing = await ringtone_index.resolve_or_refresh(name)
     if existing and not force:
         return existing["id"]
-    if existing and force:
-        await protect.delete_ringtone(existing["id"])
-        ringtone_index.invalidate(name)
-    # Upload via facade: direct-to-device primary, NVR relay as standby.
-    await chime_client.upload_ringtone(name, mp3)
+    async with ringtone_upload_lock:
+        if existing and force:
+            await protect.delete_ringtone(existing["id"])
+            ringtone_index.invalidate(name)
+        snapshot = await protect_backends.ringtone.list_ringtones()
+        evicted = await track_reconciler.ensure_capacity(snapshot, needed=1)
+        if any(item.get("nvr_delete") == "deleted" for item in evicted):
+            await ringtone_index.force_refresh()
+        # Upload via facade: direct-to-device primary, NVR relay as standby.
+        try:
+            await chime_client.upload_ringtone(name, mp3)
+        except RingtoneCapacityError:
+            metrics.inc("ringtone_capacity_retries")
+            snapshot = await protect_backends.ringtone.list_ringtones()
+            await track_reconciler.ensure_capacity(snapshot, needed=2)
+            await ringtone_index.force_refresh()
+            await chime_client.upload_ringtone(name, mp3)
     # Resolve the NVR ringtone ID via the RAM index (one refresh fallback).
     # Playback itself remains NVR-relay: the device only accepts play commands
     # from its paired controller over ucp4 wss.
@@ -1826,6 +1843,8 @@ dispatcher = AnnouncementDispatcher(
     playback_policy=playback_policy,
     track_registry=track_registry,
     track_reconciler=track_reconciler,
+    ringtone_backend=protect_backends.ringtone,
+    upload_lock=ringtone_upload_lock,
 )
 
 

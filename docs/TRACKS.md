@@ -30,6 +30,14 @@ If an NVR or disk deletion fails, the registry entry is retained for a later
 reconciliation. This avoids losing ownership evidence. Built-ins, unknown
 snapshot entries, non-owned records, and pinned records are never GC candidates.
 
+`MAX_TOTAL_RINGTONES` (default 6) also reserves space against the complete
+Protect ringtone inventory before each new TTS upload. If the total would cross
+that ceiling, the service deletes only the least-recently-used unpinned
+`dynamic_tts` record it owns. Presets, built-ins, pinned records, and unknown or
+user-created tones are never selected. A capacity-style HTTP 400 triggers one
+additional owned-dynamic eviction and one upload retry; it never broadens the
+deletion boundary.
+
 No direct-slot experiment is required for, or run by, reconciliation.
 
 ## Direct overwrite boundary

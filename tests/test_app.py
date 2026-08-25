@@ -50,6 +50,8 @@ async def test_announce_cache_miss_uploads_and_preserves_zero_volume(
     monkeypatch.setattr(main_module, "APP_API_KEY", "")
     monkeypatch.setattr(main_module.protect, "find_ringtone_by_name",
                         AsyncMock(return_value=None))
+    monkeypatch.setattr(main_module.protect, "list_ringtones",
+                        AsyncMock(return_value=[]))
     monkeypatch.setattr(main_module, "synthesize_tts_cached",
                         AsyncMock(return_value=b"sanitized-mp3-fixture"))
     upload = AsyncMock(return_value={"uploaded": True, "via": "nvr"})

@@ -417,6 +417,117 @@ async def test_new_dynamic_announcement_is_registered_and_gc_runs_once(tmp_path)
 
 
 @pytest.mark.asyncio
+async def test_announcement_reserves_total_capacity_before_upload(tmp_path):
+    from app.tracks import TrackRegistry
+
+    index = SimpleNamespace(
+        get=lambda key: None, loaded=True,
+        resolve_or_refresh=AsyncMock(return_value={"id": "tone-1", "name": "key"}),
+        put=lambda tone: None,
+    )
+    target = SimpleNamespace(
+        desc=SimpleNamespace(name="one", chime_id="id-one"),
+        queue=SimpleNamespace(submit=lambda request: request.run()),
+    )
+    protect = SimpleNamespace(
+        play=AsyncMock(return_value={}),
+        list_ringtones=AsyncMock(return_value=[{"id": "existing"}]),
+    )
+    reconciler = SimpleNamespace(
+        ensure_capacity=AsyncMock(return_value=[]),
+        evict_to_limit=AsyncMock(return_value=[]),
+    )
+    dispatcher = AnnouncementDispatcher(
+        protect=protect, chime=SimpleNamespace(upload_ringtone=AsyncMock(return_value={})),
+        ringtone_index=index, synthesize=AsyncMock(return_value=b"mp3"),
+        slug=lambda text: "key", resolve_preset=AsyncMock(),
+        resolve_targets=lambda selected: [target], profile=lambda values: values,
+        quiet=lambda: False, metrics=_Metrics(), volume_default=50, repeat_default=1,
+        track_registry=TrackRegistry(tmp_path / "tracks.json"),
+        track_reconciler=reconciler,
+    )
+
+    await dispatcher.dispatch(AnnouncementCommand(action="announce", text="hello"))
+
+    reconciler.ensure_capacity.assert_awaited_once_with([{"id": "existing"}], needed=1)
+
+
+@pytest.mark.asyncio
+async def test_capacity_upload_error_evicts_one_and_retries_once(tmp_path):
+    from app.tracks import RingtoneCapacityError, TrackRegistry
+
+    index = SimpleNamespace(
+        get=lambda key: None, loaded=True,
+        resolve_or_refresh=AsyncMock(return_value={"id": "tone-1", "name": "key"}),
+        put=lambda tone: None, force_refresh=AsyncMock(),
+    )
+    target = SimpleNamespace(
+        desc=SimpleNamespace(name="one", chime_id="id-one"),
+        queue=SimpleNamespace(submit=lambda request: request.run()),
+    )
+    snapshot = [{"id": "existing"}]
+    protect = SimpleNamespace(
+        play=AsyncMock(return_value={}), list_ringtones=AsyncMock(return_value=snapshot),
+    )
+    upload = AsyncMock(side_effect=[RingtoneCapacityError("full"), {}])
+    reconciler = SimpleNamespace(
+        ensure_capacity=AsyncMock(side_effect=[[], [{"nvr_delete": "deleted"}]]),
+        evict_to_limit=AsyncMock(return_value=[]),
+    )
+    metrics = _Metrics()
+    dispatcher = AnnouncementDispatcher(
+        protect=protect, chime=SimpleNamespace(upload_ringtone=upload),
+        ringtone_index=index, synthesize=AsyncMock(return_value=b"mp3"),
+        slug=lambda text: "key", resolve_preset=AsyncMock(),
+        resolve_targets=lambda selected: [target], profile=lambda values: values,
+        quiet=lambda: False, metrics=metrics, volume_default=50, repeat_default=1,
+        track_registry=TrackRegistry(tmp_path / "tracks.json"),
+        track_reconciler=reconciler,
+    )
+
+    result = await dispatcher.dispatch(AnnouncementCommand(action="announce", text="hello"))
+
+    assert result.disposition == "played"
+    assert upload.await_count == 2
+    assert reconciler.ensure_capacity.await_args_list[-1].kwargs == {"needed": 2}
+    index.force_refresh.assert_awaited_once()
+    assert ("ringtone_capacity_retries", 1) in metrics.counters
+
+
+@pytest.mark.asyncio
+async def test_capacity_preflight_failure_aborts_before_upload(tmp_path):
+    from app.tracks import RingtoneCapacityError, TrackRegistry
+
+    target = SimpleNamespace(
+        desc=SimpleNamespace(name="one", chime_id="id-one"),
+        queue=SimpleNamespace(submit=lambda request: request.run()),
+    )
+    upload = AsyncMock()
+    dispatcher = AnnouncementDispatcher(
+        protect=SimpleNamespace(play=AsyncMock()),
+        ringtone_backend=SimpleNamespace(
+            list_ringtones=AsyncMock(return_value=[{"id": "full"}])
+        ),
+        chime=SimpleNamespace(upload_ringtone=upload),
+        ringtone_index=SimpleNamespace(get=lambda key: None, loaded=True),
+        synthesize=AsyncMock(return_value=b"mp3"), slug=lambda text: "key",
+        resolve_preset=AsyncMock(), resolve_targets=lambda selected: [target],
+        profile=lambda values: values, quiet=lambda: False, metrics=_Metrics(),
+        volume_default=50, repeat_default=1,
+        track_registry=TrackRegistry(tmp_path / "tracks.json"),
+        track_reconciler=SimpleNamespace(
+            ensure_capacity=AsyncMock(side_effect=RingtoneCapacityError("full")),
+            evict_to_limit=AsyncMock(return_value=[]),
+        ),
+    )
+
+    with pytest.raises(RingtoneCapacityError, match="full"):
+        await dispatcher.dispatch(AnnouncementCommand(action="announce", text="hello"))
+
+    upload.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_dynamic_cache_hit_updates_registry_lru(tmp_path):
     from app.tracks import TrackRecord, TrackRegistry
 

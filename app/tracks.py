@@ -15,6 +15,10 @@ SERVICE_OWNER = "unifi_announcer"
 DEVICE_DELETE_UNPROVEN = "skipped: semantics unproven"
 
 
+class RingtoneCapacityError(RuntimeError):
+    """Protect rejected a ringtone upload at its practical capacity boundary."""
+
+
 @dataclass
 class TrackRecord:
     logical_key: str
@@ -133,10 +137,76 @@ class TrackReconciler:
     """Compare identities and GC only artifacts explicitly owned by this service."""
 
     def __init__(self, registry: TrackRegistry,
-                 delete_nvr: Callable[[str], Awaitable[bool]] | None = None) -> None:
+                 delete_nvr: Callable[[str], Awaitable[bool]] | None = None,
+                 max_total: int | None = None) -> None:
         self.registry = registry
         self.delete_nvr = delete_nvr
+        self.max_total = int(os.getenv("MAX_TOTAL_RINGTONES", "6")) if max_total is None else max_total
         self._gc_lock = asyncio.Lock()
+
+    def _owned_dynamic_candidates(self) -> list[TrackRecord]:
+        return sorted(
+            (record for record in self.registry.records.values()
+             if record.owner == SERVICE_OWNER and record.kind == "dynamic_tts"
+             and not record.pinned and record.nvr_ringtone_id),
+            key=lambda record: record.last_used_at,
+        )
+
+    async def _delete_record(self, record: TrackRecord, *, reason: str) -> dict:
+        result = {"logical_key": record.logical_key, "reason": reason,
+                  "nvr_delete": "not-applicable", "device_delete": DEVICE_DELETE_UNPROVEN,
+                  "disk_delete": "not-applicable"}
+        if record.nvr_ringtone_id:
+            if self.delete_nvr is None:
+                result["nvr_delete"] = "failed"
+                return result
+            deleted = await self.delete_nvr(record.nvr_ringtone_id)
+            result["nvr_delete"] = "deleted" if deleted else "failed"
+            if not deleted:
+                return result
+        if record.disk_path:
+            try:
+                Path(record.disk_path).unlink(missing_ok=True)
+                result["disk_delete"] = "deleted"
+            except OSError:
+                result["disk_delete"] = "failed"
+                return result
+        self.registry.remove(record.logical_key)
+        return result
+
+    async def ensure_capacity(self, nvr_snapshot: Iterable[dict], *, needed: int = 1) -> list[dict]:
+        """Reserve Protect headroom using only deletable service-owned dynamic tracks."""
+        snapshot = list(nvr_snapshot)
+        async with self._gc_lock:
+            overflow = max(0, len(snapshot) + needed - self.max_total)
+            snapshot_ids = {
+                str(item.get("id") or item.get("_id")) for item in snapshot
+                if item.get("id") or item.get("_id")
+            }
+            results = []
+            deleted = 0
+            candidates = [
+                record for record in self._owned_dynamic_candidates()
+                if record.nvr_ringtone_id in snapshot_ids
+            ]
+            for record in candidates:
+                if deleted >= overflow:
+                    break
+                result = await self._delete_record(record, reason="total-capacity")
+                results.append(result)
+                deleted += result["nvr_delete"] == "deleted"
+            if overflow and deleted < overflow:
+                log.warning(
+                    "Protect ringtone headroom unavailable: total=%s needed=%s max=%s",
+                    len(snapshot), needed, self.max_total,
+                )
+                raise RingtoneCapacityError(
+                    "Protect ringtone capacity is full and no safe owned dynamic "
+                    "tracks can provide the required headroom"
+                )
+            elif results:
+                log.info("Evicted %s dynamic ringtone(s) for Protect headroom", deleted)
+            return results
 
     def reconcile(self, *, nvr_snapshot: Iterable[dict], speaker_tracks: Iterable[dict]) -> dict:
         nvr_ids = {str(item.get("id") or item.get("_id")) for item in nvr_snapshot
@@ -162,26 +232,7 @@ class TrackReconciler:
         async with self._gc_lock:
             results = []
             for record in self.registry.eviction_candidates():
-                result = {"logical_key": record.logical_key, "nvr_delete": "not-applicable",
-                          "device_delete": DEVICE_DELETE_UNPROVEN, "disk_delete": "not-applicable"}
-                if record.nvr_ringtone_id and self.delete_nvr is not None:
-                    deleted = await self.delete_nvr(record.nvr_ringtone_id)
-                    result["nvr_delete"] = "deleted" if deleted else "failed"
-                    if not deleted:
-                        results.append(result)
-                        continue
-                if record.disk_path:
-                    try:
-                        Path(record.disk_path).unlink(missing_ok=True)
-                        result["disk_delete"] = "deleted"
-                    except OSError:
-                        result["disk_delete"] = "failed"
-                        results.append(result)
-                        continue
-                # Device flash is deliberately not touched. Its deletion semantics
-                # have not been proven and a slot may contain a built-in/user tone.
-                self.registry.remove(record.logical_key)
-                results.append(result)
+                results.append(await self._delete_record(record, reason="dynamic-limit"))
             return results
 
     async def startup(self, *, load_nvr, load_chimes) -> dict:

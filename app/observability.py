@@ -36,7 +36,7 @@ class AnnouncementTiming:
 
 class MetricsRegistry:
     HISTOGRAMS = ("announce_total_ms", "tts_ms", "pcm_process_ms", "encode_ms", "upload_ms", "play_request_ms", "queue_wait_ms")
-    COUNTERS = ("cache_hits", "cache_misses", "direct_fallback", "direct_401", "rules_fired", "rules_suppressed", "queue_deduped", "queue_dropped", "dispatch_played", "dispatch_suppressed", "dispatch_deduped", "dispatch_dropped", "dispatch_partial", "dispatch_failed")
+    COUNTERS = ("cache_hits", "cache_misses", "direct_fallback", "direct_401", "ringtone_capacity_retries", "rules_fired", "rules_suppressed", "queue_deduped", "queue_dropped", "dispatch_played", "dispatch_suppressed", "dispatch_deduped", "dispatch_dropped", "dispatch_partial", "dispatch_failed")
 
     def __init__(self) -> None:
         self._counters = {name: 0 for name in self.COUNTERS}
