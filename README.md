@@ -7,7 +7,7 @@
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.3%2B-blue)](docs/HOME_ASSISTANT.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-**Turns a UniFi Protect Smart Chime from a doorbell accessory into a local whole-home TTS announcement speaker.**
+**Transforms a UniFi Smart Chime into a local Text-To-Speech (TTS) announcement speaker.**
 
 UniFi Announcer provides local text-to-speech, reusable spoken presets, multi-chime groups, Home Assistant controls, REST/MQTT interfaces, and optional MCP tools for UniFi Protect Smart Chimes.
 
