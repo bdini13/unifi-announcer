@@ -10,10 +10,17 @@
           "api_key": "API key",
           "verify_ssl": "Verify SSL certificate",
           "instance_name": "Instance name"
+        },
+        "data_description": {
+          "url": "Base URL of the UniFi Announcer service, for example http://announcer.local:8095.",
+          "api_key": "APP_API_KEY configured on the Announcer service. Leave empty when the service intentionally runs in trusted-LAN open mode.",
+          "verify_ssl": "Verify the TLS certificate when using an HTTPS Announcer URL.",
+          "instance_name": "Display name for the Announcer service in Home Assistant."
         }
       },
       "reauth_confirm": {
         "title": "Reauthenticate UniFi Announcer",
+        "description": "Update the application API key used for playback requests.",
         "data": {"api_key": "API key"}
       }
     },
@@ -24,15 +31,34 @@
     },
     "abort": {"already_configured": "This UniFi Announcer service is already configured"}
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "UniFi Announcer options",
+        "data": {
+          "poll_interval": "Poll interval",
+          "default_target": "Default target",
+          "default_volume": "Default volume",
+          "default_repeat": "Default repeat count"
+        },
+        "data_description": {
+          "poll_interval": "Seconds between lightweight Home Assistant state refreshes.",
+          "default_target": "Optional chime or group used when the Announce action does not specify a target.",
+          "default_volume": "Default announcement volume from 0 to 100.",
+          "default_repeat": "Default number of playback repetitions."
+        }
+      }
+    }
+  },
   "entity": {
-    "notify": {"announce": {"name": "{target} announcements"}},
+    "notify": {"announce": {"name": "Announcements"}},
     "button": {
       "play_buzzer": {"name": "Play buzzer"},
       "play_default": {"name": "Play default"},
       "play_preset": {"name": "Play selected preset"}
     },
     "select": {"preset": {"name": "Preset"}},
-    "media_player": {"speaker": {"name": "{target}"}},
+    "media_player": {"speaker": {"name": "Announcer"}},
     "sensor": {
       "status": {"name": "Status"},
       "version": {"name": "Version"},
