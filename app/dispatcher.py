@@ -1,4 +1,4 @@
-"""Single canonical dispatcher for REST, rules, and MQTT commands."""
+"""Single canonical dispatcher for REST, rules, MQTT, Home Assistant, and MCP."""
 from __future__ import annotations
 
 import asyncio
@@ -57,7 +57,7 @@ class SuppressedResult(DispatchResult):
 
 
 class AnnouncementDispatcher:
-    """Validate → profile → quiet → targets → audio → per-chime queues."""
+    """Validate -> profile -> quiet -> targets -> audio -> per-chime queues."""
 
     def __init__(self, *, protect: Any, chime: Any, ringtone_index: Any,
                  synthesize: Callable[[str], Awaitable[bytes]],
@@ -71,7 +71,8 @@ class AnnouncementDispatcher:
                  track_registry: Any | None = None,
                  track_reconciler: Any | None = None,
                  ringtone_backend: Any | None = None,
-                 upload_lock: asyncio.Lock | None = None) -> None:
+                 upload_lock: asyncio.Lock | None = None,
+                 dynamic_slots: Any | None = None) -> None:
         self.protect = protect
         self.ringtone_backend = ringtone_backend or protect
         self.chime = chime
@@ -89,6 +90,7 @@ class AnnouncementDispatcher:
         self.playback_policy = playback_policy
         self.track_registry = track_registry
         self.track_reconciler = track_reconciler
+        self.dynamic_slots = dynamic_slots
         self._creation_locks: dict[str, asyncio.Lock] = {}
         self._creation_lock_users: dict[str, int] = {}
         self._upload_lock = upload_lock or asyncio.Lock()
@@ -96,6 +98,8 @@ class AnnouncementDispatcher:
     async def dispatch(self, command: AnnouncementCommand) -> DispatchResult:
         total_started = perf_counter_ns()
         timing = AnnouncementTiming()
+        dynamic_lease = None
+        repeat: int | None = None
         try:
             self._validate(command)
             use_device_defaults = (
@@ -139,8 +143,18 @@ class AnnouncementDispatcher:
                 ringtone_name = command.preset or ""
                 ringtone_id = await self.resolve_preset(command.preset or "")
             elif command.action == "announce":
-                ringtone_name = self.slug(command.text or "")
-                ringtone_id = await self._resolve_announcement(command, timing, targets)
+                if self.dynamic_slots is not None:
+                    mp3 = await self._timed(timing, "tts", self.synthesize(command.text or ""))
+                    self._capture_audio_timings(timing, mp3)
+                    dynamic_lease = await self._timed(
+                        timing, "upload", self.dynamic_slots.prepare(mp3, targets)
+                    )
+                    ringtone_id = dynamic_lease.ringtone_id
+                else:
+                    # Compatibility for direct unit construction and legacy app.main.
+                    # Production app.server wires a fixed DynamicTtsSlotManager.
+                    ringtone_name = self.slug(command.text or "")
+                    ringtone_id = await self._resolve_announcement(command, timing, targets)
 
             async def submit(target):
                 chime_id = target.desc.chime_id
@@ -155,6 +169,7 @@ class AnnouncementDispatcher:
                     if command.action == "play_default":
                         return await self.protect.play_default(
                             volume, repeat, **target_kw)
+
                     async def play_ringtone() -> dict[str, Any]:
                         if command.source == "rule":
                             return await self.protect.play(
@@ -166,6 +181,9 @@ class AnnouncementDispatcher:
                     try:
                         return await play_ringtone()
                     except StaleRingtoneError:
+                        if dynamic_lease is not None:
+                            ringtone_id = await dynamic_lease.refresh_ringtone_id()
+                            return await play_ringtone()
                         if not ringtone_name:
                             raise
                         self.index.invalidate(ringtone_name)
@@ -196,7 +214,6 @@ class AnnouncementDispatcher:
                         "dispatch_at_ns": dispatch_at_ns,
                         **queued.result,
                     }
-                # Lightweight queue doubles may return the playback dict directly.
                 return {"target": target.desc.name, "chime_id": chime_id,
                         "disposition": "played", "dispatch_at_ns": dispatch_at_ns,
                         **dict(queued)}
@@ -221,17 +238,52 @@ class AnnouncementDispatcher:
                 disposition = "dropped"
             else:
                 disposition = "partial"
+
+            if dynamic_lease is not None:
+                possible_playback = any(
+                    value not in (QueueDisposition.DEDUPED.value, QueueDisposition.DROPPED.value)
+                    for value in dispositions
+                )
+                if possible_playback:
+                    dynamic_lease.release_after(repeat or self.repeat_default)
+                else:
+                    await dynamic_lease.release_now()
+
             result_payload = {"targets": len(targets), "jobs": jobs}
+            if dynamic_lease is not None:
+                result_payload["dynamic_tts_slot"] = dynamic_lease.logical_slot
             if self.debug_timings:
                 result_payload["group_skew_ms"] = group_skew_ms
             return self._finish(command, disposition, result_payload,
                                 timing, total_started)
         except Exception:
+            if dynamic_lease is not None:
+                # A target may already have accepted play-speaker before another
+                # member failed. Hold the slot conservatively instead of reusing it.
+                dynamic_lease.release_after(repeat or self.repeat_default)
             self._record_finish("failed", timing, total_started)
             raise
 
+    @staticmethod
+    def _capture_audio_timings(timing: AnnouncementTiming, mp3: bytes) -> None:
+        tts_ms = getattr(mp3, "tts_ms", None)
+        if tts_ms is not None:
+            timing.set("tts", tts_ms)
+        pcm_ms = getattr(mp3, "pcm_ms", None)
+        if pcm_ms is not None:
+            timing.set("pcm_process", pcm_ms)
+        encode_ms = getattr(mp3, "encode_ms", None)
+        if encode_ms is not None:
+            timing.set("encode", encode_ms)
+
     async def _resolve_announcement(self, command: AnnouncementCommand,
                                     timing: AnnouncementTiming, targets: list) -> str:
+        """Legacy content-addressed Protect upload path.
+
+        Production ``app.server`` installs the fixed two-slot manager and does
+        not call this method. It remains for backwards-compatible tests and for
+        consumers importing the lower-level app.main module directly.
+        """
         key = self.slug(command.text or "")
         tone = self.index.get(key)
         if tone is None and not self.index.loaded and hasattr(self.protect, "find_ringtone_by_name"):
@@ -255,15 +307,7 @@ class AnnouncementDispatcher:
                     return tone["id"]
                 self.metrics.inc("cache_misses")
                 mp3 = await self._timed(timing, "tts", self.synthesize(command.text or ""))
-                tts_ms = getattr(mp3, "tts_ms", None)
-                if tts_ms is not None:
-                    timing.set("tts", tts_ms)
-                pcm_ms = getattr(mp3, "pcm_ms", None)
-                if pcm_ms is not None:
-                    timing.set("pcm_process", pcm_ms)
-                encode_ms = getattr(mp3, "encode_ms", None)
-                if encode_ms is not None:
-                    timing.set("encode", encode_ms)
+                self._capture_audio_timings(timing, mp3)
                 direct_clients = [target.direct_client for target in targets
                                   if getattr(target, "direct_client", None) is not None]
                 async with self._upload_lock:
