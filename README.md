@@ -582,6 +582,10 @@ python3.14 -m venv .venv-ha
 
 CI also runs HACS validation and Hassfest. Tests use mocks and sanitized fixtures; public CI does not contact live UniFi equipment or play sound.
 
+## AI-assisted development
+
+This project was developed with the assistance of AI coding and research tools. AI has been used for implementation, debugging, code review, test development, documentation, and research.
+
 ## Release status
 
 - **Stable:** `v2.0.0` — local MVP reliability release
