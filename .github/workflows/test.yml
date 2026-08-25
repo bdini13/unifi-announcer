@@ -29,7 +29,10 @@ jobs:
       - run: python -m json.tool custom_components/unifi_announcer/strings.json >/dev/null
       - run: python -m json.tool custom_components/unifi_announcer/translations/en.json >/dev/null
       - run: python -m json.tool hacs.json >/dev/null
-      - run: docker compose config >/dev/null
+      - name: Validate Docker Compose
+        run: |
+          cp .env.example .env
+          docker compose config >/dev/null
       - run: docker build --build-arg GIT_SHA=${{ github.sha }} .
 
   home-assistant:
