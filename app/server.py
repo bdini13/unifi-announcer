@@ -12,9 +12,15 @@ from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import Header, HTTPException, Response
 from starlette.applications import Starlette
-from starlette.routing import Mount
+from starlette.responses import JSONResponse
+from starlette.routing import Mount, Route
 
 from app import main as core
+from app.version import APP_VERSION
+
+# Keep FastAPI/OpenAPI metadata aligned with the released container even though
+# the legacy core module is intentionally not a packaging/version source.
+core.app.version = APP_VERSION
 
 
 @core.app.get("/auth/check", include_in_schema=True)
@@ -23,6 +29,12 @@ async def auth_check(x_api_key: str | None = Header(None, alias="X-API-Key")) ->
     if core.APP_API_KEY and not hmac.compare_digest(x_api_key or "", core.APP_API_KEY):
         raise HTTPException(status_code=401, detail="invalid or missing API key")
     return Response(status_code=204)
+
+
+async def version_check(_request) -> JSONResponse:
+    """Return the core compatibility payload plus semantic release version."""
+    payload = await core.version()
+    return JSONResponse({"version": APP_VERSION, **payload})
 
 
 MCP_ENABLED = os.getenv("MCP_ENABLED", "false").lower() == "true"
@@ -41,6 +53,7 @@ if MCP_ENABLED:
         lambda: core.app.state.services,
         api_key=MCP_API_KEY,
         allowed_hosts=MCP_ALLOWED_HOSTS,
+        groups=lambda: core.GROUPS,
     )
 
 
@@ -54,7 +67,7 @@ async def lifespan(_app: Starlette):
         yield
 
 
-routes = []
+routes = [Route("/version", version_check, methods=["GET"])]
 if _mcp_runtime is not None:
     # The MCP app itself uses streamable_http_path="/", so the public URL is
     # exactly /mcp rather than /mcp/mcp.
