@@ -1,0 +1,37 @@
+name: release-v2.1-beta
+
+on:
+  workflow_run:
+    workflows: ["test"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out validated main commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Publish v2.1.0-beta.1 prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v2.1.0-beta.1
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "$TAG already exists; nothing to publish."
+            exit 0
+          fi
+
+          gh release create "$TAG" \
+            --target "${{ github.event.workflow_run.head_sha }}" \
+            --title "v2.1.0-beta.1 — Home Assistant + MCP public beta" \
+            --notes-file docs/RELEASE_NOTES_v2.1.0-beta.1.md \
+            --prerelease
