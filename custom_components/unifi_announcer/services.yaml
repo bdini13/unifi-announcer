@@ -1,0 +1,46 @@
+announce:
+  name: Announce
+  description: Speak a message through UniFi Announcer with optional playback controls.
+  fields:
+    message:
+      name: Message
+      description: Text to announce.
+      required: true
+      example: Dinner is ready
+      selector:
+        text:
+    target:
+      name: Target
+      description: Optional configured chime or group name.
+      selector:
+        text:
+    volume:
+      name: Volume
+      selector:
+        number:
+          min: 0
+          max: 100
+          mode: slider
+    repeat_times:
+      name: Repeat count
+      selector:
+        number:
+          min: 1
+          max: 6
+          mode: box
+    profile:
+      name: Profile
+      selector:
+        text:
+    priority:
+      name: Priority
+      default: 50
+      selector:
+        number:
+          min: 0
+          max: 100
+          mode: slider
+    dedupe_key:
+      name: Dedupe key
+      selector:
+        text:

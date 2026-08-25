@@ -1,0 +1,46 @@
+{
+  "title": "UniFi Announcer",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to UniFi Announcer",
+        "description": "Connect Home Assistant to the local UniFi Announcer service.",
+        "data": {
+          "url": "Announcer URL",
+          "api_key": "API key",
+          "verify_ssl": "Verify SSL certificate",
+          "instance_name": "Instance name"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate UniFi Announcer",
+        "data": {"api_key": "API key"}
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to UniFi Announcer",
+      "invalid_auth": "The API key was rejected",
+      "invalid_response": "The service returned an invalid response"
+    },
+    "abort": {"already_configured": "This UniFi Announcer service is already configured"}
+  },
+  "entity": {
+    "notify": {"announce": {"name": "{target} announcements"}},
+    "button": {
+      "play_buzzer": {"name": "Play buzzer"},
+      "play_default": {"name": "Play default"},
+      "play_preset": {"name": "Play selected preset"}
+    },
+    "select": {"preset": {"name": "Preset"}},
+    "media_player": {"speaker": {"name": "{target}"}},
+    "sensor": {
+      "status": {"name": "Status"},
+      "version": {"name": "Version"},
+      "queue_depth": {"name": "Queue depth"},
+      "last_disposition": {"name": "Last disposition"}
+    }
+  },
+  "services": {
+    "announce": {"name": "Announce", "description": "Speak text through a UniFi Announcer target."}
+  }
+}
