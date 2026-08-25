@@ -71,7 +71,10 @@ class UniFiAnnouncerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data = {**self._reauth_entry.data, CONF_API_KEY: user_input.get(CONF_API_KEY, "")}
             try:
                 await _validate(self.hass, data)
-                return self.async_update_reload_and_abort(self._reauth_entry, data_updates=data)
+                # The integration owns an update listener which reloads the entry.
+                # Avoid async_update_reload_and_abort here so HA 2026.6+ does not
+                # perform a second reload or trigger the listener/reload deprecation.
+                return self.async_update_and_abort(self._reauth_entry, data_updates=data)
             except AuthenticationError:
                 errors["base"] = "invalid_auth"
             except CannotConnect:
@@ -86,14 +89,12 @@ class UniFiAnnouncerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     def async_get_options_flow(config_entry):
-        return UniFiAnnouncerOptionsFlow(config_entry)
+        # Home Assistant injects the active entry on OptionsFlow.config_entry.
+        return UniFiAnnouncerOptionsFlow()
 
 
 class UniFiAnnouncerOptionsFlow(config_entries.OptionsFlow):
     """Runtime tuning options; credentials remain in config-entry data."""
-
-    def __init__(self, config_entry) -> None:
-        self.config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
         if user_input is not None:
