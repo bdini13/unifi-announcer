@@ -1,0 +1,13 @@
+{
+  "action": {
+    "action": "update",
+    "modelKey": "camera",
+    "id": "camera-fixture-001",
+    "newUpdateId": "update-fixture-001"
+  },
+  "data": {
+    "modelKey": "camera",
+    "id": "camera-fixture-001",
+    "lastRing": 1700000000000
+  }
+}

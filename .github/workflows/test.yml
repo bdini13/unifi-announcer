@@ -1,0 +1,24 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: python -W error -m pytest -q
+        env:
+          EVENTS_ENABLED: "false"
+          TTS_ENGINE: "none"
+          UNIFI_HOST: "https://unifi.invalid"
+          CHIME_DIRECT_IP: "192.0.2.10"
+      - run: ruff check .
+      - run: docker build --build-arg GIT_SHA=${{ github.sha }} .

@@ -1,0 +1,17 @@
+services:
+  unifi-announcer:
+    build:
+      context: .
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+    image: unifi-announcer:local
+    container_name: ${CONTAINER_NAME}
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${HOST_PORT}:8095"
+    volumes:
+      - ${DATA_ROOT:-/opt/docker}/unifi-announcer/data:/data
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
