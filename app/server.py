@@ -17,7 +17,7 @@ from starlette.routing import Mount, Route
 from app import main as core
 from app.audio.bounded_cache import BoundedTtsSynthesizer
 from app.audio.tts import normalized_cache_key
-from app.playback.dynamic_slots import DynamicTtsSlotManager
+from app.playback.fixed_slots import DynamicTtsSlotManager
 from app.version import APP_VERSION
 
 # Keep FastAPI/OpenAPI metadata aligned with the released container even though
