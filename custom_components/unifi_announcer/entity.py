@@ -35,6 +35,11 @@ class UniFiAnnouncerEntity(CoordinatorEntity):
         self.is_group = is_group
 
     @property
+    def entity_key(self) -> str:
+        """Stable key: physical entities follow Protect ID, groups follow group name."""
+        return str(self.chime_id or self.target or "service")
+
+    @property
     def device_info(self) -> DeviceInfo:
         service_identifier = (DOMAIN, self.entry.data["url"])
         if self.target and self.chime_id and not self.is_group:
