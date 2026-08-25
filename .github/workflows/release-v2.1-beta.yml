@@ -19,10 +19,20 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Publish v2.1.0-beta.1 prerelease
+      # Repeat the HA packaging gates against the exact commit being tagged so
+      # release creation cannot race the separate validation workflow.
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: integration
+
+      - name: Hassfest validation
+        uses: home-assistant/actions/hassfest@master
+
+      - name: Publish v2.1.0-beta.2 prerelease
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v2.1.0-beta.1
+          TAG: v2.1.0-beta.2
         run: |
           set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -32,6 +42,6 @@ jobs:
 
           gh release create "$TAG" \
             --target "${{ github.event.workflow_run.head_sha }}" \
-            --title "v2.1.0-beta.1 — Home Assistant + MCP public beta" \
-            --notes-file docs/RELEASE_NOTES_v2.1.0-beta.1.md \
+            --title "v2.1.0-beta.2 — Home Assistant hardening" \
+            --notes-file docs/RELEASE_NOTES_v2.1.0-beta.2.md \
             --prerelease
