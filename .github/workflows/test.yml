@@ -45,4 +45,9 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-ha-test.txt
       - run: pip install -r requirements-ha-test.txt
-      - run: python -W error -m pytest -q tests_ha
+      - name: Run Home Assistant tests
+        run: >-
+          python
+          -W error
+          -W "ignore:'asyncio.AbstractEventLoopPolicy' is deprecated and slated for removal in Python 3.16:DeprecationWarning"
+          -m pytest -q tests_ha
