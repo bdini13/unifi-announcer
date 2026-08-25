@@ -25,7 +25,7 @@ This is a hardening prerelease for the Home Assistant + MCP work introduced in `
 - Added regression coverage for config flow, OptionsFlow, reauthentication, setup auth/connectivity failures, entity topology, service defaults, and unload behavior.
 - Added HACS validation and Hassfest workflows.
 - CI now validates Docker Compose in addition to Python tests, Ruff, compile checks, JSON metadata, and Docker build.
-- Warnings remain errors; the only retained warning filter is the exact known upstream `python-multipart` compatibility warning emitted through `starlette.formparsers`.
+- Warnings remain errors. Narrow filters are retained only for known upstream compatibility warnings: the `python-multipart` compatibility import through `starlette.formparsers`, and the Home Assistant 2026.3 test harness importing the Python 3.14-deprecated `asyncio.AbstractEventLoopPolicy` from `pytest-asyncio` before pytest can load its normal warning configuration.
 
 ## Version and release identity
 
