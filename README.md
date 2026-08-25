@@ -3,15 +3,15 @@
 [![CI](https://github.com/bdini13/unifi-announcer/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/bdini13/unifi-announcer/actions/workflows/test.yml)
 [![HA validation](https://github.com/bdini13/unifi-announcer/actions/workflows/validate-ha.yml/badge.svg?branch=main)](https://github.com/bdini13/unifi-announcer/actions/workflows/validate-ha.yml)
 [![Stable](https://img.shields.io/badge/stable-v2.0.0-blue)](https://github.com/bdini13/unifi-announcer/releases/tag/v2.0.0)
-[![Beta](https://img.shields.io/badge/beta-v2.1.0--beta.2-orange)](https://github.com/bdini13/unifi-announcer/releases)
+[![Beta](https://img.shields.io/badge/beta-v2.1.0--beta.2-orange)](https://github.com/bdini13/unifi-announcer/releases/tag/v2.1.0-beta.2)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.3%2B-blue)](docs/HOME_ASSISTANT.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-**Local text-to-speech, preset tones, Home Assistant control, and MCP tools for UniFi Protect Smart Chimes.**
+**Turns a UniFi Protect Smart Chime from a doorbell accessory into a local whole-home TTS announcement speaker.**
 
-UniFi Announcer turns a UniFi Protect Smart Chime into a flexible LAN announcement endpoint. It synthesizes speech with Piper or Edge TTS, creates and reuses Protect ringtone objects, and asks Protect to play them on one chime or a named group.
+UniFi Announcer provides local text-to-speech, reusable spoken presets, multi-chime groups, Home Assistant controls, REST/MQTT interfaces, and optional MCP tools for UniFi Protect Smart Chimes.
 
-Home Assistant users get a native HACS-compatible integration. AI-agent users can enable an optional Streamable HTTP MCP endpoint. REST, MQTT, and local Protect-event rules remain available for custom automation.
+It synthesizes speech with Piper or Edge TTS, creates and reuses Protect ringtone objects, and asks Protect to play them on one chime or a named group. Home Assistant and MCP remain thin interfaces over the same announcement engine.
 
 > [!IMPORTANT]
 > UniFi Protect's local API is undocumented and may change. This project has been tested with Protect 7.2.105 and Smart Chime firmware 1.7.20. See [Compatibility](docs/COMPATIBILITY.md) before upgrading firmware.
@@ -20,6 +20,14 @@ Home Assistant users get a native HACS-compatible integration. AI-agent users ca
 
 > [!NOTE]
 > Native Home Assistant and MCP support are in the v2.1 beta. Native Home Assistant `tts.speak` / `media-source://` audio ingestion is planned for v2.2; v2.1 supports native notify actions plus text and preset `media_player.play_media`.
+
+## Why this exists
+
+Home Assistant's native [UniFi Protect integration](https://www.home-assistant.io/integrations/unifiprotect/) already supports Smart Chimes as Protect accessories. It exposes useful basic controls such as manually triggering a chime, setting chime volume, reporting the last ring time, rebooting the device, and pairing doorbells.
+
+What it does **not** provide is a general-purpose announcement layer for Smart Chimes. There is no native way to hand the chime arbitrary text such as "Dinner is ready," synthesize that speech locally, reuse it efficiently, target several Smart Chimes as a group, or apply announcement-specific queueing and policy.
+
+UniFi Announcer fills that gap while keeping Protect in the playback path. It is designed to **complement, not replace, Home Assistant's native UniFi Protect integration**: keep the native integration for normal Protect device state/configuration and add UniFi Announcer for spoken announcements and higher-level automation.
 
 ## Choose your setup
 
@@ -72,7 +80,7 @@ text
   -> Smart Chime
 ```
 
-All production playback goes through Protect. Home Assistant and MCP are thin interfaces over the same dispatcher; they do not contain second playback implementations or receive UniFi device credentials. Direct Smart Chime HTTPS remains optional diagnostics/research rather than the production playback path.
+All production playback goes through Protect. Home Assistant and MCP do not contain second playback implementations or receive UniFi device credentials. Direct Smart Chime HTTPS remains optional diagnostics/research rather than the production playback path.
 
 ## Requirements
 
@@ -256,6 +264,34 @@ Native `tts.speak` media-source ingestion is planned for v2.2.
 - Queue depth is exposed per physical chime; groups intentionally do not expose a fake aggregate queue-depth sensor.
 - Changes to `CHIMES_CONFIG` or `GROUPS_CONFIG` require reloading or restarting the Home Assistant integration before its entity topology is rebuilt.
 - MCP is disabled by default and is independent of Home Assistant.
+
+## What UniFi Announcer adds beyond native Home Assistant UniFi Protect
+
+The native UniFi Protect integration and UniFi Announcer are intended to be used together.
+
+| Capability | Native HA UniFi Protect | UniFi Announcer |
+|---|---:|---:|
+| Discover Smart Chime as a Protect device | ✅ | Not a replacement |
+| Manually trigger normal chime | ✅ | ✅ plus buzzer/default/presets |
+| Set basic chime volume | ✅ | ✅ per-announcement volume |
+| Report last ring time | ✅ | Use native integration |
+| Reboot Smart Chime | ✅ | Intentionally not exposed |
+| Pair/unpair doorbells | ✅ | Use native integration |
+| **Speak arbitrary text** | ❌ | **✅** |
+| **Local Piper TTS** | ❌ | **✅** |
+| Edge TTS | ❌ | **✅** |
+| **Reusable spoken presets** | ❌ | **✅** |
+| **Target several Smart Chimes as a named group** | ❌ | **✅** |
+| **Per-chime bounded announcement queues** | ❌ | **✅** |
+| **Quiet hours / priority / deduplication** | ❌ | **✅** |
+| **HA `notify.send_message` endpoint per chime/group** | ❌ | **✅** |
+| **Text/preset `media_player.play_media`** | ❌ | **✅** |
+| REST announcement API | ❌ | ✅ |
+| MQTT announcement interface | ❌ | ✅ |
+| MCP tools for AI agents | ❌ | ✅ |
+| Native HA `tts.speak` media ingestion | ❌ | ⏭️ v2.2 |
+
+In short: the native integration exposes the Smart Chime as a **Protect accessory**; UniFi Announcer adds the layer that lets automations and AI treat it as a **programmable whole-home announcement endpoint**.
 
 ## MCP — optional AI-agent interface
 
@@ -511,6 +547,7 @@ See [Track registry documentation](docs/TRACKS.md) and [Playback policy](docs/PO
 - [Track registry](docs/TRACKS.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
 - [v2.1.0-beta.1 release notes](docs/RELEASE_NOTES_v2.1.0-beta.1.md)
+- [v2.1.0-beta.2 release notes](docs/RELEASE_NOTES_v2.1.0-beta.2.md)
 
 ## Security
 
@@ -540,7 +577,7 @@ Home Assistant integration validation uses a separate environment because Home A
 ```bash
 python3.14 -m venv .venv-ha
 .venv-ha/bin/pip install -r requirements-ha-test.txt
-.venv-ha/bin/python -W error -m pytest -q tests_ha
+.venv-ha/bin/python -m pytest -q tests_ha
 ```
 
 CI also runs HACS validation and Hassfest. Tests use mocks and sanitized fixtures; public CI does not contact live UniFi equipment or play sound.
