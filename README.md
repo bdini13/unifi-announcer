@@ -1,5 +1,8 @@
 # UniFi Announcer
 
+[![CI](https://github.com/bdini13/unifi-announcer/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/bdini13/unifi-announcer/actions/workflows/test.yml)
+[![Latest release](https://img.shields.io/github/v/release/bdini13/unifi-announcer?display_name=tag&sort=semver)](https://github.com/bdini13/unifi-announcer/releases/latest)
+
 Self-hosted text-to-speech announcements, preset tones, and event-driven playback for UniFi Protect Smart Chimes.
 
 UniFi Announcer runs on your LAN. It uses a local UniFi OS account to create and manage Protect ringtone objects, then asks Protect to play them on one or more Smart Chimes. Piper is the recommended TTS engine; Edge TTS is also supported.
@@ -543,3 +546,5 @@ Tests use mocks and sanitized fixtures. They do not contact a live console or pl
 ## License
 
 MIT
+
+Unofficial community project; not affiliated with or endorsed by Ubiquiti.
