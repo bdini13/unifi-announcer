@@ -47,12 +47,7 @@ def build_mcp_runtime(
     services: Callable[[], Any], *, api_key: str, allowed_hosts: list[str],
     groups: Callable[[], dict[str, list[str]]] | None = None,
 ) -> MCPRuntime:
-    """Build a mountable MCP v2 server.
-
-    `streamable_http_path="/"` is intentional: the parent application mounts
-    this ASGI application at `/mcp`, making the public endpoint exactly `/mcp`.
-    The parent lifespan must enter `server.session_manager.run()`.
-    """
+    """Build a mountable MCP v2 server."""
     from mcp.server import MCPServer
     from mcp.server.transport_security import TransportSecuritySettings
 
@@ -77,7 +72,15 @@ def build_mcp_runtime(
     @server.tool()
     async def get_status() -> dict[str, Any]:
         """Return cached service/component health without causing playback."""
-        return services().health.snapshot()
+        svc = services()
+        status = dict(svc.health.snapshot())
+        dynamic_slots = getattr(svc, "dynamic_slots", None)
+        if dynamic_slots is not None:
+            status["dynamic_tts"] = dynamic_slots.status()
+        tts_cache = getattr(svc, "tts_cache", None)
+        if tts_cache is not None:
+            status["tts_cache"] = tts_cache.stats()
+        return status
 
     @server.tool()
     async def list_chimes() -> dict[str, Any]:
@@ -94,11 +97,13 @@ def build_mcp_runtime(
 
     @server.tool()
     async def list_presets() -> dict[str, Any]:
-        """List Protect ringtone presets available to UniFi Announcer."""
+        """List user-facing Protect ringtone presets, excluding internal TTS slots."""
         tones = await services().ringtone_backend.list_ringtones()
         return {"presets": [
             {"name": t.get("name"), "is_default": bool(t.get("isDefault"))}
-            for t in tones if not t.get("isDefault")
+            for t in tones
+            if not t.get("isDefault")
+            and not str(t.get("name", "")).upper().startswith("UA-TTS-")
         ]}
 
     @server.tool()
