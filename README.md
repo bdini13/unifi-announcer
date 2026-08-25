@@ -1,46 +1,53 @@
 # UniFi Announcer
 
 [![CI](https://github.com/bdini13/unifi-announcer/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/bdini13/unifi-announcer/actions/workflows/test.yml)
-[![Latest release](https://img.shields.io/github/v/release/bdini13/unifi-announcer?display_name=tag&sort=semver)](https://github.com/bdini13/unifi-announcer/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/bdini13/unifi-announcer?display_name=tag&sort=semver)](https://github.com/bdini13/unifi-announcer/releases)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.3%2B-blue)](docs/HOME_ASSISTANT.md)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-Self-hosted text-to-speech announcements, preset tones, and event-driven playback for UniFi Protect Smart Chimes.
+**Local text-to-speech, preset tones, Home Assistant control, and MCP tools for UniFi Protect Smart Chimes.**
 
-UniFi Announcer runs on your LAN. It uses a local UniFi OS account to create and manage Protect ringtone objects, then asks Protect to play them on one or more Smart Chimes. Piper is the recommended TTS engine; Edge TTS is also supported.
+UniFi Announcer turns a UniFi Protect Smart Chime into a flexible LAN announcement endpoint. It synthesizes speech with Piper or Edge TTS, creates/reuses Protect ringtone objects, and asks Protect to play them on one chime or a named group.
+
+Home Assistant users get a native HACS-compatible integration. AI-agent users can enable an optional Streamable HTTP MCP endpoint. REST, MQTT, and local Protect-event rules remain available for custom automation.
 
 > [!IMPORTANT]
 > UniFi Protect's local API is undocumented and may change. This project has been tested with Protect 7.2.105 and Smart Chime firmware 1.7.20. See [Compatibility](docs/COMPATIBILITY.md) before upgrading firmware.
 
-## Contents
+> [!NOTE]
+> The Home Assistant and MCP interfaces are new in the v2.1 beta. Native Home Assistant `tts.speak` / `media-source://` audio ingestion is planned for v2.2; v2.1 supports native notify actions plus text and preset `media_player.play_media`.
 
-- [Features](#features)
-- [Requirements](#requirements)
-- [Quick start](#quick-start)
-- [Basic usage](#basic-usage)
-- [Home Assistant](#home-assistant)
-- [Local Protect rules](#local-protect-rules)
-- [Multiple chimes and groups](#multiple-chimes-and-groups)
-- [Configuration reference](#configuration-reference)
-- [API summary](#api-summary)
-- [Release notes](#release-notes)
-- [Documentation](#documentation)
-- [Development](#development)
+## What works today
 
-## Features
+| Capability | Status |
+|---|---|
+| Arbitrary text announcements | ✅ Stable |
+| Piper local TTS | ✅ Stable |
+| Edge TTS | ✅ Supported |
+| Reusable preset tones | ✅ Stable |
+| Buzzer and assigned-default playback | ✅ Stable |
+| Multiple chimes and named groups | ✅ Stable |
+| Quiet hours, priority, dedupe, bounded queues | ✅ Stable |
+| Home Assistant HACS integration | 🧪 v2.1 beta |
+| HA `notify.send_message` | 🧪 v2.1 beta |
+| HA text/preset `media_player.play_media` | 🧪 v2.1 beta |
+| MCP server and playback tools | 🧪 v2.1 beta |
+| MQTT discovery | ✅ Supported |
+| Protect event rules | 🧪 Experimental |
+| Native HA `tts.speak` media ingestion | ⏭️ v2.2 |
+| Direct stock-firmware HTTP playback | ❌ Not implemented |
 
-- Ad-hoc TTS through local Piper or cloud-based Edge TTS
-- Reusable preset tones
-- Chime buzzer and assigned-default playback
-- Protect doorbell events over its realtime WebSocket
-- Local rules that do not depend on Home Assistant
-- Home Assistant REST commands and optional MQTT discovery
-- Multiple chimes and named groups
-- Quiet hours, volume profiles, priorities, deduplication, and bounded queues
-- Disk and NVR caching for repeated announcements
-- Bounded cleanup of service-owned dynamic ringtones
-- Automatic recovery from temporary Piper failures and stale ringtone IDs
-- Health, cache, event, queue, and latency diagnostics
+## Architecture
 
-## How it works
+```text
+Home Assistant ─┐
+REST            ├──► AnnouncementDispatcher ─► Protect ─► Smart Chime
+MQTT            │            ▲
+MCP ────────────┤            │
+Protect rules ──┘       queue / policy / cache
+```
+
+For TTS:
 
 ```text
 text
@@ -51,23 +58,23 @@ text
   -> Smart Chime
 ```
 
-Protect playback always goes through the NVR/controller. Direct chime HTTPS is used only for supported device information, redacted logs, and guarded research paths. Stock Smart Chime firmware 1.7.20 does not expose a usable inbound HTTP playback endpoint.
+All production playback goes through Protect. Home Assistant and MCP are thin interfaces over the same dispatcher; they do not contain second playback implementations or receive UniFi device credentials.
 
 ## Requirements
 
-- A UniFi console running Protect, such as a UDM Pro, UDM Pro SE, CloudKey+, or UNVR
+- UniFi console running Protect, such as UDM Pro, UDM Pro SE, CloudKey+, or UNVR
 - At least one adopted UniFi Protect Smart Chime
-- A local UniFi OS account with access to Protect (SSO-only accounts will not work)
+- Local UniFi OS account with access to Protect; SSO-only accounts do not work
 - Docker Engine with Docker Compose
-- A TTS service:
-  - [Wyoming Piper](https://github.com/rhasspy/wyoming-piper) on any reachable host, recommended
+- TTS engine:
+  - [Wyoming Piper](https://github.com/rhasspy/wyoming-piper), recommended for local TTS
   - Edge TTS with internet access
 
-Your Docker host, UniFi console, Piper server, Home Assistant server, and chime may use any reachable addresses. They do not need to share a particular subnet.
+Home Assistant and MCP are optional.
 
-## Quick start
+# Quick start
 
-### 1. Clone the repository
+## 1. Start UniFi Announcer
 
 ```bash
 git clone https://github.com/bdini13/unifi-announcer.git
@@ -75,18 +82,9 @@ cd unifi-announcer
 cp .env.example .env
 ```
 
-### 2. Create a local UniFi account
+Create a **local** UniFi console account in **Admins & Users** and grant it the Protect permissions needed to view chimes and manage ringtones.
 
-In the UniFi console:
-
-1. Open **Admins & Users**.
-2. Create a local admin account rather than an SSO-only account.
-3. Grant it the Protect permissions needed to view chimes and manage ringtones.
-4. Put that username and password in `.env`.
-
-### 3. Find the chime ID
-
-Set your own console address and credentials. The example does not assume a specific LAN range.
+Find your chime ID from Protect:
 
 ```bash
 export UNIFI_HOST="https://<your-unifi-console-host-or-ip>"
@@ -102,11 +100,7 @@ curl -ksS -b /tmp/unifi-cookies \
   "$UNIFI_HOST/proxy/protect/api/chimes"
 ```
 
-Copy the `id` or `_id` for the chime you want to use as the default.
-
-### 4. Configure `.env`
-
-At minimum, set:
+Configure `.env`:
 
 ```env
 UNIFI_HOST=https://<your-unifi-console-host-or-ip>
@@ -124,7 +118,7 @@ HOST_PORT=8095
 CONTAINER_NAME=unifi-announcer
 ```
 
-Generate an API key if other systems will call the write endpoints:
+For integrations that can write/play, generate an application API key:
 
 ```bash
 python3 -c "import secrets; print(secrets.token_urlsafe(32))"
@@ -136,45 +130,175 @@ Then add it to `.env`:
 APP_API_KEY=<generated-key>
 ```
 
-Leaving `APP_API_KEY` empty keeps write endpoints open to the trusted LAN.
-
-### 5. Start the service
+Start the service:
 
 ```bash
 docker compose up -d --build
 docker compose logs -f unifi-announcer
 ```
 
-Persistent files are stored in `./data` beside `docker-compose.yml`; that
-directory is ignored by Git. To use a NAS or another bind-mount location, set an
-absolute host path in `.env`, for example `DATA_PATH=/srv/unifi-announcer/data`,
-before starting the service.
+Persistent data defaults to `./data`. To use another host path, set `DATA_PATH`, for example:
 
-Set the URL to the address of the machine running this container:
-
-```bash
-export ANNOUNCER_URL="http://<docker-host-or-ip>:8095"
-curl -fsS "$ANNOUNCER_URL/health"
+```env
+DATA_PATH=/srv/unifi-announcer/data
 ```
 
-A healthy response has `"status":"ok"`. Piper can be offline during startup; non-TTS functions remain available, and later announcements retry Piper automatically.
-
-## Basic usage
-
-The examples below work with or without an API key:
+Verify health:
 
 ```bash
-export ANNOUNCER_URL="http://<docker-host-or-ip>:8095"
+curl -fsS http://<announcer-host-or-ip>:8095/health
+```
 
-# No APP_API_KEY configured:
+A healthy response contains `"status":"ok"`. Piper may be offline during startup; non-TTS controls remain available.
+
+# Home Assistant — recommended setup
+
+UniFi Announcer includes a native HACS-compatible custom integration.
+
+## Install through HACS as a custom repository
+
+1. Open **HACS** in Home Assistant.
+2. Add `https://github.com/bdini13/unifi-announcer` as an **Integration** custom repository.
+3. Install **UniFi Announcer**.
+4. Restart Home Assistant.
+5. Open **Settings → Devices & services → Add integration → UniFi Announcer**.
+6. Enter your Announcer URL, such as `http://announcer.local:8095`.
+7. Enter `APP_API_KEY` if one is configured.
+
+The setup flow validates `/health`, `/version`, and `/auth/check`; it does **not** play audio during setup.
+
+For manual installation, copy `custom_components/unifi_announcer` into `/config/custom_components/` and restart Home Assistant.
+
+See the full [Home Assistant documentation](docs/HOME_ASSISTANT.md).
+
+## Announce through a notify entity
+
+Each physical chime and configured group gets a notify entity:
+
+```yaml
+action: notify.send_message
+target:
+  entity_id: notify.unifi_announcer_kitchen
+data:
+  message: "Dinner is ready"
+```
+
+## Advanced announcement controls
+
+Use the native action when an automation needs per-call options:
+
+```yaml
+action: unifi_announcer.announce
+data:
+  message: "Dinner is ready"
+  target: kitchen
+  volume: 45
+  repeat_times: 1
+  priority: 50
+  dedupe_key: dinner-ready
+```
+
+Supported advanced fields include `message`, `target`, `volume`, `repeat_times`, `profile`, `priority`, and `dedupe_key`.
+
+## Media player
+
+Text:
+
+```yaml
+action: media_player.play_media
+target:
+  entity_id: media_player.unifi_announcer_kitchen
+data:
+  media_content_type: text
+  media_content_id: "The laundry is finished"
+```
+
+Preset:
+
+```yaml
+action: media_player.play_media
+target:
+  entity_id: media_player.unifi_announcer_kitchen
+data:
+  media_content_type: unifi-announcer/preset
+  media_content_id: package-delivered
+```
+
+The media player intentionally does not pretend the Smart Chime is a normal streaming speaker: no pause, seek, fake playback position, or fake persistent transport state is advertised.
+
+Native `tts.speak` media-source ingestion is planned for v2.2.
+
+# MCP — optional AI-agent interface
+
+UniFi Announcer can expose a Streamable HTTP MCP endpoint from the same process as the REST API.
+
+Enable it in `.env`:
+
+```env
+MCP_ENABLED=true
+MCP_API_KEY=<generate-a-dedicated-secret>
+MCP_ALLOWED_HOSTS=announcer.local,<announcer-lan-ip>
+```
+
+Recreate the container:
+
+```bash
+docker compose up -d
+```
+
+Endpoint:
+
+```text
+http://<announcer-host>:8095/mcp
+```
+
+Authentication:
+
+```text
+Authorization: Bearer <MCP_API_KEY>
+```
+
+`MCP_API_KEY` is intentionally separate from `APP_API_KEY`. `MCP_ALLOWED_HOSTS` should include the exact LAN hostname/IP MCP clients use; the MCP transport keeps DNS-rebinding protection enabled.
+
+## MCP tools
+
+Read-only:
+
+```text
+get_status
+list_chimes
+list_presets
+get_recent_events
+get_queue_status
+```
+
+Playback:
+
+```text
+announce
+play_preset
+play_default
+buzzer
+```
+
+The MCP surface deliberately excludes credential retrieval, raw Protect administration, reboot/reset/adoption, cache mutation, firmware research, direct staging, and arbitrary URL/file playback.
+
+See [MCP documentation](docs/MCP.md) for Hermes configuration and architecture details.
+
+# REST examples
+
+Set:
+
+```bash
+export ANNOUNCER_URL="http://<announcer-host-or-ip>:8095"
 AUTH=()
 
-# If APP_API_KEY is configured, use this instead:
+# If APP_API_KEY is configured:
 # export UNIFI_ANNOUNCER_API_KEY="<your-api-key>"
 # AUTH=(-H "X-API-Key: $UNIFI_ANNOUNCER_API_KEY")
 ```
 
-### Announce text
+Announce text:
 
 ```bash
 curl -fsS -X POST "${AUTH[@]}" \
@@ -183,23 +307,19 @@ curl -fsS -X POST "${AUTH[@]}" \
   "$ANNOUNCER_URL/announce"
 ```
 
-### Use the buzzer
+Buzzer:
 
 ```bash
-curl -fsS -X POST "${AUTH[@]}" \
-  "$ANNOUNCER_URL/buzzer"
+curl -fsS -X POST "${AUTH[@]}" "$ANNOUNCER_URL/buzzer"
 ```
 
-### Play the chime's assigned default
+Assigned default:
 
 ```bash
-curl -fsS -X POST "${AUTH[@]}" \
-  "$ANNOUNCER_URL/play-default"
+curl -fsS -X POST "${AUTH[@]}" "$ANNOUNCER_URL/play-default"
 ```
 
-Without query parameters, this sends no volume or repeat override, so the chime uses its stored settings.
-
-### Create and play a preset
+Create and play a preset:
 
 ```bash
 curl -fsS -X PUT "${AUTH[@]}" \
@@ -211,133 +331,9 @@ curl -fsS -X POST "${AUTH[@]}" \
   "$ANNOUNCER_URL/presets/package-delivered/play?volume=50&repeat_times=1"
 ```
 
-### Read diagnostics
+# Multiple chimes and groups
 
-These endpoints do not play audio:
-
-```bash
-curl -fsS "$ANNOUNCER_URL/health"
-curl -fsS "$ANNOUNCER_URL/version"
-curl -fsS "$ANNOUNCER_URL/chime"
-curl -fsS "$ANNOUNCER_URL/chimes"
-curl -fsS "$ANNOUNCER_URL/presets"
-curl -fsS "$ANNOUNCER_URL/events/recent?limit=10"
-curl -fsS "$ANNOUNCER_URL/cache/ringtones/status"
-curl -fsS "$ANNOUNCER_URL/metrics/json"
-```
-
-## Home Assistant
-
-### REST commands
-
-If `APP_API_KEY` is enabled, add the same key to `/config/secrets.yaml`:
-
-```yaml
-unifi_announcer_api_key: "<same-key-used-in-announcer-env>"
-```
-
-Add the following to `/config/configuration.yaml`. Replace `<announcer-host-or-ip>` with the address of the Docker host.
-
-```yaml
-rest_command:
-  unifi_announcer_say:
-    url: "http://<announcer-host-or-ip>:8095/announce"
-    method: POST
-    headers:
-      X-API-Key: !secret unifi_announcer_api_key
-    content_type: "application/json; charset=utf-8"
-    payload: >-
-      {"text": {{ text | tojson }}, "volume": {{ volume | default(50) }},
-       "repeat_times": {{ repeat_times | default(1) }}}
-
-  unifi_announcer_buzzer:
-    url: "http://<announcer-host-or-ip>:8095/buzzer"
-    method: POST
-    headers:
-      X-API-Key: !secret unifi_announcer_api_key
-
-  unifi_announcer_default:
-    url: "http://<announcer-host-or-ip>:8095/play-default"
-    method: POST
-    headers:
-      X-API-Key: !secret unifi_announcer_api_key
-
-  unifi_announcer_preset:
-    url: "http://<announcer-host-or-ip>:8095/presets/{{ preset }}/play"
-    method: POST
-    headers:
-      X-API-Key: !secret unifi_announcer_api_key
-```
-
-Remove the `headers` blocks if `APP_API_KEY` is intentionally empty. Check the Home Assistant configuration before restarting.
-
-Test the TTS action from **Developer Tools → Actions**:
-
-```yaml
-action: rest_command.unifi_announcer_say
-data:
-  text: "Home Assistant test"
-  volume: 35
-```
-
-Example automation:
-
-```yaml
-automation:
-  - alias: "Announce front door opened"
-    triggers:
-      - trigger: state
-        entity_id: binary_sensor.front_door
-        to: "on"
-    actions:
-      - action: rest_command.unifi_announcer_say
-        data:
-          text: "Front door opened"
-          volume: 40
-```
-
-### MQTT discovery
-
-Set the broker address in `.env`:
-
-```env
-MQTT_URL=mqtt://<mqtt-broker-host-or-ip>:1883
-MQTT_USERNAME=<mqtt-username>
-MQTT_PASSWORD=<mqtt-password>
-```
-
-Recreate the container:
-
-```bash
-docker compose up -d
-```
-
-Home Assistant MQTT discovery creates per-chime buzzer/default buttons and status sensors. REST, events, and local rules continue working if MQTT is disabled or unavailable.
-
-See [MQTT documentation](docs/MQTT.md) for topics and payloads.
-
-## Local Protect rules
-
-Local rules react to Protect events inside the announcer process, avoiding a Home Assistant round trip. Rules are stored in `${DATA_DIR}/rules.json`.
-
-```json
-[
-  {
-    "name": "front-door-ring",
-    "when": {"event": "doorbell_ring", "model": "camera"},
-    "then": {"preset": "front-door", "volume": 70},
-    "cooldown_ms": 250
-  }
-]
-```
-
-Rules can only play existing presets. Playback runs independently from the Protect WebSocket receiver, and the rule cooldown is also used by the playback queue's dedupe window.
-
-See [Rules documentation](docs/RULES.md).
-
-## Multiple chimes and groups
-
-A single `CHIME_ID` is enough for one chime. For multiple chimes, use JSON configuration:
+For more than one chime, configure named targets:
 
 ```env
 CHIMES_CONFIG='[
@@ -347,7 +343,7 @@ CHIMES_CONFIG='[
 GROUPS_CONFIG='{"downstairs":["kitchen"],"whole_house":["kitchen","upstairs"]}'
 ```
 
-Target one chime or a group:
+Then target a group:
 
 ```bash
 curl -fsS -X POST "${AUTH[@]}" \
@@ -356,169 +352,94 @@ curl -fsS -X POST "${AUTH[@]}" \
   "$ANNOUNCER_URL/announce"
 ```
 
-The service gives each chime its own bounded queue. Group members execute concurrently, and a failed member does not prevent healthy members from playing.
+Each physical chime has its own bounded queue. Group members execute concurrently, and one failed member does not prevent healthy members from playing.
 
-## Configuration reference
+# MQTT and local rules
 
-See [`.env.example`](.env.example) for every option.
+MQTT remains optional. Set `MQTT_URL`, `MQTT_USERNAME`, and `MQTT_PASSWORD` to enable discovery. See [MQTT documentation](docs/MQTT.md).
+
+Local rules can react directly to Protect events without a Home Assistant round trip. See [Rules documentation](docs/RULES.md).
+
+# Important configuration
+
+See [`.env.example`](.env.example) for the complete list.
 
 | Variable | Default | Purpose |
 |---|---:|---|
-| `UNIFI_HOST` | none | UniFi console URL, including `http://` or `https://` |
+| `UNIFI_HOST` | none | UniFi console URL |
 | `UNIFI_USERNAME` | none | Local UniFi OS username |
 | `UNIFI_PASSWORD` | none | Local UniFi OS password |
-| `UNIFI_VERIFY_SSL` | `false` | Verify the console TLS certificate |
+| `UNIFI_VERIFY_SSL` | `false` | Verify console TLS certificate |
 | `CHIME_ID` | none | Default Protect chime ID |
 | `TTS_ENGINE` | `piper` | `piper` or `edge` |
 | `PIPER_URL` | none | Wyoming Piper endpoint |
-| `PIPER_SYNTH_TIMEOUT` | `15` | Timeout in seconds for each Piper attempt |
-| `APP_API_KEY` | empty | Protect write routes with `X-API-Key` |
-| `HOST_PORT` | `8095` | Port exposed on the Docker host |
-| `DATA_PATH` | `./data` | Host path mounted at `/data`; may be an absolute NAS/server path |
-| `VOLUME_DEFAULT` | `50` | Default volume when the request does not specify one |
+| `APP_API_KEY` | empty | Protect REST write routes with `X-API-Key` |
+| `DATA_PATH` | `./data` | Host path mounted at `/data` |
+| `VOLUME_DEFAULT` | `50` | Default request volume |
 | `REPEAT_DEFAULT` | `1` | Default repeat count |
 | `QUIET_HOURS` | empty | Suppression window such as `22:00-06:30` |
-| `VOLUME_PROFILES` | `{}` | Named volume/repeat profiles as JSON |
 | `MAX_DYNAMIC_TRACKS` | `32` | Maximum service-owned dynamic TTS records |
-| `MAX_TOTAL_RINGTONES` | `6` | Conservative total Protect ringtone ceiling; evicts owned dynamic TTS before upload |
-| `PLAY_QUEUE_MAX_DEPTH` | `16` | Per-chime playback queue limit |
-| `EVENTS_ENABLED` | `true` | Enable the Protect WebSocket listener |
-| `EVENTS_BUFFER_MAX` | `100` | Number of recent events kept in memory |
-| `MQTT_URL` | empty | Optional MQTT broker URL |
+| `MAX_TOTAL_RINGTONES` | `6` | Conservative total Protect ringtone ceiling |
+| `PLAY_QUEUE_MAX_DEPTH` | `16` | Per-chime queue limit |
 | `CHIMES_CONFIG` | empty | Multi-chime definitions as JSON |
-| `GROUPS_CONFIG` | empty | Named chime groups as JSON |
+| `GROUPS_CONFIG` | empty | Named groups as JSON |
+| `MQTT_URL` | empty | Optional MQTT broker URL |
+| `MCP_ENABLED` | `false` | Enable MCP endpoint |
+| `MCP_API_KEY` | empty | Dedicated MCP bearer credential |
+| `MCP_ALLOWED_HOSTS` | empty | LAN Host allowlist for MCP transport security |
 
-## API summary
+# API summary
 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/health` | Cached component health |
 | `GET` | `/version` | Service and compatibility details |
-| `POST` | `/announce` | Synthesize/cache text and play it |
-| `POST` | `/buzzer` | Play the hardware buzzer |
-| `POST` | `/play-default` | Play the assigned default ringtone |
+| `GET` | `/auth/check` | Harmless API-key validation |
+| `GET` | `/chimes` | Configured chimes, groups, and queue depths |
 | `GET` | `/presets` | List Protect ringtones |
+| `POST` | `/announce` | Synthesize/cache text and play it |
+| `POST` | `/buzzer` | Play hardware buzzer |
+| `POST` | `/play-default` | Play assigned default ringtone |
 | `PUT` | `/presets/{name}` | Create or replace a preset |
 | `POST` | `/presets/{name}/play` | Play a preset |
-| `GET` | `/chime` | Default chime diagnostics |
-| `GET` | `/chimes` | Configured chimes, groups, and queue depths |
 | `GET` | `/events/recent` | Recent normalized Protect events |
 | `GET` | `/events/stream` | Server-Sent Events stream |
-| `GET` | `/rules/status` | Local rule status and counters |
-| `POST` | `/rules/reload` | Reload rules; API key required |
-| `GET` | `/cache/ringtones/status` | In-memory ringtone index status |
-| `POST` | `/cache/ringtones/refresh` | Refresh the index; API key required |
+| `GET` | `/rules/status` | Local rule status/counters |
+| `GET` | `/cache/ringtones/status` | Ringtone-index status |
 | `GET` | `/metrics/json` | Timing histograms and counters |
+| MCP | `/mcp` | Optional Streamable HTTP MCP endpoint |
 
-FastAPI's interactive schema is available at `http://<announcer-host-or-ip>:8095/docs`.
+FastAPI's interactive REST schema is available at `http://<announcer-host-or-ip>:8095/docs`.
 
-## Advanced topics
+# Playback behavior
 
-### Direct chime diagnostics
+Commands return a canonical disposition:
 
-Direct chime access is optional. The service works through Protect without `CHIME_DIRECT_PASSWORD`.
+- `played` — all selected chimes played the request
+- `suppressed` — quiet-hours policy suppressed it
+- `deduped` — duplicate rejected inside the configured window
+- `dropped` — queue policy dropped it
+- `partial` — mixed results across targets
+- `failed` — playback failed
 
-If you enable direct diagnostics, the adopted chime password is stored in Protect's PostgreSQL database. Database paths and PostgreSQL versions vary by console and Protect release, so consult [Compatibility](docs/COMPATIBILITY.md) rather than copying a hard-coded host or path. Set:
+Home Assistant, REST, MQTT, local rules, and MCP all reuse the same dispatcher semantics.
 
-```env
-CHIME_DIRECT_IP=<chime-host-or-ip>
-CHIME_DIRECT_USER=ubnt
-CHIME_DIRECT_PASSWORD=<current-adoption-password>
-```
-
-UniFi may rotate this password. A file-based provider avoids container restarts:
-
-```env
-CHIME_CREDENTIAL_FILE=/run/secrets/unifi_chime_password
-```
-
-When direct access fails, supported operations fall back to Protect. Destructive direct endpoints are blocked before network I/O.
-
-### Caching and cleanup
+# Caching and safety
 
 - Repeated text uses a disk MP3 cache.
 - Ringtone IDs live in one in-memory `RingtoneIndex`.
-- Simultaneous first requests for the same phrase share ringtone creation.
-- Dynamic TTS records are bounded by `MAX_DYNAMIC_TRACKS` and evicted by recent use.
-- Before creating a ringtone, the service reserves headroom under `MAX_TOTAL_RINGTONES` and retries one capacity-style HTTP 400 after one safe LRU eviction.
-- Cleanup only targets unpinned records owned by `unifi_announcer`.
-- Presets, built-ins, and user-created tones are not dynamic cleanup candidates.
-- Device flash is not deleted because its deletion semantics have not been proven safe.
+- Simultaneous cold requests for the same phrase share ringtone creation.
+- Dynamic TTS records are bounded by `MAX_DYNAMIC_TRACKS`.
+- Before creating a ringtone, the service preserves headroom under `MAX_TOTAL_RINGTONES` and only evicts service-owned dynamic tracks.
+- Presets, built-ins, and user-created tones are not dynamic-cleanup candidates.
+- Destructive direct chime endpoints are blocked before network I/O.
 
-See [Track registry documentation](docs/TRACKS.md).
+See [Track registry documentation](docs/TRACKS.md) and [Playback policy](docs/POLICY.md).
 
-### Playback responses
+# Documentation
 
-Commands return a disposition:
-
-- `played`: all selected chimes played the request
-- `suppressed`: quiet-hours policy suppressed it (`HTTP 202`)
-- `deduped`: the queue rejected a duplicate in the configured window
-- `dropped`: queue policy dropped the request
-- `partial`: mixed results across targets (`HTTP 207`)
-- `failed`: playback failed (`HTTP 502`)
-
-### Firmware upgrades
-
-Run the offline signature tool before and after an authorized Smart Chime firmware upgrade:
-
-```bash
-python3 scripts/fw_signature.py <firmware.bin>
-```
-
-If known signatures change, direct features fail closed. Protect/NVR playback remains the production path. See [Compatibility](docs/COMPATIBILITY.md).
-
-## Release notes
-
-### v2.0.0 - local MVP reliability release
-
-The current release turns the earlier prototype into a continuously usable LAN service.
-
-- Playback failures now return failure responses instead of false HTTP 200 results.
-- Piper outages no longer prevent application startup.
-- Piper connection and synthesis attempts have bounded timeouts and one reconnect attempt.
-- Startup warmup performs actual Piper inference.
-- Ad-hoc TTS creates tracked Protect ringtone identities and enforces `MAX_DYNAMIC_TRACKS`.
-- `RingtoneIndex` is the only in-memory ringtone ID source.
-- Cleanup refreshes the index after deletion and avoids stale IDs.
-- Stale ringtone IDs refresh and retry once without masking unrelated Protect errors.
-- Protect WebSocket event intake no longer waits for rule playback.
-- Bare `/play-default` requests preserve the chime's stored volume and repeat settings.
-- Simultaneous cold requests for the same phrase create one ringtone.
-- Rule cooldown and playback deduplication use the same window.
-- Standalone, Home Assistant, and MQTT setup instructions were added.
-
-### Earlier prototypes
-
-Earlier private prototypes established the Protect API client, TTS and preset playback, event parsing, local rules, MQTT, multi-chime queues, direct diagnostics, and compatibility tooling. They were consolidated into the v2.0.0 public release.
-
-The packaged GitHub release is available on the [Releases page](https://github.com/bdini13/unifi-announcer/releases).
-
-## Project status and limits
-
-Stable:
-
-- TTS, presets, buzzer, and default playback through Protect
-- Piper reconnect and timeout behavior
-- Bounded dynamic ringtone cleanup
-- Health and diagnostics endpoints
-
-Experimental:
-
-- Direct chime diagnostics
-- Protect event parsing and local rules
-- MQTT discovery and multi-chime arbitration
-
-Not implemented:
-
-- Direct stock-firmware HTTP playback
-- Production dynamic-slot playback without Protect ringtone identities
-- Official Protect API migration
-
-Ringtones must be valid MP3 files under Protect's size limit. The service relies on private Protect endpoints, so firmware or Protect updates can require compatibility work.
-
-## Documentation
-
+- [Home Assistant](docs/HOME_ASSISTANT.md)
+- [MCP](docs/MCP.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Compatibility](docs/COMPATIBILITY.md)
 - [Latency and metrics](docs/LATENCY.md)
@@ -527,25 +448,37 @@ Ringtones must be valid MP3 files under Protect's size limit. The service relies
 - [Rules](docs/RULES.md)
 - [Track registry](docs/TRACKS.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
+- [v2.1.0-beta.1 release notes](docs/RELEASE_NOTES_v2.1.0-beta.1.md)
 
-## Security
+# Security
 
-Keep UniFi credentials and API keys out of Git. Store them in `.env`, Docker secrets, or another local secret manager. Do not expose UniFi Announcer directly to the internet. Use a VPN or authenticated reverse proxy if remote access is required.
+Keep UniFi credentials and API keys out of Git. Store them in `.env`, Docker secrets, Home Assistant config entries, or another local secret manager.
 
-The service refuses known destructive chime endpoints, including adoption and factory-reset paths.
+Do **not** expose UniFi Announcer or its MCP endpoint directly to the public internet. Use a VPN or deliberately configured authenticated reverse proxy for remote access.
 
-## Development
+The public repository intentionally excludes deployment-specific credentials, certificate fingerprints, raw authentication research, and private support data.
+
+# Development
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
 .venv/bin/python -W error -m pytest -q
 .venv/bin/ruff check .
+python3 -m compileall -q app custom_components
 ```
 
-Tests use mocks and sanitized fixtures. They do not contact a live console or play audio.
+Tests use mocks and sanitized fixtures; public CI does not contact live UniFi equipment or play sound.
 
-## License
+# Release status
+
+- `v2.0.0` — stable local MVP reliability release
+- `v2.1.0-beta.1` — Home Assistant + MCP public beta
+- `v2.2.0` — planned native Home Assistant `tts.speak` / binary media ingestion and optional SSE integration
+
+See the [Releases page](https://github.com/bdini13/unifi-announcer/releases).
+
+# License
 
 MIT
 
