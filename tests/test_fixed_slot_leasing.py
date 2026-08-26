@@ -122,7 +122,7 @@ async def test_third_message_waits_until_one_of_two_slots_is_released(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_production_startup_migrates_before_allocating_slots(tmp_path):
+async def test_production_startup_migrates_only_after_both_slots_are_proven(tmp_path):
     events = []
     world = World()
 
@@ -155,4 +155,4 @@ async def test_production_startup_migrates_before_allocating_slots(tmp_path):
     )
 
     assert status["ready"] is True
-    assert events == ["migrate", "ensure-1", "ensure-2", "validate"]
+    assert events == ["ensure-1", "ensure-2", "validate", "migrate"]
