@@ -3,7 +3,7 @@
 [![CI](https://github.com/bdini13/unifi-announcer/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/bdini13/unifi-announcer/actions/workflows/test.yml)
 [![HA validation](https://github.com/bdini13/unifi-announcer/actions/workflows/validate-ha.yml/badge.svg?branch=main)](https://github.com/bdini13/unifi-announcer/actions/workflows/validate-ha.yml)
 [![Stable](https://img.shields.io/badge/stable-v2.0.0-blue)](https://github.com/bdini13/unifi-announcer/releases/tag/v2.0.0)
-[![Beta](https://img.shields.io/badge/beta-v2.1.0--beta.2-orange)](https://github.com/bdini13/unifi-announcer/releases/tag/v2.1.0-beta.2)
+[![Beta](https://img.shields.io/badge/beta-v2.1.0--beta.3-orange)](https://github.com/bdini13/unifi-announcer/releases)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.3%2B-blue)](docs/HOME_ASSISTANT.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -11,12 +11,15 @@
 
 UniFi Announcer provides local text-to-speech, reusable spoken presets, multi-chime groups, Home Assistant controls, REST/MQTT interfaces, and optional MCP tools for UniFi Protect Smart Chimes.
 
-It synthesizes speech with Piper or Edge TTS, creates and reuses Protect ringtone objects, and asks Protect to play them on one chime or a named group. Home Assistant and MCP remain thin interfaces over the same announcement engine.
+It synthesizes speech with Piper or Edge TTS, caches it on the Announcer host, overwrites one of two persistent service-owned TTS slots on each target Smart Chime, and asks Protect to play that slot. Presets remain persistent Protect ringtones. Home Assistant and MCP remain thin interfaces over the same announcement engine.
 
 > [!IMPORTANT]
 > UniFi Protect's local API is undocumented and may change. This project has been tested with Protect 7.2.105 and Smart Chime firmware 1.7.20. See [Compatibility](docs/COMPATIBILITY.md) before upgrading firmware.
 >
 > UniFi Announcer is an unofficial community project and is not affiliated with or endorsed by Ubiquiti.
+
+> [!WARNING]
+> `v2.1.0-beta.2` and earlier can leave device-side ringtone artifacts when many unique TTS phrases are used. This is especially easy to trigger with conversational AI/MCP workloads. `v2.1.0-beta.3` replaces per-phrase device allocation with exactly two service-owned overwrite slots. Do not promote beta.2 to a high-cardinality TTS deployment.
 
 > [!NOTE]
 > Native Home Assistant and MCP support are in the v2.1 beta. Native Home Assistant `tts.speak` / `media-source://` audio ingestion is planned for v2.2; v2.1 supports native notify actions plus text and preset `media_player.play_media`.
@@ -43,13 +46,15 @@ UniFi Announcer fills that gap while keeping Protect in the playback path. It is
 
 | Capability | Status |
 |---|---|
-| Arbitrary text announcements | ✅ Stable |
+| Arbitrary text announcements | ✅ Stable core / 🧪 fixed-slot beta.3 path |
 | Piper local TTS | ✅ Stable |
 | Edge TTS | ✅ Supported |
 | Reusable preset tones | ✅ Stable |
 | Buzzer and assigned-default playback | ✅ Stable |
 | Multiple chimes and named groups | ✅ Stable |
 | Quiet hours, priority, dedupe, bounded queues | ✅ Stable |
+| Two fixed service-owned dynamic TTS slots | 🧪 v2.1 beta.3 |
+| Bounded host-side TTS MP3 cache | 🧪 v2.1 beta.3 |
 | Home Assistant HACS integration | 🧪 v2.1 beta |
 | HA `notify.send_message` | 🧪 v2.1 beta |
 | HA text/preset `media_player.play_media` | 🧪 v2.1 beta |
@@ -57,30 +62,29 @@ UniFi Announcer fills that gap while keeping Protect in the playback path. It is
 | MQTT discovery | ✅ Supported |
 | Protect event rules | 🧪 Experimental |
 | Native HA `tts.speak` media ingestion | ⏭️ v2.2 |
-| Direct stock-firmware HTTP playback | ❌ Not implemented |
 
 ## Architecture
 
 ```text
 Home Assistant ─┐
-REST            ├──► AnnouncementDispatcher ─► Protect ─► Smart Chime
-MQTT            │            ▲
-MCP ────────────┤            │
-Protect rules ──┘       queue / policy / cache
+REST            ├──► AnnouncementDispatcher ─► Protect play command ─► Smart Chime
+MQTT            │            ▲                        ▲
+MCP ────────────┤            │                        │
+Protect rules ──┘       queue / policy          fixed TTS slot ID
 ```
 
-For TTS:
+For arbitrary TTS in beta.3:
 
 ```text
 text
   -> Piper or Edge TTS
-  -> MP3 cache
-  -> Protect ringtone object
-  -> Protect play-speaker command
+  -> bounded MP3 cache on Announcer host
+  -> overwrite UA-TTS-1 or UA-TTS-2 on target Smart Chime(s)
+  -> Protect play-speaker with that persistent ringtone ID
   -> Smart Chime
 ```
 
-All production playback goes through Protect. Home Assistant and MCP do not contain second playback implementations or receive UniFi device credentials. Direct Smart Chime HTTPS remains optional diagnostics/research rather than the production playback path.
+The playback command still goes through Protect. Direct Smart Chime HTTPS is used only to overwrite an exact, previously proven UniFi-Announcer-owned TTS slot. The service never guesses a physical slot and never overwrites built-in, user-created, preset, or unknown tracks.
 
 ## Requirements
 
@@ -91,6 +95,9 @@ All production playback goes through Protect. Home Assistant and MCP do not cont
 - TTS engine:
   - [Wyoming Piper](https://github.com/rhasspy/wyoming-piper), recommended for local TTS
   - Edge TTS with internet access
+- For beta.3 arbitrary TTS: current Smart Chime per-device adoption credential supplied through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`
+
+Credential-retrieval procedures and raw authentication research are intentionally not published in this repository. Buzzer/default/preset behavior remains available independently of fixed-slot dynamic TTS readiness.
 
 Home Assistant and MCP are optional.
 
@@ -131,6 +138,7 @@ UNIFI_PASSWORD=<local-unifi-password>
 UNIFI_VERIFY_SSL=false
 
 CHIME_ID=<protect-chime-id>
+CHIME_DIRECT_PASSWORD=<current-device-adoption-credential>
 
 TTS_ENGINE=piper
 PIPER_URL=tcp://<piper-host-or-ip>:10200
@@ -165,27 +173,29 @@ Persistent data defaults to `./data`. To use another host path, set `DATA_PATH`,
 DATA_PATH=/srv/unifi-announcer/data
 ```
 
-Verify health and version:
+Verify health, version, and fixed-slot readiness:
 
 ```bash
 curl -fsS http://<announcer-host-or-ip>:8095/health
 curl -fsS http://<announcer-host-or-ip>:8095/version
+curl -fsS http://<announcer-host-or-ip>:8095/tts/slots/status
+curl -fsS http://<announcer-host-or-ip>:8095/tts/cache/status
 ```
 
-A healthy response contains `"status":"ok"`. Piper may be offline during startup; non-TTS controls remain available.
+A healthy fixed-slot deployment reports `"mode":"two_slot_overwrite"`, `"slot_count":2`, and `"ready":true`. Piper may be offline during startup; non-TTS controls remain available.
 
 ## Home Assistant — recommended setup
 
 UniFi Announcer includes a native HACS-compatible custom integration for Home Assistant 2026.3+.
 
 > [!WARNING]
-> **v2.1 beta testers:** Native Home Assistant support is distributed in `v2.1.0-beta.2`. The stable `v2.0.0` release does **not** contain the native integration. HACS does not normally select prereleases automatically, so after adding this repository explicitly enable prereleases for UniFi Announcer or select `v2.1.0-beta.2` when downloading.
+> **v2.1 beta testers:** Native Home Assistant support is distributed in the v2.1 prerelease. For conversational or high-cardinality TTS use, select `v2.1.0-beta.3` or later; beta.2 can leave device-side artifacts. The stable `v2.0.0` release does **not** contain the native integration. HACS does not normally select prereleases automatically.
 
 ### Install through HACS as a custom repository
 
 1. Open **HACS** in Home Assistant.
 2. Add `https://github.com/bdini13/unifi-announcer` as an **Integration** custom repository.
-3. Enable prereleases for this repository or explicitly choose `v2.1.0-beta.2`.
+3. Enable prereleases for this repository or explicitly choose `v2.1.0-beta.3`.
 4. Install **UniFi Announcer**.
 5. Restart Home Assistant.
 6. Open **Settings → Devices & services → Add integration → UniFi Announcer**.
@@ -263,6 +273,7 @@ Native `tts.speak` media-source ingestion is planned for v2.2.
 - Native `tts.speak` and binary/media-source ingestion are deferred to v2.2.
 - Queue depth is exposed per physical chime; groups intentionally do not expose a fake aggregate queue-depth sensor.
 - Changes to `CHIMES_CONFIG` or `GROUPS_CONFIG` require reloading or restarting the Home Assistant integration before its entity topology is rebuilt.
+- Beta.3 arbitrary TTS requires fixed-slot readiness and current direct-device credentials on every target chime.
 - MCP is disabled by default and is independent of Home Assistant.
 
 ## What UniFi Announcer adds beyond native Home Assistant UniFi Protect
@@ -346,7 +357,9 @@ play_default
 buzzer
 ```
 
-The MCP surface deliberately excludes credential retrieval, raw Protect administration, reboot/reset/adoption, cache mutation, firmware research, direct staging, and arbitrary URL/file playback.
+`get_status` includes fixed-slot and TTS-cache status in beta.3. Internal `UA-TTS-*` slot identities are excluded from `list_presets`.
+
+The MCP surface deliberately excludes credential retrieval, raw Protect administration, reboot/reset/adoption, arbitrary direct staging, firmware research, and arbitrary URL/file playback.
 
 See [MCP documentation](docs/MCP.md) for client configuration and architecture details.
 
@@ -417,7 +430,7 @@ curl -fsS -X POST "${AUTH[@]}" \
   "$ANNOUNCER_URL/announce"
 ```
 
-Each physical chime has its own bounded queue. Group members execute concurrently, and one failed member does not prevent healthy members from playing.
+Each physical chime has its own bounded queue. Group members execute concurrently, and one failed member does not prevent healthy members from playing. The logical TTS slot number is shared for an announcement, while each physical Smart Chime retains its own proven device-slot mapping.
 
 ## MQTT and local rules
 
@@ -425,33 +438,39 @@ MQTT remains optional. Set `MQTT_URL`, `MQTT_USERNAME`, and `MQTT_PASSWORD` to e
 
 Local rules can react directly to Protect events without a Home Assistant round trip. See [Rules documentation](docs/RULES.md).
 
-## Upgrade from v2.0 to the v2.1 beta
+## Upgrade to v2.1.0-beta.3
 
-Keep your existing `.env` and persistent `DATA_PATH`. Do not delete the track registry or cache during a normal upgrade.
+Keep your existing `.env` and persistent `DATA_PATH`. **Do not delete `track_registry.json` before this upgrade**: beta.3 uses ownership records to identify and conservatively migrate beta.2 dynamic artifacts.
 
 ```bash
 cd unifi-announcer
 git fetch --tags
-git checkout v2.1.0-beta.2
+git checkout v2.1.0-beta.3
 docker compose up -d --build
 ```
+
+Beta.3 additionally requires a current per-device Smart Chime credential for arbitrary TTS. Supply it through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`. Retrieval procedures are intentionally outside the public repository.
 
 Then verify:
 
 ```bash
 curl -fsS http://<announcer-host-or-ip>:8095/health
 curl -fsS http://<announcer-host-or-ip>:8095/version
+curl -fsS http://<announcer-host-or-ip>:8095/tts/slots/status
+curl -fsS http://<announcer-host-or-ip>:8095/tts/cache/status
 ```
 
-If you use MCP, add `MCP_ENABLED`, `MCP_API_KEY`, and `MCP_ALLOWED_HOSTS`; existing REST, MQTT, rules, tracks, presets, and cached TTS data do not require migration.
+The slot status should show exactly two persistent slots and `ready: true`. Legacy service-owned NVR dynamic identities are cleaned only when ownership is proven. Ambiguous device artifacts are retained/reported rather than guessed at.
 
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| UniFi Announcer does not appear in HA | HACS installed stable `v2.0.0` | Enable prereleases/select `v2.1.0-beta.2`, reinstall, restart HA |
+| UniFi Announcer does not appear in HA | HACS installed stable `v2.0.0` or older beta | Enable prereleases/select `v2.1.0-beta.3`, reinstall, restart HA |
 | HA reports invalid API key | `APP_API_KEY` changed or mismatches | Complete the integration's reauthentication flow |
-| Buttons work but TTS fails | Piper is unavailable | Check `PIPER_URL` and the Piper service |
+| Buttons/presets work but arbitrary TTS fails | Fixed TTS slots are not ready | Check `/tts/slots/status`; verify current direct-device credential and chime reachability |
+| Slot status reports ownership drift | Physical slot metadata no longer matches proof | Stop TTS and reconcile; do not force/guess a slot |
+| Piper synthesis fails | Piper is unavailable | Check `PIPER_URL` and the Piper service |
 | MCP returns HTTP 401 | Bearer key mismatch | Check `MCP_API_KEY` and Authorization header |
 | MCP returns HTTP 421 | Host not allowlisted | Add the hostname/IP to `MCP_ALLOWED_HOSTS` and recreate the container |
 | Presets are missing | Protect read failed or integration state is stale | Check `/presets`, then reload the integration |
@@ -469,15 +488,19 @@ See [`.env.example`](.env.example) for the complete list.
 | `UNIFI_PASSWORD` | none | Local UniFi OS password |
 | `UNIFI_VERIFY_SSL` | `false` | Verify console TLS certificate |
 | `CHIME_ID` | none | Default Protect chime ID |
+| `CHIME_DIRECT_PASSWORD` | empty | Current device credential for fixed-slot dynamic TTS |
+| `CHIME_CREDENTIAL_FILE` | empty | Optional externally refreshed device-credential file |
 | `TTS_ENGINE` | `piper` | `piper` or `edge` |
 | `PIPER_URL` | none | Wyoming Piper endpoint |
+| `TTS_CACHE_MAX_FILES` | `256` | Host-side cached TTS file ceiling |
+| `TTS_CACHE_MAX_BYTES` | `268435456` | Host-side cached TTS byte ceiling |
 | `APP_API_KEY` | empty | REST write routes with `X-API-Key` |
 | `DATA_PATH` | `./data` | Host path mounted at `/data` |
 | `VOLUME_DEFAULT` | `50` | Default request volume |
 | `REPEAT_DEFAULT` | `1` | Default repeat count |
 | `QUIET_HOURS` | empty | Suppression window such as `22:00-06:30` |
-| `MAX_DYNAMIC_TRACKS` | `32` | Maximum service-owned dynamic TTS records |
-| `MAX_TOTAL_RINGTONES` | `6` | Conservative total Protect ringtone ceiling |
+| `MAX_DYNAMIC_TRACKS` | `32` | Deprecated beta.2 legacy migration setting; device TTS is fixed at two slots |
+| `MAX_TOTAL_RINGTONES` | `6` | Protect capacity guard for initial slot/preset provisioning |
 | `PLAY_QUEUE_MAX_DEPTH` | `16` | Per-chime queue limit |
 | `CHIMES_CONFIG` | empty | Multi-chime definitions as JSON |
 | `GROUPS_CONFIG` | empty | Named groups as JSON |
@@ -494,11 +517,13 @@ See [`.env.example`](.env.example) for the complete list.
 | `GET` | `/version` | Semantic version, build identity, compatibility |
 | `GET` | `/auth/check` | Harmless API-key validation |
 | `GET` | `/chimes` | Configured chimes, groups, and queue depths |
-| `GET` | `/presets` | List Protect ringtones |
-| `POST` | `/announce` | Synthesize/cache text and play it |
+| `GET` | `/presets` | List user-facing Protect ringtones; internal TTS slots hidden |
+| `GET` | `/tts/slots/status` | Fixed dynamic TTS slot readiness and proven mappings |
+| `GET` | `/tts/cache/status` | Host-side bounded TTS cache statistics |
+| `POST` | `/announce` | Synthesize/cache text, overwrite an owned TTS slot, and play it |
 | `POST` | `/buzzer` | Play hardware buzzer |
 | `POST` | `/play-default` | Play assigned default ringtone |
-| `PUT` | `/presets/{name}` | Create or replace a preset |
+| `PUT` | `/presets/{name}` | Create or replace a persistent preset |
 | `POST` | `/presets/{name}/play` | Play a preset |
 | `GET` | `/events/recent` | Recent normalized Protect events |
 | `GET` | `/events/stream` | Server-Sent Events stream |
@@ -524,12 +549,14 @@ Home Assistant, REST, MQTT, local rules, and MCP all reuse the same dispatcher s
 
 ## Caching and safety
 
-- Repeated text uses a disk MP3 cache.
-- Ringtone IDs live in one in-memory `RingtoneIndex`.
-- Simultaneous cold requests for the same phrase share ringtone creation.
-- Dynamic TTS records are bounded by `MAX_DYNAMIC_TRACKS`.
-- Before creating a ringtone, the service preserves headroom under `MAX_TOTAL_RINGTONES` and only evicts service-owned dynamic tracks.
-- Presets, built-ins, and user-created tones are not dynamic-cleanup candidates.
+- Repeated text uses a content-addressed disk MP3 cache on the Announcer host.
+- The host cache is bounded independently by `TTS_CACHE_MAX_FILES` and `TTS_CACHE_MAX_BYTES`.
+- Dynamic TTS consumes exactly two persistent service-owned device slots per Announcer installation.
+- New unique phrases overwrite those two slots; they do not create new Protect ringtone identities after provisioning.
+- Slot reuse is lease/guard based so a slot is not overwritten while prior playback may still depend on it.
+- Before every direct overwrite, the service rechecks the exact physical slot against persisted ownership evidence.
+- Unknown, built-in, user-created, and preset tracks are never dynamic-slot overwrite candidates.
+- `MAX_TOTAL_RINGTONES` is used for provisioning/preset headroom, not routine dynamic message churn.
 - Destructive direct chime endpoints are blocked before network I/O.
 
 See [Track registry documentation](docs/TRACKS.md) and [Playback policy](docs/POLICY.md).
@@ -548,6 +575,7 @@ See [Track registry documentation](docs/TRACKS.md) and [Playback policy](docs/PO
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
 - [v2.1.0-beta.1 release notes](docs/RELEASE_NOTES_v2.1.0-beta.1.md)
 - [v2.1.0-beta.2 release notes](docs/RELEASE_NOTES_v2.1.0-beta.2.md)
+- [v2.1.0-beta.3 release notes](docs/RELEASE_NOTES_v2.1.0-beta.3.md)
 
 ## Security
 
@@ -555,7 +583,7 @@ Keep UniFi credentials and API keys out of Git. Store them in `.env`, Docker sec
 
 Do **not** expose UniFi Announcer or its MCP endpoint directly to the public internet. Use a VPN or deliberately configured authenticated reverse proxy for remote access.
 
-Direct-device diagnostics require a current device adoption credential. Credential-extraction procedures and raw authentication research are intentionally not documented in the public repository.
+Beta.3 dynamic TTS requires a current device adoption credential solely for exact service-owned slot overwrite. The public service does not expose that credential, and MCP/Home Assistant do not receive it. Credential-extraction procedures and raw authentication research are intentionally not documented in the public repository.
 
 The public repository intentionally excludes deployment-specific credentials, certificate fingerprints, raw authentication research, and private support data.
 
@@ -580,7 +608,7 @@ python3.14 -m venv .venv-ha
 .venv-ha/bin/python -m pytest -q tests_ha
 ```
 
-CI also runs HACS validation and Hassfest. Tests use mocks and sanitized fixtures; public CI does not contact live UniFi equipment or play sound.
+CI also runs HACS validation and Hassfest. Tests use mocks and sanitized fixtures; public CI does not contact live UniFi equipment or play sound. The core suite includes a 100-unique-message regression asserting that dynamic TTS creates no Protect ringtone identities beyond the initial two slots.
 
 ## AI-assisted development
 
@@ -589,7 +617,7 @@ This project was developed with the assistance of AI coding and research tools. 
 ## Release status
 
 - **Stable:** `v2.0.0` — local MVP reliability release
-- **Beta:** `v2.1.0-beta.2` — Home Assistant + MCP hardening beta
+- **Beta:** `v2.1.0-beta.3` — fixed-slot dynamic TTS + Home Assistant + MCP beta
 - **Planned:** `v2.2.0` — native Home Assistant `tts.speak`, binary media ingestion, and optional SSE integration
 
 See the [Releases page](https://github.com/bdini13/unifi-announcer/releases).
