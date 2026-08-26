@@ -34,8 +34,11 @@ async def auth_check(x_api_key: str | None = Header(None, alias="X-API-Key")) ->
 
 
 async def version_check(_request) -> JSONResponse:
-    """Return the core compatibility payload plus semantic release version."""
+    """Return compatibility metadata plus the semantic release version."""
     payload = await core.version()
+    protocols = dict(payload.get("protocols") or {})
+    protocols["direct_device_http"] = "production_owned_tts_slot_overwrite"
+    payload["protocols"] = protocols
     return JSONResponse({"version": APP_VERSION, **payload})
 
 
@@ -111,6 +114,14 @@ setattr(core.app.state.services, "dynamic_slots", dynamic_slots)
 setattr(core.app.state.services, "tts_cache", tts_cache)
 
 
+async def health_check(_request) -> JSONResponse:
+    """Return normal component health plus fixed-slot/cache readiness."""
+    payload = dict(core.app.state.services.health.snapshot())
+    payload["dynamic_tts"] = dynamic_slots.status()
+    payload["tts_cache"] = tts_cache.stats()
+    return JSONResponse(payload)
+
+
 async def filtered_presets(_request) -> JSONResponse:
     """Hide internal UA-TTS slot identities from user-visible preset lists."""
     try:
@@ -183,6 +194,7 @@ async def lifespan(_app: Starlette):
 
 
 routes = [
+    Route("/health", health_check, methods=["GET"]),
     Route("/version", version_check, methods=["GET"]),
     Route("/presets", filtered_presets, methods=["GET"]),
     Route("/tts/slots/status", slot_status, methods=["GET"]),
