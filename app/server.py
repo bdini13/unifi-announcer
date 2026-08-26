@@ -54,8 +54,12 @@ def _tts_cache_key(text: str) -> str:
     )
 
 
+# Capture the original content-addressed synthesizer before replacing the
+# module-global production hook. The wrapper delegates to this original
+# function and then applies the independent host-cache LRU policy.
+_original_synthesize_tts_cached = core.synthesize_tts_cached
 tts_cache = BoundedTtsSynthesizer(
-    core.synthesize_tts_cached,
+    _original_synthesize_tts_cached,
     cache_dir=Path(os.getenv("CACHE_DIR", "/data/cache")) / "tts",
     key_factory=_tts_cache_key,
     max_files=int(os.getenv("TTS_CACHE_MAX_FILES", "256")),
@@ -106,10 +110,13 @@ dynamic_slots = DynamicTtsSlotManager(
     provisioning_timeout_s=float(os.getenv("TTS_SLOT_PROVISION_TIMEOUT", "15")),
 )
 
-# Production uses the bounded host cache and the fixed-slot device path. The
-# lower-level core module remains import-compatible for unit tests and tooling.
+# Production uses the bounded host cache and the fixed-slot device path. Keep
+# the original synthesizer only inside tts_cache.delegate; every runtime caller,
+# including persistent preset creation, now goes through the bounded wrapper.
+core.synthesize_tts_cached = tts_cache
 core.dispatcher.synthesize = tts_cache
 core.dispatcher.dynamic_slots = dynamic_slots
+setattr(core.app.state.services, "synthesize", tts_cache)
 setattr(core.app.state.services, "dynamic_slots", dynamic_slots)
 setattr(core.app.state.services, "tts_cache", tts_cache)
 
