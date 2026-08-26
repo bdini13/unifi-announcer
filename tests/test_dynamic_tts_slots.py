@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.dispatcher import AnnouncementCommand, AnnouncementDispatcher
-from app.playback.dynamic_slots import DynamicTtsSlotManager, DynamicSlotUnavailable
+from app.playback.fixed_slots import DynamicTtsSlotManager, DynamicSlotUnavailable
 
 
 class FakeMetrics:
