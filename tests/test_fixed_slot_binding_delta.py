@@ -254,8 +254,8 @@ async def test_persisted_mapping_refreshes_filename_from_exact_provisioning_proo
     track = world.tracks[binding.device_slot - 1]
     track.pop("fileName")
     track["name"] = "protect-rotated-owned-name"
-    track["md5"] = binding.provisioning_md5
-    track["size"] = binding.provisioning_size
+    track["md5"] = mgr.slots[1].bootstrap_md5
+    track["size"] = mgr.slots[1].bootstrap_size
 
     restarted = manager(tmp_path, world)
     status = await restarted.startup([target(world)], bootstrap_audio_factory=bootstrap)

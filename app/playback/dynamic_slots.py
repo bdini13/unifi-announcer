@@ -360,10 +360,12 @@ class DynamicTtsSlotManager:
                 if binding is None:
                     slot.bindings[chime_id] = await self._discover_binding(slot, chime_id)
                     continue
-                await self._preflight_binding(binding)
+                await self._preflight_binding(slot, binding)
         self._persist_registry()
 
-    async def _preflight_binding(self, binding: DeviceSlotBinding) -> None:
+    async def _preflight_binding(
+        self, slot: DynamicTtsSlot, binding: DeviceSlotBinding
+    ) -> None:
         chime = await self.get_chime(binding.chime_id)
         tracks = chime.get("speakerTrackList") or []
         if binding.device_slot < 1 or not binding.filename.endswith(".mp3"):
@@ -385,10 +387,10 @@ class DynamicTtsSlotManager:
             if filename and not filename.endswith(".mp3"):
                 filename = f"{filename}.mp3"
             if filename != binding.filename:
-                if filename and _fingerprint(track) == (
-                    binding.provisioning_md5,
-                    binding.provisioning_size,
-                ):
+                if filename and _fingerprint(track) in {
+                    (binding.provisioning_md5, binding.provisioning_size),
+                    (slot.bootstrap_md5, slot.bootstrap_size),
+                }:
                     binding.filename = filename
                 else:
                     raise DynamicSlotUnavailable(
@@ -425,7 +427,7 @@ class DynamicTtsSlotManager:
                     raise DynamicSlotUnavailable(
                         f"slot {number}: no proven binding for {target.desc.name}"
                     )
-                await self._preflight_binding(binding)
+                await self._preflight_binding(slot, binding)
                 if binding.current_md5 == md5 and binding.current_size == size:
                     self._metric("tts_slot_overwrite_skips")
                     continue
