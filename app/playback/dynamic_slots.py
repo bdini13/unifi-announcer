@@ -378,7 +378,12 @@ class DynamicTtsSlotManager:
         # must prove that Protect renamed the same service-owned slot.
         if binding.device_slot <= len(tracks):
             track = tracks[binding.device_slot - 1]
-            filename = str(track.get("fileName") or track.get("filename") or "")
+            raw_filename = (
+                track.get("fileName") or track.get("filename") or track.get("name") or ""
+            )
+            filename = str(raw_filename)
+            if filename and not filename.endswith(".mp3"):
+                filename = f"{filename}.mp3"
             if filename != binding.filename:
                 if filename and _fingerprint(track) == (
                     binding.provisioning_md5,

@@ -252,7 +252,8 @@ async def test_persisted_mapping_refreshes_filename_from_exact_provisioning_proo
     assert (await mgr.startup([target(world)], bootstrap_audio_factory=bootstrap))["ready"]
     binding = mgr.slots[1].bindings["chime-1"]
     track = world.tracks[binding.device_slot - 1]
-    track["fileName"] = "protect-rotated-owned-name.mp3"
+    track.pop("fileName")
+    track["name"] = "protect-rotated-owned-name"
     track["md5"] = binding.provisioning_md5
     track["size"] = binding.provisioning_size
 
