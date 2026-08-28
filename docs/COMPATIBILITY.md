@@ -4,35 +4,61 @@
 
 | Component / capability | Evidence level | Status |
 |---|---|---|
-| UniFi Protect 4.x/5.x private session API | Existing implementation + mocked tests | NVR auth, ringtone identity and playback are the production backend |
-| Smart Chime firmware 1.7.20 `/api/info` | Existing recorded evidence | Experimental read; capability-gated with NVR fallback |
-| Smart Chime firmware 1.7.20 `/api/support` | Existing recorded evidence | Experimental sensitive read; redacted |
-| Direct ringtone-slot staging | Controlled local research on fw 1.7.20 | Experimental and unpublished; Protect metadata did not reliably reconcile, so generic direct staging remains disabled |
-| Direct HTTP playback/deletion | No verified route | Unsupported; do not infer from UCP4 command strings |
-| Protect-internal UCP4 transport/trust | No supported transport or trust path found | Unsupported; disconnected default-off research interface only |
-| Python | 3.12 container target; CI also runs project Python | Supported by tests |
+| UniFi Protect 7.2.105 private session API | Existing implementation + live use + mocked tests | Protect auth, persistent ringtone identity and playback backend |
+| Smart Chime firmware 1.7.20 `/api/info` | Existing recorded/live evidence | Used to capability-gate beta.3 fixed-slot TTS writes |
+| Smart Chime firmware 1.7.20 `/api/support` | Existing recorded evidence | Sensitive diagnostic read; not part of normal playback |
+| Exact owned ringtone-slot overwrite | Controlled local research on fw 1.7.20 + beta.3 ownership gates | Used only for two proven service-owned dynamic TTS slots |
+| Generic arbitrary direct staging | Insufficient safe ownership model | Disabled |
+| Direct HTTP playback | No verified route | Unsupported; playback remains Protect `play-speaker` |
+| Direct slot deletion | Semantics not proven | Unsupported; beta.3 migration overwrites proven legacy bytes with silence rather than guessing deletion |
+| Protect-internal UCP4 transport/trust | No supported transport or trust path found | Unsupported; disconnected research interface only |
+| Python | 3.12 container target; HA validation uses its pinned environment | Supported by CI |
 | aiomqtt | 2.3.0 | Optional MQTT path |
+| MCP Python SDK | 2.0.0 | Optional Streamable HTTP MCP path |
 
-Direct-device endpoints are undocumented and experimental. Unknown firmware
-fails closed for writes. Direct staging is optional; Protect/NVR ringtone
-identity remains mandatory and playback uses the NVR route.
+## Beta.3 fixed-slot compatibility boundary
+
+Dynamic TTS in `v2.1.0-beta.3` requires all of the following:
+
+- a compatible Smart Chime firmware whose direct info capability permits custom ringtone storage;
+- a current per-device adoption credential supplied locally to the Announcer host;
+- exactly two persistent service-owned Protect ringtone identities;
+- an exact, persisted physical slot binding for each configured target;
+- ownership evidence that still matches immediately before each overwrite.
+
+If any write precondition fails, arbitrary TTS fails closed. The service never falls back to beta.2's per-phrase ringtone allocation because that can accumulate device-side artifacts under high-cardinality workloads.
+
+Buzzer/default/persistent preset operations can remain available independently when their existing Protect paths are healthy.
+
+## Protect + direct responsibilities
+
+The beta.3 path intentionally uses both sides:
+
+```text
+Direct Smart Chime HTTPS
+  -> replace bytes only in a proven UA-TTS slot
+
+Protect/NVR
+  -> retain the persistent ringtone identity
+  -> issue play-speaker
+```
+
+A successful direct save is not itself enough to claim an arbitrary physical slot. Generic staging remains disabled.
 
 ## Firmware evidence levels
 
-- **Level 1 — strings signature:** `scripts/fw_signature.py` extracts printable
-  clues, exact/normalized full-phrase matches, offsets, and bounded contexts.
-  String presence does not prove a route is registered or a function is called.
-- **Level 2 — private analyst notes:** deployment-specific evidence is kept out
-  of the public repository.
-- Dynamic tests, auth probes, uploads, playback, deletion, and flash writes were
-  not run in this checkpoint.
+- **Level 1 — strings signature:** `scripts/fw_signature.py` extracts printable clues, exact/normalized full-phrase matches, offsets, and bounded contexts. String presence does not prove a route is registered or safe.
+- **Level 2 — controlled device evidence:** sanitized tests can prove exact slot/hash/size behavior without publishing deployment credentials.
+- **Level 3 — production enablement:** requires explicit ownership evidence, capability gating, and fail-closed behavior in code.
 
-After a firmware update, run the signature tool only against an authorized
-local image and compare JSON. Signature changes require review; they do not by
-themselves enable direct writes. Leave experiments off and rely on the NVR path
-until compatibility and auth are separately approved and proven.
+After a Smart Chime firmware update, treat fixed-slot writes as unverified until compatibility is retested. Signature changes alone must never enable direct writes.
+
+## Credential handling
+
+The public repository does not document credential-extraction procedures or raw authentication research. The current device credential may be supplied as `CHIME_DIRECT_PASSWORD` or via `CHIME_CREDENTIAL_FILE`; the latter supports an external local refresher without requiring container restarts.
+
+MCP and Home Assistant receive only the Announcer application/API surfaces and never receive the physical device credential.
 
 ## Protect WebSocket framing
 
-The existing sanitized fixture covers one/two linked frames with an 8-byte
-header and JSON or zlib payload. It contains no live IDs, addresses, or auth.
+The existing sanitized fixture covers one/two linked frames with an 8-byte header and JSON or zlib payload. It contains no live IDs, addresses, or auth.
