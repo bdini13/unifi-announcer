@@ -371,18 +371,24 @@ class DynamicTtsSlotManager:
                 f"chime {binding.chime_id}: invalid persisted TTS slot binding"
             )
 
-        # Protect 7.2.105 may omit custom slots or leave their fingerprints
-        # stale after a direct overwrite. In that case, retain the mapping that
-        # was already proven and persisted. If Protect positively reports the
-        # mapped physical position, however, its exact filename must still
-        # match; a different filename is ownership drift and must fail closed.
+        # Protect may omit custom slots or leave fingerprints stale after a
+        # direct overwrite. Missing metadata therefore retains an already-proven
+        # persisted mapping. When the physical position is reported, either its
+        # exact filename must still match or its exact provisioning fingerprint
+        # must prove that Protect renamed the same service-owned slot.
         if binding.device_slot <= len(tracks):
             track = tracks[binding.device_slot - 1]
-            filename = track.get("fileName") or track.get("filename")
-            if str(filename or "") != binding.filename:
-                raise DynamicSlotUnavailable(
-                    f"chime {binding.chime_id}: TTS slot ownership proof no longer matches"
-                )
+            filename = str(track.get("fileName") or track.get("filename") or "")
+            if filename != binding.filename:
+                if filename and _fingerprint(track) == (
+                    binding.provisioning_md5,
+                    binding.provisioning_size,
+                ):
+                    binding.filename = filename
+                else:
+                    raise DynamicSlotUnavailable(
+                        f"chime {binding.chime_id}: TTS slot ownership proof no longer matches"
+                    )
         binding.verified_at = time.time()
 
     async def _acquire_slot_number(self) -> int:

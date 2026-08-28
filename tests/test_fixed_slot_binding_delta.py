@@ -246,6 +246,26 @@ async def test_persisted_mapping_survives_omitted_track_metadata(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_persisted_mapping_refreshes_filename_from_exact_provisioning_proof(tmp_path):
+    world = DeltaWorld(mode="replace")
+    mgr = manager(tmp_path, world)
+    assert (await mgr.startup([target(world)], bootstrap_audio_factory=bootstrap))["ready"]
+    binding = mgr.slots[1].bindings["chime-1"]
+    track = world.tracks[binding.device_slot - 1]
+    track["fileName"] = "protect-rotated-owned-name.mp3"
+    track["md5"] = binding.provisioning_md5
+    track["size"] = binding.provisioning_size
+
+    restarted = manager(tmp_path, world)
+    status = await restarted.startup([target(world)], bootstrap_audio_factory=bootstrap)
+
+    assert status["ready"] is True, status
+    assert restarted.slots[1].bindings["chime-1"].filename == (
+        "protect-rotated-owned-name.mp3"
+    )
+
+
+@pytest.mark.asyncio
 async def test_persisted_mapping_rejects_positive_filename_drift(tmp_path):
     world = DeltaWorld(mode="replace")
     mgr = manager(tmp_path, world)
