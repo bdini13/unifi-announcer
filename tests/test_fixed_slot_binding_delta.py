@@ -14,8 +14,9 @@ class DeltaWorld:
         self.deletes = 0
         self.play_calls = []
         self.tracks = [
-            {"md5": "base-a", "size": 100, "fileName": "base-a.mp3"},
-            {"md5": "base-b", "size": 110, "fileName": "base-b.mp3"},
+            {"md5": f"base-{number}", "size": 90 + number,
+             "fileName": f"base-{number}.mp3"}
+            for number in range(1, 8)
         ]
 
     async def list_ringtones(self):
@@ -125,7 +126,7 @@ async def test_transcoded_same_count_track_delta_proves_binding(tmp_path):
 
     status = await mgr.startup([target(world)], bootstrap_audio_factory=bootstrap)
 
-    assert status["ready"] is True
+    assert status["ready"] is True, status
     assert world.uploads == 2
     assert all(call[1] == 1 for call in world.play_calls)
     assert mgr.slots[1].bindings["chime-1"].device_slot == 1
@@ -143,12 +144,12 @@ async def test_single_inserted_track_delta_proves_binding(tmp_path):
     status = await mgr.startup([target(world)], bootstrap_audio_factory=bootstrap)
 
     assert status["ready"] is True
-    assert mgr.slots[1].bindings["chime-1"].device_slot == 3
-    assert mgr.slots[2].bindings["chime-1"].device_slot == 4
+    assert mgr.slots[1].bindings["chime-1"].device_slot == 8
+    assert mgr.slots[2].bindings["chime-1"].device_slot == 9
 
 
 @pytest.mark.asyncio
-async def test_zero_track_delta_fails_closed(tmp_path):
+async def test_zero_track_delta_fails_closed_without_guessing_slots(tmp_path):
     world = DeltaWorld(mode="none")
     mgr = manager(tmp_path, world)
 
@@ -161,7 +162,7 @@ async def test_zero_track_delta_fails_closed(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_multiple_track_delta_fails_closed(tmp_path):
+async def test_multiple_track_delta_fails_closed_without_guessing_slots(tmp_path):
     world = DeltaWorld(mode="multiple")
     mgr = manager(tmp_path, world)
 
@@ -180,14 +181,12 @@ async def test_existing_partial_slot_is_retried_without_duplicate_identity(tmp_p
     assert first_status["ready"] is False
     assert world.uploads == 1
 
-    # This is the exact live-Hermes recovery case: the Protect slot-1 identity
-    # and local registry exist, but volume=0 previously produced no binding.
     world.mode = "replace"
     second = manager(tmp_path, world)
     second_status = await second.startup([target(world)], bootstrap_audio_factory=bootstrap)
 
     assert second_status["ready"] is True
-    assert world.uploads == 2  # existing slot 1 reused; only slot 2 was created
+    assert world.uploads == 2  # slot 1 reused; only slot 2 was created
     assert len([r for r in world.ringtones if r["name"].startswith("UA-TTS-1-")]) == 1
     assert second.slots[1].bindings["chime-1"].device_slot == 1
 
@@ -220,3 +219,60 @@ async def test_failed_slot_proof_does_not_run_legacy_migration(tmp_path):
     assert status["ready"] is False
     assert events == []
     assert world.deletes == 0
+
+
+@pytest.mark.asyncio
+async def test_persisted_mapping_survives_omitted_track_metadata(tmp_path):
+    world = DeltaWorld(mode="replace")
+    first = manager(tmp_path, world)
+    assert (await first.startup([target(world)], bootstrap_audio_factory=bootstrap))["ready"]
+    expected = {
+        number: (slot.bindings["chime-1"].device_slot,
+                 slot.bindings["chime-1"].filename)
+        for number, slot in first.slots.items()
+    }
+
+    world.tracks = []
+    second = manager(tmp_path, world)
+    status = await second.startup([target(world)], bootstrap_audio_factory=bootstrap)
+
+    assert status["ready"] is True, status
+    assert {
+        number: (slot.bindings["chime-1"].device_slot,
+                 slot.bindings["chime-1"].filename)
+        for number, slot in second.slots.items()
+    } == expected
+    assert world.uploads == 2
+
+
+@pytest.mark.asyncio
+async def test_persisted_mapping_rejects_positive_filename_drift(tmp_path):
+    world = DeltaWorld(mode="replace")
+    mgr = manager(tmp_path, world)
+    assert (await mgr.startup([target(world)], bootstrap_audio_factory=bootstrap))["ready"]
+    binding = mgr.slots[1].bindings["chime-1"]
+    binding.device_slot = 6
+    binding.filename = world.tracks[5]["fileName"]
+    mgr._persist_registry()
+    world.tracks[5]["fileName"] = "foreign-owned-track.mp3"
+
+    restarted = manager(tmp_path, world)
+    status = await restarted.startup([target(world)], bootstrap_audio_factory=bootstrap)
+
+    assert status["ready"] is False
+    assert "ownership proof" in status["last_error"]
+
+
+@pytest.mark.asyncio
+async def test_persisted_mapping_rejects_reported_slot_without_filename(tmp_path):
+    world = DeltaWorld(mode="replace")
+    mgr = manager(tmp_path, world)
+    assert (await mgr.startup([target(world)], bootstrap_audio_factory=bootstrap))["ready"]
+    binding = mgr.slots[1].bindings["chime-1"]
+    world.tracks[binding.device_slot - 1].pop("fileName")
+
+    restarted = manager(tmp_path, world)
+    status = await restarted.startup([target(world)], bootstrap_audio_factory=bootstrap)
+
+    assert status["ready"] is False
+    assert "ownership proof" in status["last_error"]
