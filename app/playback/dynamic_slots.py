@@ -351,16 +351,33 @@ class DynamicTtsSlotManager:
             await asyncio.sleep(self.poll_interval_s)
 
     async def _validate_all_bindings(self) -> None:
-        for number in range(1, SLOT_COUNT + 1):
-            slot = self.slots.get(number)
-            if slot is None:
-                raise DynamicSlotUnavailable(f"slot {number} is not provisioned")
-            for chime_id in self._targets:
+        expected_slots = set(range(1, SLOT_COUNT + 1))
+        if set(self.slots) != expected_slots:
+            raise DynamicSlotUnavailable("exactly logical slots 1 and 2 must be provisioned")
+
+        ringtone_ids = [self.slots[number].protect_ringtone_id for number in expected_slots]
+        if any(not ringtone_id.strip() for ringtone_id in ringtone_ids) or len(
+            set(ringtone_ids)
+        ) != SLOT_COUNT:
+            raise DynamicSlotUnavailable(
+                "logical slots 1 and 2 must have distinct nonempty Protect IDs"
+            )
+
+        for chime_id in self._targets:
+            physical_slots: set[int] = set()
+            for number in range(1, SLOT_COUNT + 1):
+                slot = self.slots[number]
                 binding = slot.bindings.get(chime_id)
                 if binding is None:
-                    slot.bindings[chime_id] = await self._discover_binding(slot, chime_id)
-                    continue
-                await self._preflight_binding(slot, binding)
+                    binding = await self._discover_binding(slot, chime_id)
+                    slot.bindings[chime_id] = binding
+                else:
+                    await self._preflight_binding(slot, binding)
+                if binding.device_slot in physical_slots:
+                    raise DynamicSlotUnavailable(
+                        f"chime {chime_id}: logical slots must use distinct physical slots"
+                    )
+                physical_slots.add(binding.device_slot)
         self._persist_registry()
 
     async def _preflight_binding(

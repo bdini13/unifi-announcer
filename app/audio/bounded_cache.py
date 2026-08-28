@@ -63,16 +63,22 @@ class BoundedTtsSynthesizer:
         entries.sort(key=lambda item: item[0])
         total = sum(size for _, _, size in entries)
         evicted = 0
-        while entries and (len(entries) > self.max_files or total > self.max_bytes):
-            _, path, size = entries.pop(0)
+        undeletable = []
+        while entries and (
+            len(entries) + len(undeletable) > self.max_files
+            or total > self.max_bytes
+        ):
+            entry = entries.pop(0)
+            _, path, size = entry
             try:
                 path.unlink(missing_ok=True)
                 total -= size
                 evicted += 1
             except OSError:
-                # Skip an undeletable file and continue trying older candidates.
-                pass
-        return {"files": len(entries), "bytes": max(0, total), "evicted": evicted,
+                # Keep failed entries in accounting while trying other candidates.
+                undeletable.append(entry)
+        remaining = undeletable + entries
+        return {"files": len(remaining), "bytes": max(0, total), "evicted": evicted,
                 "max_files": self.max_files, "max_bytes": self.max_bytes}
 
     def stats(self) -> dict:

@@ -46,8 +46,8 @@ A clean beta.3 installation:
 2. proves the direct-device write capability for every configured target before allocation;
 3. creates two distinct short silent MP3 bootstrap artifacts;
 4. creates the two Protect ringtone identities once;
-5. plays each bootstrap at volume 0 so Protect stages it to each target;
-6. maps each bootstrap fingerprint to exactly one physical `speakerTrackList` position;
+5. plays each silent bootstrap at volume 1 so a non-zero request forces Protect's real staging/playback path;
+6. maps the resulting single before/after `speakerTrackList` delta to exactly one physical position, allowing for Protect-side audio transformation;
 7. persists the proven mapping.
 
 An exact-looking `UA-TTS-*` name is **not** enough to claim ownership if the local registry is missing. Such a collision fails closed.
@@ -62,7 +62,7 @@ The user-facing `/presets` and MCP `list_presets` responses hide internal `UA-TT
 
 Beta.2 represented every unique spoken phrase as an owned `dynamic_tts` record. NVR garbage collection could delete the Protect object, but direct device deletion was intentionally prohibited because deletion semantics were unproven. High-cardinality workloads could therefore leave physical flash artifacts.
 
-Beta.3 preserves the legacy registry through startup and performs migration before allocating new slot identities.
+Beta.3 preserves the legacy registry through startup and performs migration only after both new fixed-slot identities and physical bindings are proven.
 
 For each proven legacy dynamic record:
 

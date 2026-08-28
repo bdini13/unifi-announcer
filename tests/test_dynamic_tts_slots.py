@@ -155,6 +155,69 @@ async def test_restart_reuses_same_two_identities(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_persisted_id_with_foreign_protect_name_fails_closed(tmp_path):
+    world = FakeProtectWorld()
+    first = make_manager(tmp_path, world)
+    await first.startup([make_target(world)], bootstrap_audio_factory=bootstrap)
+    world.ringtones[0]["name"] = "User Preset"
+
+    restarted = make_manager(tmp_path, world)
+    restarted.installation_id = restarted._load_or_create_identity()
+    restarted._load_registry()
+    restarted._targets = {"chime-1": make_target(world)}
+    restarted._bootstrap_audio[1] = await bootstrap(1)
+
+    with pytest.raises(DynamicSlotUnavailable, match="Protect ringtone name"):
+        await restarted._ensure_slot(1)
+
+
+@pytest.mark.asyncio
+async def test_missing_persisted_id_recovers_unique_expected_name(tmp_path):
+    world = FakeProtectWorld()
+    first = make_manager(tmp_path, world)
+    await first.startup([make_target(world)], bootstrap_audio_factory=bootstrap)
+    world.ringtones[0]["id"] = "replacement-ring-1"
+
+    restarted = make_manager(tmp_path, world)
+    status = await restarted.startup(
+        [make_target(world)], bootstrap_audio_factory=bootstrap
+    )
+
+    assert status["ready"] is True, status
+    assert restarted.slots[1].protect_ringtone_id == "replacement-ring-1"
+    assert world.upload_calls == 2
+
+
+@pytest.mark.asyncio
+async def test_global_validation_rejects_duplicate_protect_ids(tmp_path):
+    world = FakeProtectWorld()
+    manager = make_manager(tmp_path, world)
+    assert (await manager.startup(
+        [make_target(world)], bootstrap_audio_factory=bootstrap
+    ))["ready"]
+    manager.slots[2].protect_ringtone_id = manager.slots[1].protect_ringtone_id
+
+    with pytest.raises(DynamicSlotUnavailable, match="distinct nonempty Protect IDs"):
+        await manager._validate_all_bindings()
+
+
+@pytest.mark.asyncio
+async def test_global_validation_rejects_duplicate_physical_slot_bindings(tmp_path):
+    world = FakeProtectWorld()
+    manager = make_manager(tmp_path, world)
+    assert (await manager.startup(
+        [make_target(world)], bootstrap_audio_factory=bootstrap
+    ))["ready"]
+    first = manager.slots[1].bindings["chime-1"]
+    second = manager.slots[2].bindings["chime-1"]
+    second.device_slot = first.device_slot
+    second.filename = first.filename
+
+    with pytest.raises(DynamicSlotUnavailable, match="distinct physical slots"):
+        await manager._validate_all_bindings()
+
+
+@pytest.mark.asyncio
 async def test_100_unique_hermes_messages_never_create_more_ringtones(tmp_path):
     world = FakeProtectWorld()
     target = make_target(world)

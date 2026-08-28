@@ -60,7 +60,7 @@ Two logical slots avoid overwriting bytes that may still be needed by a previous
 - `app/audio/cache.py`: in-memory Protect `RingtoneIndex`.
 - `app/audio/bounded_cache.py`: bounded host-side MP3 cache policy.
 - `app/playback/dynamic_slots.py`: slot data model, ownership proof, overwrite, lease, migration primitives.
-- `app/playback/fixed_slots.py`: fail-closed production startup ordering and migration-first provisioning.
+- `app/playback/fixed_slots.py`: fail-closed production provisioning followed by conservative legacy migration.
 - `app/playback/arbitration.py`: bounded per-chime priority queues and dispositions.
 - `app/rules/engine.py`: local rule action contracts.
 - `app/integrations/mqtt.py`: MQTT lifecycle, discovery, events, and command adapter.

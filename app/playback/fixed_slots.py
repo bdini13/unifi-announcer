@@ -244,7 +244,12 @@ class DynamicTtsSlotManager(_BaseDynamicTtsSlotManager):
                     raise DynamicSlotUnavailable(
                         f"slot {number}: registered Protect ringtone is missing or ambiguous"
                     )
-                existing.protect_ringtone_id = _ringtone_id(exact[0])
+                tone = exact[0]
+                existing.protect_ringtone_id = _ringtone_id(tone)
+            if str(tone.get("name", "")) != name:
+                raise DynamicSlotUnavailable(
+                    f"slot {number}: Protect ringtone name does not match installation"
+                )
             if existing.protect_name != name:
                 raise DynamicSlotUnavailable(
                     f"slot {number}: persisted name does not match installation"

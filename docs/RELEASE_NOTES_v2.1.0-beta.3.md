@@ -29,7 +29,7 @@ Built-in, user-created, preset, and unknown tracks are never dynamic overwrite c
 
 ## Migration
 
-Beta.3 preserves beta.2 ownership records through startup and conservatively migrates legacy `dynamic_tts` records before provisioning new fixed slots.
+Beta.3 preserves beta.2 ownership records through startup and conservatively migrates legacy `dynamic_tts` records only after both new fixed slots are proven.
 
 Where an old service-owned Protect fingerprint maps uniquely to a physical device track, beta.3 can replace the legacy audio bytes with a tiny silent artifact and delete the old NVR identity. Ambiguous device artifacts are retained as `legacy_orphan` evidence rather than modified automatically.
 

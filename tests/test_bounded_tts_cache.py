@@ -57,3 +57,35 @@ async def test_bounded_cache_prunes_to_byte_limit(tmp_path):
     assert stats["bytes"] <= 50
     assert stats["files"] <= 2
     assert Path(cache, "0.mp3").exists() is False
+
+
+@pytest.mark.asyncio
+async def test_bounded_cache_counts_undeletable_entries(monkeypatch, tmp_path):
+    cache = tmp_path / "tts"
+    cache.mkdir()
+    for index in range(3):
+        (cache / f"{index}.mp3").write_bytes(b"x" * 10)
+
+    original_unlink = Path.unlink
+
+    def refuse_mp3_unlink(path, *args, **kwargs):
+        if path.suffix == ".mp3":
+            raise PermissionError("undeletable")
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", refuse_mp3_unlink)
+
+    async def delegate(_text):
+        return b"cached"
+
+    synth = BoundedTtsSynthesizer(
+        delegate, cache_dir=cache, key_factory=lambda text: text,
+        max_files=20, max_bytes=15,
+    )
+
+    stats = await synth.startup()
+
+    assert stats["files"] == 3
+    assert stats["bytes"] == 30
+    assert stats["bytes"] > stats["max_bytes"]
+    assert stats["evicted"] == 0
