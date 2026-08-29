@@ -7,10 +7,10 @@ from scripts.release_v2_1 import NOTES_FILE, TAG, TITLE, ReleaseError, publish_r
 REPOSITORY = "owner/repository"
 
 
-def test_release_identity_targets_v2_1_1():
-    assert TAG == "v2.1.1"
-    assert TITLE.startswith("v2.1.1 ")
-    assert NOTES_FILE == "docs/RELEASE_NOTES_v2.1.1.md"
+def test_release_identity_targets_v2_1_2():
+    assert TAG == "v2.1.2"
+    assert TITLE.startswith("v2.1.2 ")
+    assert NOTES_FILE == "docs/RELEASE_NOTES_v2.1.2.md"
 
 
 class FakeRunner:
@@ -38,7 +38,7 @@ class FakeRunner:
         if command[:3] == ("git", "ls-remote", "--exit-code"):
             return SimpleNamespace(
                 returncode=self.tag_returncode,
-                stdout=(f"b646bdfe\trefs/tags/{TAG}\n" if self.tag_returncode == 0 else ""),
+                stdout=(f"f18a180e\trefs/tags/{TAG}\n" if self.tag_returncode == 0 else ""),
                 stderr="network failure" if self.tag_returncode not in (0, 2) else "",
             )
         if command[:3] == ("gh", "api", "--include"):
