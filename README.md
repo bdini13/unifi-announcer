@@ -645,6 +645,19 @@ See [Track registry documentation](docs/TRACKS.md) and [Playback policy](docs/PO
 - [v2.1.0-beta.2 release notes](docs/RELEASE_NOTES_v2.1.0-beta.2.md)
 - [v2.1.0-beta.3 release notes](docs/RELEASE_NOTES_v2.1.0-beta.3.md)
 
+## Support
+
+Use [GitHub Issues](https://github.com/bdini13/unifi-announcer/issues) for
+reproducible bugs and focused feature requests. Include the Announcer version,
+Protect version, Smart Chime model/firmware, exact reproduction steps, and
+whether evidence came from automated fixtures or physical devices. Redact all
+credentials, private addresses, device IDs, certificate details, support logs,
+and private audio. This is a community project with best-effort support.
+
+For vulnerabilities, follow [SECURITY.md](SECURITY.md) instead of opening a
+public issue. Development contributions are covered by
+[CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+
 ## Security
 
 Keep UniFi credentials and API keys out of Git. Store them in `.env`, Docker secrets, Home Assistant config entries, or another local secret manager.

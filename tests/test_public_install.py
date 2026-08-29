@@ -61,3 +61,18 @@ def test_stable_claims_disclose_physical_validation_boundary():
     assert "physical playback matrix" not in notes
     assert "100-unique-message automated regression" in notes
     assert "Multi-chime behavior is covered by automated tests" in notes
+
+
+def test_community_health_and_support_files_exist():
+    required = [
+        "SECURITY.md",
+        "CONTRIBUTING.md",
+        "CODE_OF_CONDUCT.md",
+        ".github/ISSUE_TEMPLATE/bug_report.yml",
+        ".github/pull_request_template.md",
+    ]
+    for name in required:
+        assert Path(name).is_file(), name
+    readme = Path("README.md").read_text()
+    assert "## Support" in readme
+    assert "SECURITY.md" in readme
