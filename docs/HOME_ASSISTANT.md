@@ -3,14 +3,14 @@
 UniFi Announcer includes a HACS-compatible custom integration under `custom_components/unifi_announcer` for Home Assistant 2026.3+.
 
 > [!WARNING]
-> Native Home Assistant support is currently a prerelease feature. For high-cardinality or conversational TTS, explicitly install `v2.1.0-beta.3` or later. The stable `v2.0.0` release predates this integration, and beta.2 can leave device-side artifacts when many unique phrases are spoken. HACS does not normally select prereleases automatically.
+> Native Home Assistant support is included in stable `v2.1.0` and later. Beta.2 can leave device-side artifacts when many unique phrases are spoken; use v2.1.0 or later for high-cardinality or conversational TTS.
 
 ## Install
 
 ### HACS custom repository
 
 1. In HACS, add `https://github.com/bdini13/unifi-announcer` as an **Integration** custom repository.
-2. Enable prereleases for UniFi Announcer or explicitly select `v2.1.0-beta.3`.
+2. Select the latest stable release.
 3. Install **UniFi Announcer**.
 4. Restart Home Assistant.
 5. Go to **Settings → Devices & services → Add integration → UniFi Announcer**.
@@ -156,7 +156,7 @@ The Version sensor reports the semantic UniFi Announcer version. The container g
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Integration not offered after HACS install | Stable `v2.0.0` or older beta was installed | Enable prereleases/select `v2.1.0-beta.3`, reinstall, restart HA |
+| Integration not offered after HACS install | `v2.0.0` or an older beta was installed | Select `v2.1.0` or later, reinstall, restart HA |
 | Invalid API key / reauthentication requested | `APP_API_KEY` changed or mismatches | Enter the current application key in the reauth flow |
 | Cannot connect | Home Assistant cannot reach the Docker host/port | Verify the Announcer URL and LAN routing |
 | No preset options | `/presets` failed or state is stale | Verify `/presets`, then reload the integration |
