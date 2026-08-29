@@ -144,3 +144,128 @@ async def test_full_setup_entity_topology_and_service(hass):
         assert await hass.config_entries.async_unload(entry.entry_id)
         await hass.async_block_till_done()
         assert not hass.services.has_service(DOMAIN, "announce")
+
+
+async def test_default_target_uses_intuitive_device_and_entity_names(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="UniFi Announcer",
+        data=BASE_DATA,
+        unique_id=BASE_DATA["url"],
+    )
+    entry.add_to_hass(hass)
+
+    with (
+        patch.object(UniFiAnnouncerClient, "async_check_auth", AsyncMock(return_value=None)),
+        patch.object(
+            UniFiAnnouncerClient,
+            "async_get_version",
+            AsyncMock(return_value={"version": "2.1.2", "service": "unifi-announcer"}),
+        ),
+        patch.object(
+            UniFiAnnouncerClient,
+            "async_get_health",
+            AsyncMock(return_value={"status": "ok"}),
+        ),
+        patch.object(
+            UniFiAnnouncerClient,
+            "async_get_chimes",
+            AsyncMock(return_value={
+                "chimes": [{
+                    "name": "default",
+                    "id": "chime-1",
+                    "queue_depth": 0,
+                    "capability_state": {"status": "available"},
+                }],
+                "groups": {},
+            }),
+        ),
+        patch.object(
+            UniFiAnnouncerClient,
+            "async_get_presets",
+            AsyncMock(return_value=[{"name": "package-delivered"}]),
+        ),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    device_registry = dr.async_get(hass)
+    service_device = device_registry.async_get_device(
+        identifiers={(DOMAIN, BASE_DATA["url"])}
+    )
+    chime_device = device_registry.async_get_device(
+        identifiers={(DOMAIN, "chime-1")}
+    )
+    assert service_device.name == "UniFi Announcer Service"
+    assert chime_device.name == "Protect Smart Chime"
+
+    registry = er.async_get(hass)
+    names_by_unique_id = {
+        item.unique_id: item.original_name
+        for item in registry.entities.values()
+        if item.config_entry_id == entry.entry_id and "chime-1" in item.unique_id
+    }
+    prefix = f"{entry.entry_id}_chime-1"
+    assert names_by_unique_id[f"{prefix}_buzzer"] == "Play buzzer"
+    assert names_by_unique_id[f"{prefix}_default"] == "Play default ringtone"
+    assert names_by_unique_id[f"{prefix}_preset"] == "Play selected preset"
+    assert names_by_unique_id[f"{prefix}_preset_select"] == "Ringtone preset"
+    assert names_by_unique_id[f"{prefix}_queue_depth"] == "Queue depth"
+    assert names_by_unique_id[f"{prefix}_last_disposition"] == "Last playback result"
+
+
+async def test_existing_generated_device_names_are_migrated(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="UniFi Announcer",
+        data=BASE_DATA,
+        unique_id=BASE_DATA["url"],
+    )
+    entry.add_to_hass(hass)
+    registry = dr.async_get(hass)
+    registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, BASE_DATA["url"])},
+        name="UniFi Announcer",
+    )
+    registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, "chime-1")},
+        name="default",
+    )
+
+    with (
+        patch.object(UniFiAnnouncerClient, "async_check_auth", AsyncMock(return_value=None)),
+        patch.object(
+            UniFiAnnouncerClient,
+            "async_get_version",
+            AsyncMock(return_value={"version": "2.1.2", "service": "unifi-announcer"}),
+        ),
+        patch.object(
+            UniFiAnnouncerClient,
+            "async_get_health",
+            AsyncMock(return_value={"status": "ok"}),
+        ),
+        patch.object(
+            UniFiAnnouncerClient,
+            "async_get_chimes",
+            AsyncMock(return_value={
+                "chimes": [{"name": "default", "id": "chime-1", "queue_depth": 0}],
+                "groups": {},
+            }),
+        ),
+        patch.object(
+            UniFiAnnouncerClient,
+            "async_get_presets",
+            AsyncMock(return_value=[]),
+        ),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert registry.async_get_device(
+        identifiers={(DOMAIN, BASE_DATA["url"])}
+    ).name == "UniFi Announcer Service"
+    assert registry.async_get_device(
+        identifiers={(DOMAIN, "chime-1")}
+    ).name == "Protect Smart Chime"

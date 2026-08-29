@@ -28,7 +28,11 @@ class UniFiAnnouncerButton(UniFiAnnouncerEntity, ButtonEntity):
         self.kind = kind
         self._attr_unique_id = f"{entry.entry_id}_{self.entity_key}_{kind}"
         self._attr_translation_key = f"play_{kind}"
-        self._attr_name = None
+        self._attr_name = {
+            "buzzer": "Play buzzer",
+            "default": "Play default ringtone",
+            "preset": "Play selected preset",
+        }[kind]
 
     async def async_press(self) -> None:
         try:

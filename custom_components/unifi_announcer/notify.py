@@ -21,7 +21,7 @@ class UniFiAnnouncerNotify(UniFiAnnouncerEntity, NotifyEntity):
     """Standard notify.send_message target for one chime or group."""
 
     _attr_translation_key = "announce"
-    _attr_name = None
+    _attr_name = "Announcements"
 
     def __init__(self, entry, coordinator, target, chime_id, is_group) -> None:
         super().__init__(entry, coordinator, target, chime_id, is_group)
