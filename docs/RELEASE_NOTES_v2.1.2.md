@@ -15,7 +15,7 @@ v2.1.2 is a release-quality patch over v2.1.1. It does not change the announceme
 
 ## Validation boundary
 
-The playback architecture shipped in v2.1.0 was physically validated on one Smart Chime, including alternating fixed slots, preset/default/buzzer playback, restart persistence, concurrency/deduplication, and a 100-unique-message live soak that kept dynamic Protect identities fixed at two.
+The playback architecture shipped in v2.1.0 was physically validated on one Smart Chime for alternating fixed slots, preset/default/buzzer playback, restart persistence, and service status. A separate 100-unique-message automated regression kept dynamic Protect identities fixed at two and preserved synthetic per-device slot mappings.
 
 v2.1.1 and v2.1.2 are public-installation/release-polish patches and do not change that playback architecture. Multi-chime behavior remains covered by automated fixtures but has not yet been physically validated with multiple Smart Chimes. No measured acoustic-latency claim is made.
 
