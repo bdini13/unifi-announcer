@@ -22,7 +22,7 @@ from .const import (
 
 STEP_SCHEMA = vol.Schema({
     vol.Required(CONF_URL): str,
-    vol.Optional(CONF_API_KEY, default=""): str,
+    vol.Required(CONF_API_KEY): vol.All(str, vol.Length(min=1)),
     vol.Optional(CONF_VERIFY_SSL, default=False): bool,
     vol.Optional(CONF_INSTANCE_NAME, default="UniFi Announcer"): str,
 })

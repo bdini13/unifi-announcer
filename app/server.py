@@ -28,7 +28,9 @@ core.app.version = APP_VERSION
 @core.app.get("/auth/check", include_in_schema=True)
 async def auth_check(x_api_key: str | None = Header(None, alias="X-API-Key")) -> Response:
     """Harmless API-key validation for client configuration flows."""
-    if core.APP_API_KEY and not hmac.compare_digest(x_api_key or "", core.APP_API_KEY):
+    if not core._api_key_is_configured():
+        raise HTTPException(status_code=503, detail="APP_API_KEY is not configured")
+    if not hmac.compare_digest(x_api_key or "", core.APP_API_KEY):
         raise HTTPException(status_code=401, detail="invalid or missing API key")
     return Response(status_code=204)
 
@@ -122,15 +124,35 @@ setattr(core.app.state.services, "tts_cache", tts_cache)
 
 
 async def health_check(_request) -> JSONResponse:
-    """Return normal component health plus fixed-slot/cache readiness."""
+    """Return coarse readiness without leaking detailed device/cache state."""
     payload = dict(core.app.state.services.health.snapshot())
-    payload["dynamic_tts"] = dynamic_slots.status()
-    payload["tts_cache"] = tts_cache.stats()
+    slot_state = dynamic_slots.status()
+    cache_state = tts_cache.stats()
+    payload["dynamic_tts"] = {
+        key: slot_state.get(key) for key in ("ready", "mode", "slot_count")
+    }
+    payload["tts_cache"] = {"ready": isinstance(cache_state, dict)}
     return JSONResponse(payload)
 
 
-async def filtered_presets(_request) -> JSONResponse:
+def _authorize_diagnostic(request) -> JSONResponse | None:
+    if not core._api_key_is_configured():
+        return JSONResponse(
+            {"detail": "APP_API_KEY is not configured"}, status_code=503
+        )
+    if not hmac.compare_digest(
+        request.headers.get("x-api-key", ""), core.APP_API_KEY
+    ):
+        return JSONResponse(
+            {"detail": "invalid or missing API key"}, status_code=403
+        )
+    return None
+
+
+async def filtered_presets(request) -> JSONResponse:
     """Hide internal UA-TTS slot identities from user-visible preset lists."""
+    if denied := _authorize_diagnostic(request):
+        return denied
     try:
         tones = [
             tone for tone in await core.protect_backends.ringtone.list_ringtones()
@@ -142,11 +164,15 @@ async def filtered_presets(_request) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, status_code=502)
 
 
-async def slot_status(_request) -> JSONResponse:
+async def slot_status(request) -> JSONResponse:
+    if denied := _authorize_diagnostic(request):
+        return denied
     return JSONResponse(dynamic_slots.status())
 
 
-async def cache_status(_request) -> JSONResponse:
+async def cache_status(request) -> JSONResponse:
+    if denied := _authorize_diagnostic(request):
+        return denied
     return JSONResponse(tts_cache.stats())
 
 

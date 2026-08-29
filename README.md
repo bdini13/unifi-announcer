@@ -6,6 +6,10 @@
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.3%2B-blue)](docs/HOME_ASSISTANT.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+> The installation corrections in this tree are scheduled for `v2.1.1`. Do not
+> move the existing `v2.1.0` tag; publish a new immutable tag before announcing
+> this revised Quick Start.
+
 **Transforms a UniFi Smart Chime into a local Text-To-Speech (TTS) announcement speaker.**
 
 UniFi Announcer provides local text-to-speech, reusable spoken presets, multi-chime groups, Home Assistant controls, REST/MQTT interfaces, and optional MCP tools for UniFi Protect Smart Chimes.
@@ -35,7 +39,7 @@ UniFi Announcer fills that gap while keeping Protect in the playback path. It is
 
 | Goal | Start here |
 |---|---|
-| Make a Smart Chime speak | [Docker quick start](#quick-start) |
+| Make a Smart Chime speak (advanced) | [Docker quick start](#quick-start) |
 | Use Home Assistant | [HACS setup](#home-assistant-recommended-setup) |
 | Give an AI agent access | [MCP setup](#mcp-optional-ai-agent-interface) |
 | Build custom automation | [REST examples](#rest-examples) |
@@ -45,12 +49,12 @@ UniFi Announcer fills that gap while keeping Protect in the playback path. It is
 
 | Capability | Status |
 |---|---|
-| Arbitrary text announcements | ✅ Stable |
+| Arbitrary text announcements | ⚠️ Advanced; requires a separately obtained device credential |
 | Piper local TTS | ✅ Stable |
 | Edge TTS | ✅ Supported |
 | Reusable preset tones | ✅ Stable |
 | Buzzer and assigned-default playback | ✅ Stable |
-| Multiple chimes and named groups | ✅ Stable |
+| Multiple chimes and named groups | 🧪 Automated coverage; multi-device physical validation pending |
 | Quiet hours, priority, dedupe, bounded queues | ✅ Stable |
 | Two fixed service-owned dynamic TTS slots | ✅ Stable |
 | Bounded host-side TTS MP3 cache | ✅ Stable |
@@ -91,12 +95,18 @@ The playback command still goes through Protect. Direct Smart Chime HTTPS is use
 - At least one adopted UniFi Protect Smart Chime
 - Local UniFi OS account with access to Protect; SSO-only accounts do not work
 - Docker Engine with Docker Compose
-- TTS engine:
+- For arbitrary TTS, one TTS engine:
   - [Wyoming Piper](https://github.com/rhasspy/wyoming-piper), recommended for local TTS
   - Edge TTS with internet access
-- For v2.1 arbitrary TTS: current Smart Chime per-device adoption credential supplied through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`
+- For v2.1 arbitrary TTS: a current Smart Chime per-device adoption credential,
+  obtained and maintained outside this project, supplied through
+  `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`
 
-Credential-retrieval procedures and raw authentication research are intentionally not published in this repository. Buzzer/default/preset behavior remains available independently of fixed-slot dynamic TTS readiness.
+There is no supported public retrieval workflow for that undocumented device
+credential. UniFi Announcer does not extract it from the console. If you do not
+already have a lawful, authorized way to maintain it, configure `TTS_ENGINE=none`
+and use buzzer/default/preset playback only. Do not enable console or device SSH,
+query internal databases, or weaken console security solely for this project.
 
 Home Assistant and MCP are optional.
 
@@ -107,6 +117,7 @@ Home Assistant and MCP are optional.
 ```bash
 git clone https://github.com/bdini13/unifi-announcer.git
 cd unifi-announcer
+git checkout v2.1.1
 cp .env.example .env
 ```
 
@@ -137,9 +148,13 @@ UNIFI_PASSWORD=<local-unifi-password>
 UNIFI_VERIFY_SSL=false
 
 CHIME_ID=<protect-chime-id>
-CHIME_DIRECT_PASSWORD=<current-device-adoption-credential>
 
-TTS_ENGINE=piper
+# Safe public baseline; preset/default/buzzer playback works without direct credentials.
+TTS_ENGINE=none
+
+# Advanced arbitrary TTS only, when you already maintain the device credential:
+# CHIME_DIRECT_PASSWORD=<current-device-adoption-credential>
+# TTS_ENGINE=piper
 PIPER_URL=tcp://<piper-host-or-ip>:10200
 PIPER_SYNTH_TIMEOUT=15
 
@@ -147,7 +162,8 @@ HOST_PORT=8095
 CONTAINER_NAME=unifi-announcer
 ```
 
-For integrations that can write/play, generate an application API key:
+APP_API_KEY is required: write and diagnostic routes fail closed without it.
+Generate an application API key:
 
 ```bash
 python3 -c "import secrets; print(secrets.token_urlsafe(32))"
@@ -166,19 +182,27 @@ docker compose up -d --build
 docker compose logs -f unifi-announcer
 ```
 
-Persistent data defaults to `./data`. To use another host path, set `DATA_PATH`, for example:
+Persistent data defaults to the Docker-managed `unifi-announcer-data` volume,
+which is writable by the non-root container user without host preparation.
 
-```env
-DATA_PATH=/srv/unifi-announcer/data
+To use a host bind mount instead, set `DATA_PATH` in `.env` and make it writable
+by container UID/GID `1000:1000`:
+
+```bash
+sudo mkdir -p /srv/unifi-announcer/data
+sudo chown -R 1000:1000 /srv/unifi-announcer/data
+printf '\nDATA_PATH=/srv/unifi-announcer/data\n' >>.env
 ```
 
 Verify health, version, and fixed-slot readiness:
 
 ```bash
+export UNIFI_ANNOUNCER_API_KEY="<your-api-key>"
+AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")
 curl -fsS http://<announcer-host-or-ip>:8095/health
 curl -fsS http://<announcer-host-or-ip>:8095/version
-curl -fsS http://<announcer-host-or-ip>:8095/tts/slots/status
-curl -fsS http://<announcer-host-or-ip>:8095/tts/cache/status
+curl -fsS "${AUTH[@]}" http://<announcer-host-or-ip>:8095/tts/slots/status
+curl -fsS "${AUTH[@]}" http://<announcer-host-or-ip>:8095/tts/cache/status
 ```
 
 A healthy fixed-slot deployment reports `"mode":"two_slot_overwrite"`, `"slot_count":2`, and `"ready":true`. Piper may be offline during startup; non-TTS controls remain available.
@@ -199,7 +223,7 @@ UniFi Announcer includes a native HACS-compatible custom integration for Home As
 5. Restart Home Assistant.
 6. Open **Settings → Devices & services → Add integration → UniFi Announcer**.
 7. Enter your Announcer URL, such as `http://announcer.local:8095`.
-8. Enter `APP_API_KEY` if one is configured.
+8. Enter the required `APP_API_KEY`.
 
 The setup flow validates `/health`, `/version`, and `/auth/check`; it does **not** play audio during setup. If the application API key later changes, Home Assistant requests reauthentication rather than requiring the integration to be deleted.
 
@@ -273,6 +297,9 @@ Native `tts.speak` media-source ingestion is planned for v2.2.
 - Queue depth is exposed per physical chime; groups intentionally do not expose a fake aggregate queue-depth sensor.
 - Changes to `CHIMES_CONFIG` or `GROUPS_CONFIG` require reloading or restarting the Home Assistant integration before its entity topology is rebuilt.
 - Arbitrary TTS requires fixed-slot readiness and current direct-device credentials on every target chime.
+- Multi-chime behavior is covered by automated tests, but v2.1 was physically
+  validated with only one physical Smart Chime; treat groups as experimental
+  until independent multi-device playback reports are available.
 - MCP is disabled by default and is independent of Home Assistant.
 
 ## What UniFi Announcer adds beyond native Home Assistant UniFi Protect
@@ -330,7 +357,7 @@ http://<announcer-host>:8095/mcp
 Authentication:
 
 ```text
-Authorization: Bearer <MCP_API_KEY>
+Authorization: Bearer ***
 ```
 
 `MCP_API_KEY` is intentionally separate from `APP_API_KEY`. `MCP_ALLOWED_HOSTS` should include the exact LAN hostname/IP MCP clients use; the MCP transport keeps DNS-rebinding protection enabled.
@@ -368,11 +395,8 @@ Set:
 
 ```bash
 export ANNOUNCER_URL="http://<announcer-host-or-ip>:8095"
-AUTH=()
-
-# If APP_API_KEY is configured:
-# export UNIFI_ANNOUNCER_API_KEY="<your-api-key>"
-# AUTH=(-H "X-API-Key: $UNIFI_ANNOUNCER_API_KEY")
+export UNIFI_ANNOUNCER_API_KEY="<your-api-key>"
+AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")
 ```
 
 Announce text:
@@ -437,29 +461,117 @@ MQTT remains optional. Set `MQTT_URL`, `MQTT_USERNAME`, and `MQTT_PASSWORD` to e
 
 Local rules can react directly to Protect events without a Home Assistant round trip. See [Rules documentation](docs/RULES.md).
 
-## Upgrade to v2.1.0
+## Upgrade to v2.1.1
 
-Keep your existing `.env` and persistent `DATA_PATH`. **Do not delete `track_registry.json` before this upgrade**: beta.3 uses ownership records to identify and conservatively migrate beta.2 dynamic artifacts.
+Keep your existing `.env` and persistent `DATA_PATH`; Compose still honors an
+existing bind path while new installations default to a project-scoped named
+volume. Older installs that used the former implicit `./data` bind mount may
+have no `DATA_PATH` line. Before upgrading, preserve that location explicitly:
+
+```bash
+if test -d ./data && ! grep -q '^DATA_PATH=' .env; then
+  printf '\nDATA_PATH=./data\n' >>.env
+fi
+docker compose config | grep -A4 '/data'
+```
+
+Confirm the rendered `/data` source is the expected old directory before
+starting the new image. **Do not delete `track_registry.json` before this upgrade**: it is
+ownership evidence used to conservatively migrate older dynamic artifacts.
 
 ```bash
 cd unifi-announcer
 git fetch --tags
-git checkout v2.1.0
+git checkout v2.1.1
 docker compose up -d --build
 ```
 
-v2.1 additionally requires a current per-device Smart Chime credential for arbitrary TTS. Supply it through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`. Retrieval procedures are intentionally outside the public repository.
+v2.1 additionally requires a current per-device Smart Chime credential for arbitrary TTS. Supply it through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE` only if you already maintain it through an authorized external process. There is no supported public retrieval workflow, and UniFi Announcer does not retrieve it from Protect.
 
 Then verify:
 
 ```bash
+export UNIFI_ANNOUNCER_API_KEY="<your-api-key>"
+AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")
 curl -fsS http://<announcer-host-or-ip>:8095/health
 curl -fsS http://<announcer-host-or-ip>:8095/version
-curl -fsS http://<announcer-host-or-ip>:8095/tts/slots/status
-curl -fsS http://<announcer-host-or-ip>:8095/tts/cache/status
+curl -fsS "${AUTH[@]}" http://<announcer-host-or-ip>:8095/tts/slots/status
+curl -fsS "${AUTH[@]}" http://<announcer-host-or-ip>:8095/tts/cache/status
 ```
 
-The slot status should show exactly two persistent slots and `ready: true`. Legacy service-owned NVR dynamic identities are cleaned only when ownership is proven. Ambiguous device artifacts are retained/reported rather than guessed at.
+With arbitrary TTS configured, slot status should show exactly two persistent
+slots and `ready: true`. Credential-free `TTS_ENGINE=none` installations should
+not expect dynamic-slot readiness. Legacy service-owned identities are cleaned
+only when ownership is proven; ambiguous artifacts are retained and reported.
+
+## Roll back
+
+Back up both `.env` and the actual `/data` mount before changing release tags.
+These commands discover the source mounted by the current container, so they
+work with both project-scoped volumes and retained `DATA_PATH` bind mounts:
+
+```bash
+umask 077
+mkdir -p -m 700 backups
+STAMP=$(date +%Y%m%d-%H%M%S)
+CONTAINER_ID=$(docker compose ps -aq unifi-announcer)
+DATA_SOURCE=$(docker inspect "$CONTAINER_ID" \
+  --format '{{range .Mounts}}{{if eq .Destination "/data"}}{{.Source}}{{end}}{{end}}')
+test -n "$DATA_SOURCE"
+docker compose stop unifi-announcer
+cp .env "backups/env-$STAMP"
+chmod 600 "backups/env-$STAMP"
+docker run --rm \
+  -e BACKUP_UID="$(id -u)" -e BACKUP_GID="$(id -g)" \
+  -v "$DATA_SOURCE:/data:ro" \
+  -v "$PWD/backups:/backup" \
+  alpine:3.22 sh -c \
+  'set -eu; file="/backup/data-'"$STAMP"'.tgz"; tar -C /data -czf "$file" .; chown "$BACKUP_UID:$BACKUP_GID" "$file"; chmod 600 "$file"'
+tar -tzf "backups/data-$STAMP.tgz" >/dev/null
+sha256sum "backups/data-$STAMP.tgz" >"backups/data-$STAMP.tgz.sha256"
+chmod 600 "backups/data-$STAMP.tgz.sha256"
+```
+
+Retain `track_registry.json` in the backup: it is ownership evidence for dynamic
+TTS slots. Do not delete or hand-edit it.
+
+Choose whether the target version is data-compatible before starting it. To
+roll code back while preserving compatible current data:
+
+```bash
+git fetch --tags
+git checkout <previous-tag>
+docker compose up -d --build
+curl -fsS http://<announcer-host-or-ip>:8095/health
+curl -fsS http://<announcer-host-or-ip>:8095/version
+```
+
+If compatibility is unknown or the previous release requires older data,
+validate and extract the backup into a **new** restore directory. The current
+volume or bind mount is never erased:
+
+```bash
+docker compose stop unifi-announcer
+sha256sum -c backups/data-<timestamp>.tgz.sha256
+tar -tzf backups/data-<timestamp>.tgz >/dev/null
+RESTORE_DIR="$PWD/backups/restore-test-<timestamp>"
+install -d -m 700 "$RESTORE_DIR"
+docker run --rm \
+  -v "$RESTORE_DIR:/restore" \
+  -v "$PWD/backups:/backup:ro" \
+  alpine:3.22 sh -c \
+  'set -eu; tar -C /restore -xzf /backup/data-<timestamp>.tgz; chown -R 1000:1000 /restore'
+test -r "$RESTORE_DIR/track_registry.json" || test ! -e "$RESTORE_DIR/track_registry.json"
+cp backups/<saved-env-file> .env
+chmod 600 .env
+printf '\nDATA_PATH=%s\n' "$RESTORE_DIR" >>.env
+git checkout <previous-tag>
+docker compose up -d --build
+```
+
+This switches the older release to a separately restored bind directory, leaving
+the current installation data intact for a forward rollback. Verify the absolute
+`DATA_PATH` at the end of `.env` before starting the container.
 
 ## Troubleshooting
 
@@ -467,7 +579,7 @@ The slot status should show exactly two persistent slots and `ready: true`. Lega
 |---|---|---|
 | UniFi Announcer does not appear in HA | HACS installed `v2.0.0` or an older beta | Select `v2.1.0` or later, reinstall, restart HA |
 | HA reports invalid API key | `APP_API_KEY` changed or mismatches | Complete the integration's reauthentication flow |
-| Buttons/presets work but arbitrary TTS fails | Fixed TTS slots are not ready | Check `/tts/slots/status`; verify current direct-device credential and chime reachability |
+| Buttons/presets work but arbitrary TTS fails | Fixed TTS slots are not ready | Check `/tts/slots/status` with `X-API-Key`; verify current direct-device credential and chime reachability |
 | Slot status reports ownership drift | Physical slot metadata no longer matches proof | Stop TTS and reconcile; do not force/guess a slot |
 | Piper synthesis fails | Piper is unavailable | Check `PIPER_URL` and the Piper service |
 | MCP returns HTTP 401 | Bearer key mismatch | Check `MCP_API_KEY` and Authorization header |
@@ -489,12 +601,12 @@ See [`.env.example`](.env.example) for the complete list.
 | `CHIME_ID` | none | Default Protect chime ID |
 | `CHIME_DIRECT_PASSWORD` | empty | Current device credential for fixed-slot dynamic TTS |
 | `CHIME_CREDENTIAL_FILE` | empty | Optional externally refreshed device-credential file |
-| `TTS_ENGINE` | `piper` | `piper` or `edge` |
+| `TTS_ENGINE` | `none` in `.env.example` | `piper`, `edge`, or `none`; use `none` for the credential-free baseline |
 | `PIPER_URL` | none | Wyoming Piper endpoint |
 | `TTS_CACHE_MAX_FILES` | `256` | Host-side cached TTS file ceiling |
 | `TTS_CACHE_MAX_BYTES` | `268435456` | Host-side cached TTS byte ceiling |
-| `APP_API_KEY` | empty | REST write routes with `X-API-Key` |
-| `DATA_PATH` | `./data` | Host path mounted at `/data` |
+| `APP_API_KEY` | required | REST write routes fail closed until a key is configured |
+| `DATA_PATH` | empty | Project-scoped named volume; set a path to retain a legacy bind mount |
 | `VOLUME_DEFAULT` | `50` | Default request volume |
 | `REPEAT_DEFAULT` | `1` | Default repeat count |
 | `QUIET_HOURS` | empty | Suppression window such as `22:00-06:30` |
@@ -578,6 +690,19 @@ See [Track registry documentation](docs/TRACKS.md) and [Playback policy](docs/PO
 - [v2.1.0-beta.2 release notes](docs/RELEASE_NOTES_v2.1.0-beta.2.md)
 - [v2.1.0-beta.3 release notes](docs/RELEASE_NOTES_v2.1.0-beta.3.md)
 
+## Support
+
+Use [GitHub Issues](https://github.com/bdini13/unifi-announcer/issues) for
+reproducible bugs and focused feature requests. Include the Announcer version,
+Protect version, Smart Chime model/firmware, exact reproduction steps, and
+whether evidence came from automated fixtures or physical devices. Redact all
+credentials, private addresses, device IDs, certificate details, support logs,
+and private audio. This is a community project with best-effort support.
+
+For vulnerabilities, follow [SECURITY.md](SECURITY.md) instead of opening a
+public issue. Development contributions are covered by
+[CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+
 ## Security
 
 Keep UniFi credentials and API keys out of Git. Store them in `.env`, Docker secrets, Home Assistant config entries, or another local secret manager.
@@ -617,7 +742,8 @@ This project was developed with the assistance of AI coding and research tools. 
 
 ## Release status
 
-- **Stable:** `v2.1.0` — fixed-slot dynamic TTS + Home Assistant + MCP
+- **Stable:** `v2.1.0` — previous release
+- **Next release:** `v2.1.1` — public-install and documentation fixes in this tree
 - **Planned:** `v2.2.0` — native Home Assistant `tts.speak`, binary media ingestion, and optional SSE integration
 
 See the [Releases page](https://github.com/bdini13/unifi-announcer/releases).

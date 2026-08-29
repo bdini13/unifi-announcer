@@ -50,7 +50,7 @@ async def test_metrics_json_is_in_memory_and_timing_header_is_debug_only(main_mo
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=main_module.app), base_url="http://test"
     ) as client:
-        response = await client.get("/metrics/json")
+        response = await client.get("/metrics/json", headers={"X-API-Key": "configured-test-key"})
         health = await client.get("/health")
     assert response.status_code == 200
     assert response.json()["counters"]["cache_hits"] >= 1

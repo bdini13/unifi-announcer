@@ -16,7 +16,7 @@ async def test_cache_status_and_authenticated_refresh(main_module, monkeypatch):
     refresh = AsyncMock()
     monkeypatch.setattr(main_module.ringtone_index, "refresh", refresh)
     async with httpx.AsyncClient(transport=transport_for(main_module), base_url="http://test") as client:
-        status = await client.get("/cache/ringtones/status")
+        status = await client.get("/cache/ringtones/status", headers={"X-API-Key": "fixture-key"})
         denied = await client.post("/cache/ringtones/refresh")
         accepted = await client.post("/cache/ringtones/refresh", headers={"X-API-Key": "fixture-key"})
     assert status.status_code == 200
@@ -34,7 +34,7 @@ async def test_cache_refresh_is_unavailable_without_admin_key(main_module, monke
     async with httpx.AsyncClient(transport=transport_for(main_module), base_url="http://test") as client:
         response = await client.post("/cache/ringtones/refresh")
     assert response.status_code == 503
-    assert response.json()["detail"] == "admin API key is not configured"
+    assert response.json()["detail"] == "APP_API_KEY is not configured"
     refresh.assert_not_awaited()
 
 
@@ -112,7 +112,7 @@ async def test_concurrent_tts_cache_miss_synthesizes_once(main_module, monkeypat
 
 @pytest.mark.asyncio
 async def test_cached_preset_play_is_exactly_one_protect_http_call(main_module, monkeypatch):
-    monkeypatch.setattr(main_module, "APP_API_KEY", "")
+    monkeypatch.setattr(main_module, "APP_API_KEY", "configured-test-key")
     monkeypatch.setattr(main_module, "CHIME_ID", "chime-fixture")
     main_module.ringtone_index.put({"name": "fixture-tone", "id": "ringtone-fixture"})
     main_module.protect._logged_in = True
@@ -122,7 +122,11 @@ async def test_cached_preset_play_is_exactly_one_protect_http_call(main_module, 
         play = router.post(
             "https://unifi.invalid/proxy/protect/api/chimes/chime-fixture/play-speaker"
         ).mock(return_value=httpx.Response(204))
-        async with httpx.AsyncClient(transport=transport_for(main_module), base_url="http://test") as client:
+        async with httpx.AsyncClient(
+            transport=transport_for(main_module),
+            base_url="http://test",
+            headers={"X-API-Key": "configured-test-key"},
+        ) as client:
             response = await client.post("/presets/fixture-tone/play")
 
     assert response.status_code == 200

@@ -752,7 +752,7 @@ async def test_encoded_audio_separates_tts_and_encode_stages():
 async def test_http_command_entrypoints_use_dispatcher(main_module, monkeypatch, path, json, action):
     dispatch = AsyncMock(return_value=DispatchResult(action=action, disposition="played", result={"ok": True}))
     monkeypatch.setattr(main_module.dispatcher, "dispatch", dispatch)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main_module.app), base_url="http://test") as client:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main_module.app), base_url="http://test", headers={"X-API-Key": "configured-test-key"}) as client:
         response = await client.post(path, json=json)
     assert response.status_code == 200
     command = dispatch.await_args.args[0]
@@ -767,7 +767,8 @@ async def test_replacing_services_container_changes_route_dispatch(main_module):
     main_module.app.state.services = SimpleNamespace(dispatcher=SimpleNamespace(dispatch=dispatch))
 
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=main_module.app), base_url="http://test"
+        transport=httpx.ASGITransport(app=main_module.app), base_url="http://test",
+        headers={"X-API-Key": "configured-test-key"},
     ) as client:
         response = await client.post("/buzzer")
 
@@ -784,7 +785,8 @@ async def test_quiet_hour_suppression_maps_to_http_202(main_module):
     main_module.app.state.services = SimpleNamespace(dispatcher=SimpleNamespace(dispatch=dispatch))
 
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=main_module.app), base_url="http://test"
+        transport=httpx.ASGITransport(app=main_module.app), base_url="http://test",
+        headers={"X-API-Key": "configured-test-key"},
     ) as client:
         response = await client.post("/announce", json={"text": "fixture"})
 
@@ -801,7 +803,8 @@ async def test_failed_playback_disposition_maps_to_http_502(main_module):
         dispatcher=SimpleNamespace(dispatch=dispatch))
 
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=main_module.app), base_url="http://test"
+        transport=httpx.ASGITransport(app=main_module.app), base_url="http://test",
+        headers={"X-API-Key": "configured-test-key"},
     ) as client:
         response = await client.post("/buzzer")
 
@@ -837,7 +840,8 @@ async def test_rest_play_routes_accept_target(main_module, path, json):
     main_module.app.state.services = SimpleNamespace(dispatcher=SimpleNamespace(dispatch=dispatch))
 
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=main_module.app), base_url="http://test"
+        transport=httpx.ASGITransport(app=main_module.app), base_url="http://test",
+        headers={"X-API-Key": "configured-test-key"},
     ) as client:
         response = await client.post(path, json=json)
 
@@ -852,7 +856,8 @@ async def test_missing_default_chime_id_returns_config_error_without_playback(ma
     monkeypatch.setattr(main_module.protect, "play_buzzer", play)
 
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=main_module.app), base_url="http://test"
+        transport=httpx.ASGITransport(app=main_module.app), base_url="http://test",
+        headers={"X-API-Key": "configured-test-key"},
     ) as client:
         response = await client.post("/buzzer")
 

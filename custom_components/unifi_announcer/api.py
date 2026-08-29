@@ -78,7 +78,7 @@ class UniFiAnnouncerClient:
                 method, f"{self.base_url}{path}", headers=headers,
                 timeout=self._timeout, **kwargs
             ) as response:
-                if response.status in {401, 403}:
+                if response.status in {401, 403, 503} and path == "/auth/check":
                     raise AuthenticationError("UniFi Announcer rejected the API key")
                 if not expect_json and response.status == 204:
                     return response.status, None

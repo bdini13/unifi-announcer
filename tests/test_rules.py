@@ -127,7 +127,7 @@ async def test_rules_status_is_read_only_and_reload_is_protected(main_module, mo
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=main_module.app), base_url="http://test"
     ) as client:
-        status = await client.get("/rules/status")
+        status = await client.get("/rules/status", headers={"X-API-Key": "fixture-key"})
         forbidden = await client.post("/rules/reload")
 
     assert status.status_code == 200

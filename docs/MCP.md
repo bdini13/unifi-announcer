@@ -13,8 +13,10 @@ After initial provisioning, 1 or 100 unique `announce` tool calls create **zero 
 The Announcer host still keeps a bounded content-addressed MP3 cache so repeated phrases can skip synthesis/encoding. Check the runtime before enabling a high-volume agent:
 
 ```bash
-curl -fsS http://<announcer-host>:8095/tts/slots/status
-curl -fsS http://<announcer-host>:8095/tts/cache/status
+export UNIFI_ANNOUNCER_API_KEY="<your-api-key>"
+AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")
+curl -fsS "${AUTH[@]}" http://<announcer-host>:8095/tts/slots/status
+curl -fsS "${AUTH[@]}" http://<announcer-host>:8095/tts/cache/status
 ```
 
 Dynamic MCP announcements require fixed-slot status `ready: true`. The direct overwrite path needs the current Smart Chime per-device credential on the Announcer host; MCP never receives or exposes that credential.
@@ -40,7 +42,7 @@ The MCP key is intentionally separate from `APP_API_KEY`, although an operator m
 Requests authenticate with:
 
 ```text
-Authorization: Bearer <MCP_API_KEY>
+Authorization: Bearer ***
 ```
 
 `MCP_ALLOWED_HOSTS` is required for non-localhost names/IPs because the MCP SDK's DNS-rebinding protection rejects unexpected `Host` headers. Include the exact LAN hostname/IP clients will use.

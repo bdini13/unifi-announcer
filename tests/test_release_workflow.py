@@ -6,3 +6,5 @@ def test_release_workflow_runs_behavioral_release_script():
     assert "python scripts/release_v2_1.py" in workflow
     assert 'VALIDATED_SHA="${{ github.event.workflow_run.head_sha }}"' in workflow
     assert "GITHUB_REPOSITORY: ${{ github.repository }}" in workflow
+    assert "EXPECTED_VERSION: 2.1.1" in workflow
+    assert "Publish v2.1.1 release" in workflow

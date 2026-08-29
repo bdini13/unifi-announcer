@@ -1,0 +1,61 @@
+name: Bug report
+description: Report a reproducible UniFi Announcer problem
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not post secrets, console addresses, device IDs, certificate details, raw support logs, or private audio. Report security issues through SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: UniFi Announcer version
+      placeholder: v2.1.0
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Docker/Compose, Protect version, Smart Chime model and firmware; redact private details.
+    validations:
+      required: true
+  - type: dropdown
+    id: physical_devices
+    attributes:
+      label: Physical Smart Chimes involved
+      options:
+        - One
+        - Two or more
+        - None / automated test only
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and redacted logs
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety checks
+      options:
+        - label: I removed credentials, private network details, device IDs, certificate data, support logs, and private audio.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true

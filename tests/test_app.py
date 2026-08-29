@@ -25,8 +25,51 @@ async def test_health_is_local_and_public(main_module, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_announce_cache_hit_uses_resolved_defaults(main_module, monkeypatch):
+async def test_mutating_routes_fail_closed_when_api_key_is_empty(main_module, monkeypatch):
     monkeypatch.setattr(main_module, "APP_API_KEY", "")
+    async with httpx.AsyncClient(
+        transport=transport_for(main_module), base_url="http://test"
+    ) as client:
+        response = await client.post("/announce", json={"text": "Hello"})
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "APP_API_KEY is not configured"
+
+
+@pytest.mark.asyncio
+async def test_placeholder_api_key_fails_closed(main_module, monkeypatch):
+    monkeypatch.setattr(main_module, "APP_API_KEY", "REPLACE_ME")
+    async with httpx.AsyncClient(
+        transport=transport_for(main_module), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/announce",
+            headers={"X-API-Key": "REPLACE_ME"},
+            json={"text": "Hello"},
+        )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "APP_API_KEY is not configured"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path",
+    ["/chime", "/chime/settings", "/chime/direct-info", "/events/recent"],
+)
+async def test_sensitive_get_diagnostics_require_api_key(main_module, monkeypatch, path):
+    monkeypatch.setattr(main_module, "APP_API_KEY", "configured-test-key")
+    async with httpx.AsyncClient(
+        transport=transport_for(main_module), base_url="http://test"
+    ) as client:
+        response = await client.get(path)
+
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_announce_cache_hit_uses_resolved_defaults(main_module, monkeypatch):
+    monkeypatch.setattr(main_module, "APP_API_KEY", "configured-test-key")
     find = AsyncMock(return_value={"id": "ringtone-1", "name": "hello"})
     play = AsyncMock(return_value={"played": True})
     monkeypatch.setattr(main_module.protect, "find_ringtone_by_name", find)
@@ -35,7 +78,11 @@ async def test_announce_cache_hit_uses_resolved_defaults(main_module, monkeypatc
     async with httpx.AsyncClient(
         transport=transport_for(main_module), base_url="http://test"
     ) as client:
-        response = await client.post("/announce", json={"text": "Hello"})
+        response = await client.post(
+            "/announce",
+            headers={"X-API-Key": "configured-test-key"},
+            json={"text": "Hello"},
+        )
 
     assert response.status_code == 200
     play.assert_awaited_once_with("ringtone-1", main_module.VOLUME_DEFAULT,
@@ -47,7 +94,7 @@ async def test_announce_cache_hit_uses_resolved_defaults(main_module, monkeypatc
 async def test_announce_cache_miss_uploads_and_preserves_zero_volume(
     main_module, monkeypatch
 ):
-    monkeypatch.setattr(main_module, "APP_API_KEY", "")
+    monkeypatch.setattr(main_module, "APP_API_KEY", "configured-test-key")
     monkeypatch.setattr(main_module.protect, "find_ringtone_by_name",
                         AsyncMock(return_value=None))
     monkeypatch.setattr(main_module.protect, "list_ringtones",
@@ -65,7 +112,9 @@ async def test_announce_cache_miss_uploads_and_preserves_zero_volume(
         transport=transport_for(main_module), base_url="http://test"
     ) as client:
         response = await client.post(
-            "/announce", json={"text": "Quiet", "volume": 0, "repeat_times": 2}
+            "/announce",
+            headers={"X-API-Key": "configured-test-key"},
+            json={"text": "Quiet", "volume": 0, "repeat_times": 2},
         )
 
     assert response.status_code == 200

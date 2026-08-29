@@ -73,14 +73,13 @@ WS_VERIFY_SSL = os.getenv("WS_VERIFY_SSL", "false").lower() == "true"
 EVENTS_BUFFER_MAX = int(os.getenv("EVENTS_BUFFER_MAX", "100"))
 # --- Direct device API settings (primary path) --------------------------------
 # The chime exposes its own TLS API on :8080 with JSON-body auth
-# (username "ubnt" + per-device password provisioned at adoption). The password
-# lives on the NVR's Postgres (chimes.password column). We read it once via the
-# NVR API bootstrap flow below rather than storing it in .env.
+# (username "ubnt" + per-device password provisioned at adoption). The service
+# accepts that credential only from explicit local configuration; it does not
+# extract it from Protect or an internal console database.
 CHIME_DIRECT_IP = os.getenv("CHIME_DIRECT_IP", "")     # auto-discovered if empty
 CHIME_DIRECT_USER = os.getenv("CHIME_DIRECT_USER", "ubnt")
-# Per-device password from NVR Postgres (see README "Direct device API" for
-# the one-liner to fetch it). If unset, the direct path disables itself and
-# all traffic rides the NVR standby route.
+# If unset, the direct path disables itself and credential-free controls remain
+# available through Protect.
 CHIME_DIRECT_PASSWORD = os.getenv("CHIME_DIRECT_PASSWORD", "")
 CHIME_VERIFY_SSL = os.getenv("CHIME_VERIFY_SSL", "false").lower() == "true"
 DIRECT_TIMEOUT = float(os.getenv("DIRECT_TIMEOUT", "8"))
@@ -403,9 +402,9 @@ class ProtectClient:
 # The chime runs its own TLS server on :8080 with a small JSON API. For the
 # verified JSON endpoints, auth is not HTTP auth: credentials travel in JSON:
 #   {"username": "ubnt", "password": "<per-device pw>", ...request fields}
-# The password is provisioned at adoption and stored on the NVR (chimes table,
-# `password` column). We fetch it lazily through the NVR client so no secret
-# needs to live in .env.
+# The password is provisioned at adoption. It is accepted only through the
+# configured environment or credential-file provider; this service does not
+# retrieve it from Protect.
 #
 # Verified endpoints (fw 1.7.20):
 #   POST /api/info         - device info + feature flags (safe)
@@ -1317,13 +1316,11 @@ _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 def require_api_key(x_api_key: str = Security(_api_key_header)) -> None:
     """Dependency guarding write/diagnostic routes.
 
-    If APP_API_KEY is unset the service runs in OPEN mode (LAN trust) and logs
-    a warning at startup; when set, every protected route demands the header
-    `X-API-Key: <key>`. Bearer-style Authorization headers are also accepted
-    for curl friendliness.
+    APP_API_KEY must be configured before protected routes are enabled. When
+    configured, every protected route demands the ``X-API-Key`` header.
     """
-    if not APP_API_KEY:
-        return  # open mode - explicitly configured
+    if not _api_key_is_configured():
+        raise _HTTPException(status_code=503, detail="APP_API_KEY is not configured")
     provided = x_api_key or ""
     # constant-time compare to avoid timing side-channels
     import hmac as _hmac
@@ -1362,24 +1359,34 @@ async def timing_middleware(request, call_next):
     return response
 
 
-PUBLIC_PATHS = {"/health", "/chime", "/chime/settings", "/chime/direct-info",
-                "/events/recent", "/events/stream", "/openapi.json", "/docs",
-                "/openapi.json"}
+SENSITIVE_GET_PATHS = {
+    "/chime", "/chime/settings", "/chime/direct-info", "/chime/direct-log",
+    "/chimes", "/chime/capabilities", "/events/recent", "/events/stream",
+    "/metrics/json", "/cache/ringtones/status", "/presets", "/rules/status",
+}
+
+
+def _api_key_is_configured() -> bool:
+    return bool(APP_API_KEY and APP_API_KEY.strip() and APP_API_KEY != "REPLACE_ME")
 
 
 @app.middleware("http")
 async def api_key_guard(request, call_next):
-    """Phase 0 security gate: when APP_API_KEY is set, every mutating request
-    (POST/PUT/PATCH/DELETE) and the sensitive /chime/direct-log diagnostic must
-    present header X-API-Key matching the configured value. Read-only status
-    endpoints stay open for dashboards. If APP_API_KEY is empty the service
-    runs in trusted-LAN open mode.
+    """Require APP_API_KEY on mutations and sensitive diagnostic reads.
+
+    Public health/version/schema endpoints remain available. Detailed device,
+    event, slot, cache, preset, and rules diagnostics require authentication.
+    Unconfigured or placeholder keys fail closed.
     """
     path = request.url.path
-    is_sensitive = request.method != "GET" or path == "/chime/direct-log"
-    if APP_API_KEY and is_sensitive:
+    is_sensitive = request.method != "GET" or path in SENSITIVE_GET_PATHS
+    if is_sensitive:
         import hmac as _hmac2
         provided = request.headers.get("x-api-key", "")
+        if not _api_key_is_configured():
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"detail": "APP_API_KEY is not configured"},
+                                status_code=503)
         if not _hmac2.compare_digest(provided, APP_API_KEY):
             from fastapi.responses import JSONResponse
             return JSONResponse({"detail": "invalid or missing API key"},

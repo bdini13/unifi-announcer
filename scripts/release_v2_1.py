@@ -1,4 +1,4 @@
-"""Idempotently publish the fixed v2.1.0 GitHub release."""
+"""Idempotently publish the fixed v2.1.1 GitHub release."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ import subprocess
 from collections.abc import Callable, Sequence
 from typing import Protocol
 
-TAG = "v2.1.0"
-TITLE = "v2.1.0 — Home Assistant, MCP, and fixed-slot TTS"
-NOTES_FILE = "docs/RELEASE_NOTES_v2.1.0.md"
+TAG = "v2.1.1"
+TITLE = "v2.1.1 — Secure public installation hardening"
+NOTES_FILE = "docs/RELEASE_NOTES_v2.1.1.md"
 
 
 class Result(Protocol):
