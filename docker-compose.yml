@@ -18,3 +18,4 @@ services:
 
 volumes:
   unifi-announcer-data:
+    name: unifi-announcer-data

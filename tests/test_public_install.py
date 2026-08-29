@@ -7,7 +7,7 @@ def test_compose_uses_named_volume_for_writable_default_data():
     compose = yaml.safe_load(Path("docker-compose.yml").read_text())
     mount = compose["services"]["unifi-announcer"]["volumes"][0]
     assert mount == "unifi-announcer-data:/data"
-    assert compose["volumes"]["unifi-announcer-data"] is None
+    assert compose["volumes"]["unifi-announcer-data"]["name"] == "unifi-announcer-data"
 
 
 def test_readme_uses_immutable_release_checkout_and_valid_auth_example():
@@ -40,3 +40,14 @@ def test_source_comments_match_the_configured_credential_providers():
     assert "We read it once via the NVR API bootstrap" not in source
     assert "We fetch it lazily through the NVR client" not in source
     assert "see README \"Direct device API\" for" not in source
+
+
+def test_readme_documents_backup_and_rollback_for_named_volume():
+    readme = Path("README.md").read_text()
+    rollback = readme.split("## Roll back", 1)[1].split("## Troubleshooting", 1)[0]
+    assert "docker compose stop unifi-announcer" in rollback
+    assert "unifi-announcer-data" in rollback
+    assert "backup" in rollback.lower()
+    assert "git checkout <previous-tag>" in rollback
+    assert "restore" in rollback.lower()
+    assert "track_registry.json" in rollback

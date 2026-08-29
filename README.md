@@ -477,6 +477,54 @@ curl -fsS http://<announcer-host-or-ip>:8095/tts/cache/status
 
 The slot status should show exactly two persistent slots and `ready: true`. Legacy service-owned NVR dynamic identities are cleaned only when ownership is proven. Ambiguous device artifacts are retained/reported rather than guessed at.
 
+## Roll back
+
+Back up both `.env` and `/data` before changing release tags. The commands below
+handle the default Docker-managed `unifi-announcer-data` volume without exposing
+credentials in command output:
+
+```bash
+mkdir -p backups
+docker compose stop unifi-announcer
+cp -p .env "backups/env-$(date +%Y%m%d-%H%M%S)"
+docker run --rm \
+  -v unifi-announcer-data:/data:ro \
+  -v "$PWD/backups:/backup" \
+  alpine:3.22 \
+  tar -C /data -czf /backup/unifi-announcer-data.tgz .
+```
+
+Retain `track_registry.json` in the backup: it is ownership evidence for dynamic
+TTS slots. Do not delete or hand-edit it.
+
+To roll the application code back while preserving current data:
+
+```bash
+git fetch --tags
+git checkout <previous-tag>
+docker compose up -d --build
+curl -fsS http://<announcer-host-or-ip>:8095/health
+curl -fsS http://<announcer-host-or-ip>:8095/version
+```
+
+If the previous release is incompatible with the current data, stop the service
+and restore the backup before starting it:
+
+```bash
+docker compose stop unifi-announcer
+docker run --rm \
+  -v unifi-announcer-data:/data \
+  -v "$PWD/backups:/backup:ro" \
+  alpine:3.22 \
+  sh -c 'find /data -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + && tar -C /data -xzf /backup/unifi-announcer-data.tgz'
+cp -p backups/<saved-env-file> .env
+docker compose up -d --build
+```
+
+The restore command replaces the volume contents. Verify that the backup exists
+and that the target is the `unifi-announcer-data` volume before running it. For a
+custom host bind mount, back up and restore that host directory instead.
+
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
