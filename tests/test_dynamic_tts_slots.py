@@ -173,6 +173,9 @@ async def test_persisted_id_with_foreign_protect_name_fails_closed(tmp_path):
 
 @pytest.mark.asyncio
 async def test_missing_persisted_id_recovers_unique_expected_name(tmp_path):
+    # A stale ID is recoverable only because exactly one Protect ringtone still
+    # has the installation-specific expected name; this is safe identity repair,
+    # not permission to claim an unregistered name or physical slot.
     world = FakeProtectWorld()
     first = make_manager(tmp_path, world)
     await first.startup([make_target(world)], bootstrap_audio_factory=bootstrap)
@@ -186,6 +189,39 @@ async def test_missing_persisted_id_recovers_unique_expected_name(tmp_path):
     assert status["ready"] is True, status
     assert restarted.slots[1].protect_ringtone_id == "replacement-ring-1"
     assert world.upload_calls == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("corrupt_slot", ["missing", "extra"])
+async def test_global_validation_rejects_corrupt_logical_slot_keys(
+    tmp_path, corrupt_slot
+):
+    world = FakeProtectWorld()
+    manager = make_manager(tmp_path, world)
+    assert (await manager.startup(
+        [make_target(world)], bootstrap_audio_factory=bootstrap
+    ))["ready"]
+
+    if corrupt_slot == "missing":
+        manager.slots.pop(2)
+    else:
+        manager.slots[3] = manager.slots[2]
+
+    with pytest.raises(DynamicSlotUnavailable, match="exactly logical slots 1 and 2"):
+        await manager._validate_all_bindings()
+
+
+@pytest.mark.asyncio
+async def test_global_validation_rejects_whitespace_only_protect_id(tmp_path):
+    world = FakeProtectWorld()
+    manager = make_manager(tmp_path, world)
+    assert (await manager.startup(
+        [make_target(world)], bootstrap_audio_factory=bootstrap
+    ))["ready"]
+    manager.slots[1].protect_ringtone_id = "   "
+
+    with pytest.raises(DynamicSlotUnavailable, match="distinct nonempty Protect IDs"):
+        await manager._validate_all_bindings()
 
 
 @pytest.mark.asyncio
@@ -215,6 +251,35 @@ async def test_global_validation_rejects_duplicate_physical_slot_bindings(tmp_pa
 
     with pytest.raises(DynamicSlotUnavailable, match="distinct physical slots"):
         await manager._validate_all_bindings()
+
+
+@pytest.mark.asyncio
+async def test_physical_slot_uniqueness_is_scoped_per_chime(tmp_path):
+    world = FakeProtectWorld(("chime-1", "chime-2"))
+    targets = [
+        make_target(world, "chime-1", "kitchen"),
+        make_target(world, "chime-2", "hallway"),
+    ]
+    manager = make_manager(tmp_path, world)
+
+    status = await manager.startup(targets, bootstrap_audio_factory=bootstrap)
+
+    assert status["ready"] is True, status
+    assert set(manager.slots) == {1, 2}
+    assert {
+        number: manager.slots[number].bindings["chime-1"].device_slot
+        for number in (1, 2)
+    } == {1: 1, 2: 2}
+    assert {
+        number: manager.slots[number].bindings["chime-2"].device_slot
+        for number in (1, 2)
+    } == {1: 1, 2: 2}
+    for chime_id in ("chime-1", "chime-2"):
+        mappings = {
+            manager.slots[number].bindings[chime_id].device_slot
+            for number in (1, 2)
+        }
+        assert mappings == {1, 2}
 
 
 @pytest.mark.asyncio

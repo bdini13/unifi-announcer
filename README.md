@@ -550,7 +550,8 @@ Home Assistant, REST, MQTT, local rules, and MCP all reuse the same dispatcher s
 ## Caching and safety
 
 - Repeated text uses a content-addressed disk MP3 cache on the Announcer host.
-- The host cache is bounded independently by `TTS_CACHE_MAX_FILES` and `TTS_CACHE_MAX_BYTES`.
+- The host cache is pruned independently toward `TTS_CACHE_MAX_FILES` and `TTS_CACHE_MAX_BYTES` as best-effort limits.
+- Files that cannot be deleted remain counted, so `/tts/cache/status` may exceed either configured maximum until filesystem permissions or other deletion errors are corrected.
 - Dynamic TTS consumes exactly two persistent service-owned device slots per Announcer installation.
 - New unique phrases overwrite those two slots; they do not create new Protect ringtone identities after provisioning.
 - Slot reuse is lease/guard based so a slot is not overwritten while prior playback may still depend on it.

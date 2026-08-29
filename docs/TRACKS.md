@@ -85,7 +85,7 @@ TTS_CACHE_MAX_FILES=256
 TTS_CACHE_MAX_BYTES=268435456
 ```
 
-Pruning is least-recently-used by file timestamp and occurs at startup and after cache use.
+Pruning is least-recently-used by file timestamp and occurs at startup and after cache use. The configured limits are best-effort pruning targets, not hard quotas: files that cannot be deleted remain counted, `/tts/cache/status` may exceed either maximum, and the underlying filesystem permission or deletion error must be corrected before pruning can reach the targets.
 
 ## Protect capacity
 
