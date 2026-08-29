@@ -20,3 +20,23 @@ def test_readme_uses_immutable_release_checkout_and_valid_auth_example():
 def test_readme_documents_bind_mount_ownership_when_data_path_is_used():
     readme = Path("README.md").read_text()
     assert "sudo chown -R 1000:1000 /srv/unifi-announcer/data" in readme
+
+
+def test_public_docs_do_not_claim_unsupported_credential_onboarding():
+    readme = Path("README.md").read_text()
+    env_example = Path(".env.example").read_text()
+    assert "Make a Smart Chime speak (advanced)" in readme
+    assert "Arbitrary text announcements | ⚠️ Advanced" in readme
+    assert "There is no supported public retrieval workflow" in readme
+    quick_start = readme.split("### 2. Start the service", 1)[0]
+    assert "\nCHIME_DIRECT_PASSWORD=<current-device-adoption-credential>" not in quick_start
+    assert "# CHIME_DIRECT_PASSWORD=<current-device-adoption-credential>" in quick_start
+    assert "TTS_ENGINE=none" in readme
+    assert "CHIME_DIRECT_PASSWORD=" in env_example
+
+
+def test_source_comments_match_the_configured_credential_providers():
+    source = Path("app/main.py").read_text()
+    assert "We read it once via the NVR API bootstrap" not in source
+    assert "We fetch it lazily through the NVR client" not in source
+    assert "see README \"Direct device API\" for" not in source

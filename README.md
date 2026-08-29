@@ -35,7 +35,7 @@ UniFi Announcer fills that gap while keeping Protect in the playback path. It is
 
 | Goal | Start here |
 |---|---|
-| Make a Smart Chime speak | [Docker quick start](#quick-start) |
+| Make a Smart Chime speak (advanced) | [Docker quick start](#quick-start) |
 | Use Home Assistant | [HACS setup](#home-assistant-recommended-setup) |
 | Give an AI agent access | [MCP setup](#mcp-optional-ai-agent-interface) |
 | Build custom automation | [REST examples](#rest-examples) |
@@ -45,7 +45,7 @@ UniFi Announcer fills that gap while keeping Protect in the playback path. It is
 
 | Capability | Status |
 |---|---|
-| Arbitrary text announcements | ✅ Stable |
+| Arbitrary text announcements | ⚠️ Advanced; requires a separately obtained device credential |
 | Piper local TTS | ✅ Stable |
 | Edge TTS | ✅ Supported |
 | Reusable preset tones | ✅ Stable |
@@ -91,12 +91,18 @@ The playback command still goes through Protect. Direct Smart Chime HTTPS is use
 - At least one adopted UniFi Protect Smart Chime
 - Local UniFi OS account with access to Protect; SSO-only accounts do not work
 - Docker Engine with Docker Compose
-- TTS engine:
+- For arbitrary TTS, one TTS engine:
   - [Wyoming Piper](https://github.com/rhasspy/wyoming-piper), recommended for local TTS
   - Edge TTS with internet access
-- For v2.1 arbitrary TTS: current Smart Chime per-device adoption credential supplied through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`
+- For v2.1 arbitrary TTS: a current Smart Chime per-device adoption credential,
+  obtained and maintained outside this project, supplied through
+  `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`
 
-Credential-retrieval procedures and raw authentication research are intentionally not published in this repository. Buzzer/default/preset behavior remains available independently of fixed-slot dynamic TTS readiness.
+There is no supported public retrieval workflow for that undocumented device
+credential. UniFi Announcer does not extract it from the console. If you do not
+already have a lawful, authorized way to maintain it, configure `TTS_ENGINE=none`
+and use buzzer/default/preset playback only. Do not enable console or device SSH,
+query internal databases, or weaken console security solely for this project.
 
 Home Assistant and MCP are optional.
 
@@ -138,9 +144,13 @@ UNIFI_PASSWORD=<local-unifi-password>
 UNIFI_VERIFY_SSL=false
 
 CHIME_ID=<protect-chime-id>
-CHIME_DIRECT_PASSWORD=<current-device-adoption-credential>
 
-TTS_ENGINE=piper
+# Safe public baseline; preset/default/buzzer playback works without direct credentials.
+TTS_ENGINE=none
+
+# Advanced arbitrary TTS only, when you already maintain the device credential:
+# CHIME_DIRECT_PASSWORD=<current-device-adoption-credential>
+# TTS_ENGINE=piper
 PIPER_URL=tcp://<piper-host-or-ip>:10200
 PIPER_SYNTH_TIMEOUT=15
 
@@ -454,7 +464,7 @@ git checkout v2.1.0
 docker compose up -d --build
 ```
 
-v2.1 additionally requires a current per-device Smart Chime credential for arbitrary TTS. Supply it through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`. Retrieval procedures are intentionally outside the public repository.
+v2.1 additionally requires a current per-device Smart Chime credential for arbitrary TTS. Supply it through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE` only if you already maintain it through an authorized external process. There is no supported public retrieval workflow, and UniFi Announcer does not retrieve it from Protect.
 
 Then verify:
 
@@ -495,7 +505,7 @@ See [`.env.example`](.env.example) for the complete list.
 | `CHIME_ID` | none | Default Protect chime ID |
 | `CHIME_DIRECT_PASSWORD` | empty | Current device credential for fixed-slot dynamic TTS |
 | `CHIME_CREDENTIAL_FILE` | empty | Optional externally refreshed device-credential file |
-| `TTS_ENGINE` | `piper` | `piper` or `edge` |
+| `TTS_ENGINE` | `piper` | `piper`, `edge`, or `none`; use `none` for the safe credential-free baseline |
 | `PIPER_URL` | none | Wyoming Piper endpoint |
 | `TTS_CACHE_MAX_FILES` | `256` | Host-side cached TTS file ceiling |
 | `TTS_CACHE_MAX_BYTES` | `268435456` | Host-side cached TTS byte ceiling |

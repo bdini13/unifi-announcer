@@ -73,14 +73,13 @@ WS_VERIFY_SSL = os.getenv("WS_VERIFY_SSL", "false").lower() == "true"
 EVENTS_BUFFER_MAX = int(os.getenv("EVENTS_BUFFER_MAX", "100"))
 # --- Direct device API settings (primary path) --------------------------------
 # The chime exposes its own TLS API on :8080 with JSON-body auth
-# (username "ubnt" + per-device password provisioned at adoption). The password
-# lives on the NVR's Postgres (chimes.password column). We read it once via the
-# NVR API bootstrap flow below rather than storing it in .env.
+# (username "ubnt" + per-device password provisioned at adoption). The service
+# accepts that credential only from explicit local configuration; it does not
+# extract it from Protect or an internal console database.
 CHIME_DIRECT_IP = os.getenv("CHIME_DIRECT_IP", "")     # auto-discovered if empty
 CHIME_DIRECT_USER = os.getenv("CHIME_DIRECT_USER", "ubnt")
-# Per-device password from NVR Postgres (see README "Direct device API" for
-# the one-liner to fetch it). If unset, the direct path disables itself and
-# all traffic rides the NVR standby route.
+# If unset, the direct path disables itself and credential-free controls remain
+# available through Protect.
 CHIME_DIRECT_PASSWORD = os.getenv("CHIME_DIRECT_PASSWORD", "")
 CHIME_VERIFY_SSL = os.getenv("CHIME_VERIFY_SSL", "false").lower() == "true"
 DIRECT_TIMEOUT = float(os.getenv("DIRECT_TIMEOUT", "8"))
@@ -403,9 +402,9 @@ class ProtectClient:
 # The chime runs its own TLS server on :8080 with a small JSON API. For the
 # verified JSON endpoints, auth is not HTTP auth: credentials travel in JSON:
 #   {"username": "ubnt", "password": "<per-device pw>", ...request fields}
-# The password is provisioned at adoption and stored on the NVR (chimes table,
-# `password` column). We fetch it lazily through the NVR client so no secret
-# needs to live in .env.
+# The password is provisioned at adoption. It is accepted only through the
+# configured environment or credential-file provider; this service does not
+# retrieve it from Protect.
 #
 # Verified endpoints (fw 1.7.20):
 #   POST /api/info         - device info + feature flags (safe)
