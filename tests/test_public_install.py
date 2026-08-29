@@ -29,6 +29,8 @@ def test_quick_start_handles_secrets_and_temporary_login_safely():
     assert 'COOKIE_JAR="$(mktemp)"' in quick_start
     assert "--data-binary @-" in quick_start
     assert "export UNIFI_USERNAME UNIFI_PASSWORD" in quick_start
+    assert 'rm -f "$COOKIE_JAR"' in quick_start
+    assert "trap - EXIT" in quick_start
     assert "unset UNIFI_USERNAME UNIFI_PASSWORD" in quick_start
     assert "chmod 600 .env" in quick_start
 
@@ -114,6 +116,8 @@ def test_stable_claims_disclose_physical_validation_boundary():
     notes = Path("docs/RELEASE_NOTES_v2.1.0.md").read_text()
     assert "Multiple chimes and named groups | 🧪" in readme
     assert "only one physical Smart Chime" in readme
+    assert "100-unique-message live soak" not in readme
+    assert "100-unique-message automated regression" in readme
     assert "physical playback matrix" not in notes
     assert "100-unique-message automated regression" in notes
     assert "Multi-chime behavior is covered by automated tests" in notes
