@@ -1,6 +1,8 @@
 # v2.1.0 — Home Assistant, MCP, and fixed-slot TTS
 
-v2.1.0 promotes the v2.1 beta series to stable after automated CI, live Smart Chime soak testing, and a final physical playback matrix.
+v2.1.0 promotes the v2.1 beta series after automated CI and single-device live
+Smart Chime validation. Multi-chime behavior is covered by automated tests but
+was not physically validated with multiple Smart Chimes for this release.
 
 ## Highlights
 
@@ -13,8 +15,12 @@ v2.1.0 promotes the v2.1 beta series to stable after automated CI, live Smart Ch
 ## Validation
 
 - Core, Home Assistant, HACS, Hassfest, Ruff, compile, Compose, and Docker build gates pass in CI.
-- A 100-unique-message live Smart Chime soak kept the Protect identity count fixed at two and preserved physical slot mappings.
-- Final live checks covered both alternating TTS slots, preset/default/buzzer playback, concurrent announcements, deduplication, restart persistence, health, metrics, rules, cache, and recent events.
+- A 100-unique-message automated regression kept the Protect identity count
+  fixed at two and preserved synthetic per-device slot mappings.
+- Single-device live checks covered both alternating TTS slots,
+  preset/default/buzzer playback, restart persistence, and service status.
+- Multi-chime behavior is covered by automated tests using synthetic fixtures;
+  physical multi-device playback remains unvalidated in v2.1.0.
 
 ## Upgrade
 
@@ -26,4 +32,5 @@ git checkout v2.1.0
 docker compose up -d --build
 ```
 
-Beta.3's current per-device Smart Chime credential requirement remains for arbitrary TTS. Preset, default, and buzzer controls remain available independently.
+The current per-device Smart Chime credential requirement remains for arbitrary
+TTS. Preset, default, and buzzer controls remain available independently.

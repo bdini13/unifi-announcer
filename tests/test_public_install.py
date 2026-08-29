@@ -51,3 +51,13 @@ def test_readme_documents_backup_and_rollback_for_named_volume():
     assert "git checkout <previous-tag>" in rollback
     assert "restore" in rollback.lower()
     assert "track_registry.json" in rollback
+
+
+def test_stable_claims_disclose_physical_validation_boundary():
+    readme = Path("README.md").read_text()
+    notes = Path("docs/RELEASE_NOTES_v2.1.0.md").read_text()
+    assert "Multiple chimes and named groups | 🧪" in readme
+    assert "only one physical Smart Chime" in readme
+    assert "physical playback matrix" not in notes
+    assert "100-unique-message automated regression" in notes
+    assert "Multi-chime behavior is covered by automated tests" in notes

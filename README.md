@@ -50,7 +50,7 @@ UniFi Announcer fills that gap while keeping Protect in the playback path. It is
 | Edge TTS | ✅ Supported |
 | Reusable preset tones | ✅ Stable |
 | Buzzer and assigned-default playback | ✅ Stable |
-| Multiple chimes and named groups | ✅ Stable |
+| Multiple chimes and named groups | 🧪 Automated coverage; multi-device physical validation pending |
 | Quiet hours, priority, dedupe, bounded queues | ✅ Stable |
 | Two fixed service-owned dynamic TTS slots | ✅ Stable |
 | Bounded host-side TTS MP3 cache | ✅ Stable |
@@ -289,6 +289,9 @@ Native `tts.speak` media-source ingestion is planned for v2.2.
 - Queue depth is exposed per physical chime; groups intentionally do not expose a fake aggregate queue-depth sensor.
 - Changes to `CHIMES_CONFIG` or `GROUPS_CONFIG` require reloading or restarting the Home Assistant integration before its entity topology is rebuilt.
 - Arbitrary TTS requires fixed-slot readiness and current direct-device credentials on every target chime.
+- Multi-chime behavior is covered by automated tests, but v2.1 was physically
+  validated with only one physical Smart Chime; treat groups as experimental
+  until independent multi-device playback reports are available.
 - MCP is disabled by default and is independent of Home Assistant.
 
 ## What UniFi Announcer adds beyond native Home Assistant UniFi Protect
