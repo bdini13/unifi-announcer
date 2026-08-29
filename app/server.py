@@ -124,10 +124,14 @@ setattr(core.app.state.services, "tts_cache", tts_cache)
 
 
 async def health_check(_request) -> JSONResponse:
-    """Return normal component health plus fixed-slot/cache readiness."""
+    """Return coarse readiness without leaking detailed device/cache state."""
     payload = dict(core.app.state.services.health.snapshot())
-    payload["dynamic_tts"] = dynamic_slots.status()
-    payload["tts_cache"] = tts_cache.stats()
+    slot_state = dynamic_slots.status()
+    cache_state = tts_cache.stats()
+    payload["dynamic_tts"] = {
+        key: slot_state.get(key) for key in ("ready", "mode", "slot_count")
+    }
+    payload["tts_cache"] = {"ready": isinstance(cache_state, dict)}
     return JSONResponse(payload)
 
 

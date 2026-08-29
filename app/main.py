@@ -1372,11 +1372,11 @@ def _api_key_is_configured() -> bool:
 
 @app.middleware("http")
 async def api_key_guard(request, call_next):
-    """Phase 0 security gate: when APP_API_KEY is set, every mutating request
-    (POST/PUT/PATCH/DELETE) and the sensitive /chime/direct-log diagnostic must
-    present header X-API-Key matching the configured value. Read-only status
-    endpoints stay open for dashboards. If APP_API_KEY is empty, sensitive
-    routes fail closed rather than trusting every host on the LAN.
+    """Require APP_API_KEY on mutations and sensitive diagnostic reads.
+
+    Public health/version/schema endpoints remain available. Detailed device,
+    event, slot, cache, preset, and rules diagnostics require authentication.
+    Unconfigured or placeholder keys fail closed.
     """
     path = request.url.path
     is_sensitive = request.method != "GET" or path in SENSITIVE_GET_PATHS
