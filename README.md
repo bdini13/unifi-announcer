@@ -518,10 +518,11 @@ docker compose stop unifi-announcer
 cp .env "backups/env-$STAMP"
 chmod 600 "backups/env-$STAMP"
 docker run --rm \
+  -e BACKUP_UID="$(id -u)" -e BACKUP_GID="$(id -g)" \
   -v "$DATA_SOURCE:/data:ro" \
   -v "$PWD/backups:/backup" \
   alpine:3.22 sh -c \
-  'set -eu; tar -C /data -czf "/backup/data-'"$STAMP"'.tgz" .; chmod 600 "/backup/data-'"$STAMP"'.tgz"'
+  'set -eu; file="/backup/data-'"$STAMP"'.tgz"; tar -C /data -czf "$file" .; chown "$BACKUP_UID:$BACKUP_GID" "$file"; chmod 600 "$file"'
 tar -tzf "backups/data-$STAMP.tgz" >/dev/null
 sha256sum "backups/data-$STAMP.tgz" >"backups/data-$STAMP.tgz.sha256"
 chmod 600 "backups/data-$STAMP.tgz.sha256"

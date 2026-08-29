@@ -43,5 +43,7 @@ def test_backup_permissions_are_applied_by_root_container():
 
     readme = Path("README.md").read_text()
     rollback = readme.split("## Roll back", 1)[1].split("## Troubleshooting", 1)[0]
-    assert 'chmod 600 "/backup/data-' in rollback
+    assert 'BACKUP_UID="$(id -u)"' in rollback
+    assert 'chown "$BACKUP_UID:$BACKUP_GID" "$file"' in rollback
+    assert 'chmod 600 "$file"' in rollback
     assert 'chmod 600 "backups/data-$STAMP.tgz"' not in rollback
