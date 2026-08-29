@@ -1,4 +1,4 @@
-"""Idempotently publish the fixed v2.1.1 GitHub release."""
+"""Idempotently publish the fixed v2.1.2 GitHub release."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ import subprocess
 from collections.abc import Callable, Sequence
 from typing import Protocol
 
-TAG = "v2.1.1"
-TITLE = "v2.1.1 — Secure public installation hardening"
-NOTES_FILE = "docs/RELEASE_NOTES_v2.1.1.md"
+TAG = "v2.1.2"
+TITLE = "v2.1.2 — Public launch polish"
+NOTES_FILE = "docs/RELEASE_NOTES_v2.1.2.md"
 
 
 class Result(Protocol):
