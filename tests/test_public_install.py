@@ -1,13 +1,11 @@
 from pathlib import Path
 
-import yaml
-
 
 def test_compose_uses_named_volume_for_writable_default_data():
-    compose = yaml.safe_load(Path("docker-compose.yml").read_text())
-    mount = compose["services"]["unifi-announcer"]["volumes"][0]
-    assert mount == "unifi-announcer-data:/data"
-    assert compose["volumes"]["unifi-announcer-data"]["name"] == "unifi-announcer-data"
+    compose = Path("docker-compose.yml").read_text()
+    assert "- unifi-announcer-data:/data" in compose
+    assert "name: unifi-announcer-data" in compose
+    assert "${DATA_PATH:-./data}:/data" not in compose
 
 
 def test_readme_uses_immutable_release_checkout_and_valid_auth_example():
