@@ -1,7 +1,7 @@
 # v2.1.1 — Secure public installation hardening
 
 v2.1.1 is a patch release focused on safe, repeatable public installation and
-upgrade behavior. It does not move or replace the immutable `v2.1.0` tag.
+upgrade behavior. It does not move or replace the existing `v2.1.0` tag.
 
 ## Highlights
 
@@ -17,7 +17,7 @@ upgrade behavior. It does not move or replace the immutable `v2.1.0` tag.
   ownership, archive validation, and non-destructive restore staging.
 - Requires an API key in the Home Assistant integration and corrects all REST,
   Home Assistant, and MCP verification examples.
-- Aligns the application, Home Assistant integration, workflow, and immutable
+- Aligns the application, Home Assistant integration, workflow, and fail-closed
   release automation on `v2.1.1`.
 
 ## Validation
