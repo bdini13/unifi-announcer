@@ -197,6 +197,8 @@ printf '\nDATA_PATH=/srv/unifi-announcer/data\n' >>.env
 Verify health, version, and fixed-slot readiness:
 
 ```bash
+export UNIFI_ANNOUNCER_API_KEY="<your-api-key>"
+AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")
 curl -fsS http://<announcer-host-or-ip>:8095/health
 curl -fsS http://<announcer-host-or-ip>:8095/version
 curl -fsS "${AUTH[@]}" http://<announcer-host-or-ip>:8095/tts/slots/status
@@ -489,6 +491,8 @@ v2.1 additionally requires a current per-device Smart Chime credential for arbit
 Then verify:
 
 ```bash
+export UNIFI_ANNOUNCER_API_KEY="<your-api-key>"
+AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")
 curl -fsS http://<announcer-host-or-ip>:8095/health
 curl -fsS http://<announcer-host-or-ip>:8095/version
 curl -fsS "${AUTH[@]}" http://<announcer-host-or-ip>:8095/tts/slots/status

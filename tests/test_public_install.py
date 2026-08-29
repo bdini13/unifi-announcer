@@ -121,3 +121,14 @@ def test_protected_diagnostic_examples_send_api_key():
                 assert '"${AUTH[@]}"' in line
     combined = "\n".join(docs)
     assert 'AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")' in combined
+
+
+def test_readme_standalone_verification_blocks_define_auth_locally():
+    readme = Path("README.md").read_text()
+    quick = readme.split("Verify health, version, and fixed-slot readiness:", 1)[1]
+    quick = quick.split("```", 2)[1]
+    upgrade = readme.split("Then verify:", 1)[1].split("```", 2)[1]
+    for block in (quick, upgrade):
+        assert 'export UNIFI_ANNOUNCER_API_KEY="<your-api-key>"' in block
+        assert 'AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")' in block
+        assert block.index("AUTH=(-H") < block.index("/tts/slots/status")
