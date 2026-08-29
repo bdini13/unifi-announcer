@@ -1,0 +1,55 @@
+name: Feature request
+description: Suggest a focused improvement to UniFi Announcer
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve UniFi Announcer. Please describe the problem or workflow first, then the proposed feature. Do not post credentials, private network details, device IDs, certificate data, support logs, or private audio.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What are you trying to accomplish, and what is difficult with the current release?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest useful change you would like to see.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Primary interface
+      options:
+        - Docker / core service
+        - Home Assistant
+        - REST API
+        - MQTT
+        - MCP / AI agent
+        - Protect events / rules
+        - Documentation / installation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware / software context
+      description: Protect version, Smart Chime model/firmware, Home Assistant version, or other relevant details. Redact private information.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and release notes for the same request.
+          required: true
+        - label: I removed credentials and private deployment information.
+          required: true
+        - label: This request does not require credential extraction, destructive device operations, or weakening UniFi security.
+          required: true
