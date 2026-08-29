@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.unifi_announcer import async_setup_entry
@@ -103,6 +103,17 @@ async def test_full_setup_entity_topology_and_service(hass):
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
+
+        device_registry = dr.async_get(hass)
+        service_device = device_registry.async_get_device(
+            identifiers={(DOMAIN, BASE_DATA["url"])}
+        )
+        chime_device = device_registry.async_get_device(
+            identifiers={(DOMAIN, "chime-1")}
+        )
+        assert service_device is not None
+        assert chime_device is not None
+        assert chime_device.via_device_id == service_device.id
 
         registry = er.async_get(hass)
         entries = [

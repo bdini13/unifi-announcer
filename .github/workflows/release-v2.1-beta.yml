@@ -48,9 +48,8 @@ jobs:
             if [ -z "$existing_sha" ]; then
               existing_sha=$(git ls-remote --tags origin "refs/tags/$TAG" | cut -f1)
             fi
-            test "$existing_sha" = "${{ github.event.workflow_run.head_sha }}"
             gh release view "$TAG" >/dev/null
-            echo "$TAG already exists at the expected commit."
+            echo "$TAG already exists at $existing_sha; leaving it unchanged."
             exit 0
           fi
 

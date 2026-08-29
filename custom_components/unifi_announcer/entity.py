@@ -1,6 +1,7 @@
 """Shared Home Assistant entities for UniFi Announcer."""
 from __future__ import annotations
 
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -27,6 +28,15 @@ class UniFiAnnouncerEntity(CoordinatorEntity):
 
     def __init__(self, entry, coordinator, target: str | None = None,
                  chime_id: str | None = None, is_group: bool = False) -> None:
+        service_identifier = (DOMAIN, entry.data["url"])
+        dr.async_get(coordinator.hass).async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={service_identifier},
+            name=entry.title,
+            manufacturer="UniFi Announcer",
+            model="Local announcement service",
+            entry_type=DeviceEntryType.SERVICE,
+        )
         super().__init__(coordinator)
         self.entry = entry
         self.runtime = entry.runtime_data
