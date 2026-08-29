@@ -18,7 +18,7 @@ class UniFiAnnouncerPresetSelect(UniFiAnnouncerEntity, SelectEntity):
     """Choose the preset used by the companion Play Preset button."""
 
     _attr_translation_key = "preset"
-    _attr_name = None
+    _attr_name = "Ringtone preset"
 
     def __init__(self, entry, coordinator, target, chime_id, is_group) -> None:
         super().__init__(entry, coordinator, target, chime_id, is_group)

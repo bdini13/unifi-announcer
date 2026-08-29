@@ -36,7 +36,7 @@ class UniFiAnnouncerServiceSensor(UniFiAnnouncerEntity, SensorEntity):
         self.kind = kind
         self._attr_unique_id = f"{entry.entry_id}_{kind}"
         self._attr_translation_key = kind
-        self._attr_name = None
+        self._attr_name = {"status": "Status", "version": "Version"}[kind]
 
     @property
     def native_value(self):
@@ -63,7 +63,10 @@ class UniFiAnnouncerTargetSensor(UniFiAnnouncerEntity, SensorEntity):
         self.kind = kind
         self._attr_unique_id = f"{entry.entry_id}_{self.entity_key}_{kind}"
         self._attr_translation_key = kind
-        self._attr_name = None
+        self._attr_name = {
+            "queue_depth": "Queue depth",
+            "last_disposition": "Last playback result",
+        }[kind]
 
     @property
     def native_value(self):

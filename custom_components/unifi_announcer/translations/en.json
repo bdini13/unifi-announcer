@@ -54,16 +54,16 @@
     "notify": {"announce": {"name": "Announcements"}},
     "button": {
       "play_buzzer": {"name": "Play buzzer"},
-      "play_default": {"name": "Play default"},
+      "play_default": {"name": "Play default ringtone"},
       "play_preset": {"name": "Play selected preset"}
     },
-    "select": {"preset": {"name": "Preset"}},
-    "media_player": {"speaker": {"name": "Announcer"}},
+    "select": {"preset": {"name": "Ringtone preset"}},
+    "media_player": {"speaker": {"name": "Announcement player"}},
     "sensor": {
       "status": {"name": "Status"},
       "version": {"name": "Version"},
       "queue_depth": {"name": "Queue depth"},
-      "last_disposition": {"name": "Last disposition"}
+      "last_disposition": {"name": "Last playback result"}
     }
   },
   "services": {
