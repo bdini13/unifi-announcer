@@ -16,7 +16,7 @@ async def test_cache_status_and_authenticated_refresh(main_module, monkeypatch):
     refresh = AsyncMock()
     monkeypatch.setattr(main_module.ringtone_index, "refresh", refresh)
     async with httpx.AsyncClient(transport=transport_for(main_module), base_url="http://test") as client:
-        status = await client.get("/cache/ringtones/status")
+        status = await client.get("/cache/ringtones/status", headers={"X-API-Key": "fixture-key"})
         denied = await client.post("/cache/ringtones/refresh")
         accepted = await client.post("/cache/ringtones/refresh", headers={"X-API-Key": "fixture-key"})
     assert status.status_code == 200

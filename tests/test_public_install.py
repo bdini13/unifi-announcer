@@ -61,6 +61,26 @@ def test_public_configuration_fails_closed_without_api_key():
     assert "APP_API_KEY is required" in readme
     assert "APP_API_KEY=REPLACE_ME" in env_example
     assert "If APP_API_KEY is configured" not in readme
+    assert "REPLACE_ME" in env_example
+    assert "backups/" in Path(".gitignore").read_text()
+    assert "chmod 600" in readme
+
+
+def test_upgrade_docs_preserve_legacy_default_bind_data():
+    readme = Path("README.md").read_text()
+    assert "./data" in readme
+    assert "DATA_PATH=./data" in readme
+    assert "docker compose config" in readme
+
+
+def test_release_identity_is_v2_1_1():
+    assert 'APP_VERSION = "2.1.1"' in Path("app/version.py").read_text()
+    assert 'INTEGRATION_VERSION = "2.1.1"' in Path(
+        "custom_components/unifi_announcer/const.py"
+    ).read_text()
+    assert '"version": "2.1.1"' in Path(
+        "custom_components/unifi_announcer/manifest.json"
+    ).read_text()
 
 
 def test_stable_claims_disclose_physical_validation_boundary():

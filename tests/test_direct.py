@@ -116,7 +116,7 @@ async def test_capabilities_endpoint_reports_sanitized_per_chime_state(main_modu
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=main_module.app), base_url="http://test"
     ) as client:
-        response = await client.get("/chime/capabilities")
+        response = await client.get("/chime/capabilities", headers={"X-API-Key": "configured-test-key"})
 
     assert response.status_code == 200
     assert response.json()["chimes"] == [

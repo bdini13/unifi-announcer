@@ -1319,7 +1319,7 @@ def require_api_key(x_api_key: str = Security(_api_key_header)) -> None:
     APP_API_KEY must be configured before protected routes are enabled. When
     configured, every protected route demands the ``X-API-Key`` header.
     """
-    if not APP_API_KEY:
+    if not _api_key_is_configured():
         raise _HTTPException(status_code=503, detail="APP_API_KEY is not configured")
     provided = x_api_key or ""
     # constant-time compare to avoid timing side-channels
@@ -1359,9 +1359,15 @@ async def timing_middleware(request, call_next):
     return response
 
 
-PUBLIC_PATHS = {"/health", "/chime", "/chime/settings", "/chime/direct-info",
-                "/events/recent", "/events/stream", "/openapi.json", "/docs",
-                "/openapi.json"}
+SENSITIVE_GET_PATHS = {
+    "/chime", "/chime/settings", "/chime/direct-info", "/chime/direct-log",
+    "/chimes", "/chime/capabilities", "/events/recent", "/events/stream",
+    "/metrics/json", "/cache/ringtones/status", "/presets", "/rules/status",
+}
+
+
+def _api_key_is_configured() -> bool:
+    return bool(APP_API_KEY and APP_API_KEY.strip() and APP_API_KEY != "REPLACE_ME")
 
 
 @app.middleware("http")
@@ -1373,11 +1379,11 @@ async def api_key_guard(request, call_next):
     routes fail closed rather than trusting every host on the LAN.
     """
     path = request.url.path
-    is_sensitive = request.method != "GET" or path == "/chime/direct-log"
+    is_sensitive = request.method != "GET" or path in SENSITIVE_GET_PATHS
     if is_sensitive:
         import hmac as _hmac2
         provided = request.headers.get("x-api-key", "")
-        if not APP_API_KEY:
+        if not _api_key_is_configured():
             from fastapi.responses import JSONResponse
             return JSONResponse({"detail": "APP_API_KEY is not configured"},
                                 status_code=503)

@@ -185,12 +185,13 @@ docker compose logs -f unifi-announcer
 Persistent data defaults to the Docker-managed `unifi-announcer-data` volume,
 which is writable by the non-root container user without host preparation.
 
-To use a host bind mount instead, replace the Compose volume source with the
-desired absolute path and make it writable by container UID/GID `1000:1000`:
+To use a host bind mount instead, set `DATA_PATH` in `.env` and make it writable
+by container UID/GID `1000:1000`:
 
 ```bash
 sudo mkdir -p /srv/unifi-announcer/data
 sudo chown -R 1000:1000 /srv/unifi-announcer/data
+printf '\nDATA_PATH=/srv/unifi-announcer/data\n' >>.env
 ```
 
 Verify health, version, and fixed-slot readiness:
@@ -462,7 +463,18 @@ Local rules can react directly to Protect events without a Home Assistant round 
 
 Keep your existing `.env` and persistent `DATA_PATH`; Compose still honors an
 existing bind path while new installations default to a project-scoped named
-volume. **Do not delete `track_registry.json` before this upgrade**: it is
+volume. Older installs that used the former implicit `./data` bind mount may
+have no `DATA_PATH` line. Before upgrading, preserve that location explicitly:
+
+```bash
+if test -d ./data && ! grep -q '^DATA_PATH=' .env; then
+  printf '\nDATA_PATH=./data\n' >>.env
+fi
+docker compose config | grep -A4 '/data'
+```
+
+Confirm the rendered `/data` source is the expected old directory before
+starting the new image. **Do not delete `track_registry.json` before this upgrade**: it is
 ownership evidence used to conservatively migrate older dynamic artifacts.
 
 ```bash
@@ -510,8 +522,10 @@ docker run --rm \
   -v "$PWD/backups:/backup" \
   alpine:3.22 \
   tar -C /data -czf "/backup/data-$STAMP.tgz" .
+chmod 600 "backups/data-$STAMP.tgz"
 tar -tzf "backups/data-$STAMP.tgz" >/dev/null
 sha256sum "backups/data-$STAMP.tgz" >"backups/data-$STAMP.tgz.sha256"
+chmod 600 "backups/data-$STAMP.tgz.sha256"
 ```
 
 Retain `track_registry.json` in the backup: it is ownership evidence for dynamic

@@ -15,7 +15,7 @@ UniFi Announcer includes a HACS-compatible custom integration under `custom_comp
 4. Restart Home Assistant.
 5. Go to **Settings → Devices & services → Add integration → UniFi Announcer**.
 6. Enter the Announcer URL, for example `http://announcer.local:8095`.
-7. Enter `APP_API_KEY` if the Announcer service uses one.
+7. Enter the required `APP_API_KEY` configured on the Announcer service.
 
 ### Manual
 

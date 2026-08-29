@@ -30,6 +30,14 @@ async def test_user_flow_creates_entry(hass):
     assert result["data"]["url"] == "http://announcer.local:8095"
 
 
+async def test_user_flow_requires_api_key(hass):
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    schema_keys = {key.schema: key for key in result["data_schema"].schema}
+    assert schema_keys["api_key"].__class__.__name__ == "Required"
+
+
 async def test_options_flow_uses_framework_config_entry(hass):
     entry = MockConfigEntry(
         domain=DOMAIN,

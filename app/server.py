@@ -28,7 +28,7 @@ core.app.version = APP_VERSION
 @core.app.get("/auth/check", include_in_schema=True)
 async def auth_check(x_api_key: str | None = Header(None, alias="X-API-Key")) -> Response:
     """Harmless API-key validation for client configuration flows."""
-    if not core.APP_API_KEY:
+    if not core._api_key_is_configured():
         raise HTTPException(status_code=503, detail="APP_API_KEY is not configured")
     if not hmac.compare_digest(x_api_key or "", core.APP_API_KEY):
         raise HTTPException(status_code=401, detail="invalid or missing API key")
