@@ -41,7 +41,7 @@ jobs:
           set -euo pipefail
           test "$(python -c 'from app.version import APP_VERSION; print(APP_VERSION)')" = "$EXPECTED_VERSION"
           test "$(python -c 'import json; print(json.load(open("custom_components/unifi_announcer/manifest.json"))["version"])')" = "$EXPECTED_VERSION"
-          test "$(python -c 'from custom_components.unifi_announcer.const import INTEGRATION_VERSION; print(INTEGRATION_VERSION)')" = "$EXPECTED_VERSION"
+          test "$(python -c 'import ast; tree=ast.parse(open("custom_components/unifi_announcer/const.py").read()); print(next(node.value.value for node in tree.body if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "INTEGRATION_VERSION" for target in node.targets)))')" = "$EXPECTED_VERSION"
 
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
             existing_sha=$(git ls-remote --tags origin "refs/tags/$TAG^{}" | cut -f1)
