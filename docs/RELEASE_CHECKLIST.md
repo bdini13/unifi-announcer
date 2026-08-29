@@ -23,9 +23,9 @@ CI or deploying a commit does not clear approval-gated research blockers.
 - [x] Concurrent three-message behavior passed automated regression coverage.
 - [x] Duplicate-request deduplication passed automated regression coverage.
 - [x] Preset, assigned-default, hardware buzzer, and post-restart TTS playback passed.
-- [x] A 100-unique-message live Smart Chime soak preserved exactly two
-      service-owned dynamic identities.
-- [x] Live `/health`, `/version`, slot/cache, metrics, rules, and recent-events checks passed.
+- [x] A 100-unique-message automated regression preserved exactly two service-owned
+      dynamic identities and synthetic per-device slot mappings.
+- [x] Live single-device `/health`, `/version`, slot/cache, metrics, rules, and recent-events checks passed.
 
 ## v2.1.2 public-launch gate
 
