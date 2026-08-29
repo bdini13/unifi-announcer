@@ -2,8 +2,7 @@
 
 [![CI](https://github.com/bdini13/unifi-announcer/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/bdini13/unifi-announcer/actions/workflows/test.yml)
 [![HA validation](https://github.com/bdini13/unifi-announcer/actions/workflows/validate-ha.yml/badge.svg?branch=main)](https://github.com/bdini13/unifi-announcer/actions/workflows/validate-ha.yml)
-[![Stable](https://img.shields.io/badge/stable-v2.0.0-blue)](https://github.com/bdini13/unifi-announcer/releases/tag/v2.0.0)
-[![Beta](https://img.shields.io/badge/beta-v2.1.0--beta.3-orange)](https://github.com/bdini13/unifi-announcer/releases)
+[![Stable](https://img.shields.io/badge/stable-v2.1.0-blue)](https://github.com/bdini13/unifi-announcer/releases/tag/v2.1.0)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.3%2B-blue)](docs/HOME_ASSISTANT.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -22,7 +21,7 @@ It synthesizes speech with Piper or Edge TTS, caches it on the Announcer host, o
 > `v2.1.0-beta.2` and earlier can leave device-side ringtone artifacts when many unique TTS phrases are used. This is especially easy to trigger with conversational AI/MCP workloads. `v2.1.0-beta.3` replaces per-phrase device allocation with exactly two service-owned overwrite slots. Do not promote beta.2 to a high-cardinality TTS deployment.
 
 > [!NOTE]
-> Native Home Assistant and MCP support are in the v2.1 beta. Native Home Assistant `tts.speak` / `media-source://` audio ingestion is planned for v2.2; v2.1 supports native notify actions plus text and preset `media_player.play_media`.
+> Native Home Assistant `tts.speak` / `media-source://` audio ingestion is planned for v2.2; v2.1 supports native notify actions plus text and preset `media_player.play_media`.
 
 ## Why this exists
 
@@ -46,19 +45,19 @@ UniFi Announcer fills that gap while keeping Protect in the playback path. It is
 
 | Capability | Status |
 |---|---|
-| Arbitrary text announcements | ✅ Stable core / 🧪 fixed-slot beta.3 path |
+| Arbitrary text announcements | ✅ Stable |
 | Piper local TTS | ✅ Stable |
 | Edge TTS | ✅ Supported |
 | Reusable preset tones | ✅ Stable |
 | Buzzer and assigned-default playback | ✅ Stable |
 | Multiple chimes and named groups | ✅ Stable |
 | Quiet hours, priority, dedupe, bounded queues | ✅ Stable |
-| Two fixed service-owned dynamic TTS slots | 🧪 v2.1 beta.3 |
-| Bounded host-side TTS MP3 cache | 🧪 v2.1 beta.3 |
-| Home Assistant HACS integration | 🧪 v2.1 beta |
-| HA `notify.send_message` | 🧪 v2.1 beta |
-| HA text/preset `media_player.play_media` | 🧪 v2.1 beta |
-| MCP server and playback tools | 🧪 v2.1 beta |
+| Two fixed service-owned dynamic TTS slots | ✅ Stable |
+| Bounded host-side TTS MP3 cache | ✅ Stable |
+| Home Assistant HACS integration | ✅ Stable |
+| HA `notify.send_message` | ✅ Stable |
+| HA text/preset `media_player.play_media` | ✅ Stable |
+| MCP server and playback tools | ✅ Stable |
 | MQTT discovery | ✅ Supported |
 | Protect event rules | 🧪 Experimental |
 | Native HA `tts.speak` media ingestion | ⏭️ v2.2 |
@@ -189,13 +188,13 @@ A healthy fixed-slot deployment reports `"mode":"two_slot_overwrite"`, `"slot_co
 UniFi Announcer includes a native HACS-compatible custom integration for Home Assistant 2026.3+.
 
 > [!WARNING]
-> **v2.1 beta testers:** Native Home Assistant support is distributed in the v2.1 prerelease. For conversational or high-cardinality TTS use, select `v2.1.0-beta.3` or later; beta.2 can leave device-side artifacts. The stable `v2.0.0` release does **not** contain the native integration. HACS does not normally select prereleases automatically.
+> **Upgrading from an older v2.1 beta:** Use `v2.1.0` or later. Beta.2 can leave device-side artifacts under high-cardinality TTS workloads; v2.1.0 uses the fixed two-slot design introduced in beta.3.
 
 ### Install through HACS as a custom repository
 
 1. Open **HACS** in Home Assistant.
 2. Add `https://github.com/bdini13/unifi-announcer` as an **Integration** custom repository.
-3. Enable prereleases for this repository or explicitly choose `v2.1.0-beta.3`.
+3. Select the latest stable release.
 4. Install **UniFi Announcer**.
 5. Restart Home Assistant.
 6. Open **Settings → Devices & services → Add integration → UniFi Announcer**.
@@ -438,14 +437,14 @@ MQTT remains optional. Set `MQTT_URL`, `MQTT_USERNAME`, and `MQTT_PASSWORD` to e
 
 Local rules can react directly to Protect events without a Home Assistant round trip. See [Rules documentation](docs/RULES.md).
 
-## Upgrade to v2.1.0-beta.3
+## Upgrade to v2.1.0
 
 Keep your existing `.env` and persistent `DATA_PATH`. **Do not delete `track_registry.json` before this upgrade**: beta.3 uses ownership records to identify and conservatively migrate beta.2 dynamic artifacts.
 
 ```bash
 cd unifi-announcer
 git fetch --tags
-git checkout v2.1.0-beta.3
+git checkout v2.1.0
 docker compose up -d --build
 ```
 
@@ -466,7 +465,7 @@ The slot status should show exactly two persistent slots and `ready: true`. Lega
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| UniFi Announcer does not appear in HA | HACS installed stable `v2.0.0` or older beta | Enable prereleases/select `v2.1.0-beta.3`, reinstall, restart HA |
+| UniFi Announcer does not appear in HA | HACS installed `v2.0.0` or an older beta | Select `v2.1.0` or later, reinstall, restart HA |
 | HA reports invalid API key | `APP_API_KEY` changed or mismatches | Complete the integration's reauthentication flow |
 | Buttons/presets work but arbitrary TTS fails | Fixed TTS slots are not ready | Check `/tts/slots/status`; verify current direct-device credential and chime reachability |
 | Slot status reports ownership drift | Physical slot metadata no longer matches proof | Stop TTS and reconcile; do not force/guess a slot |
@@ -574,6 +573,7 @@ See [Track registry documentation](docs/TRACKS.md) and [Playback policy](docs/PO
 - [Rules](docs/RULES.md)
 - [Track registry](docs/TRACKS.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
+- [v2.1.0 release notes](docs/RELEASE_NOTES_v2.1.0.md)
 - [v2.1.0-beta.1 release notes](docs/RELEASE_NOTES_v2.1.0-beta.1.md)
 - [v2.1.0-beta.2 release notes](docs/RELEASE_NOTES_v2.1.0-beta.2.md)
 - [v2.1.0-beta.3 release notes](docs/RELEASE_NOTES_v2.1.0-beta.3.md)
@@ -617,8 +617,7 @@ This project was developed with the assistance of AI coding and research tools. 
 
 ## Release status
 
-- **Stable:** `v2.0.0` — local MVP reliability release
-- **Beta:** `v2.1.0-beta.3` — fixed-slot dynamic TTS + Home Assistant + MCP beta
+- **Stable:** `v2.1.0` — fixed-slot dynamic TTS + Home Assistant + MCP
 - **Planned:** `v2.2.0` — native Home Assistant `tts.speak`, binary media ingestion, and optional SSE integration
 
 See the [Releases page](https://github.com/bdini13/unifi-announcer/releases).
