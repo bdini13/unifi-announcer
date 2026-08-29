@@ -8,7 +8,7 @@ CI or deploying a commit does not clear approval-gated research blockers.
 - [ ] Core lane uses Python 3.12 with `pip install -r requirements-dev.txt`, then runs `EVENTS_ENABLED=false TTS_ENGINE=none UNIFI_HOST=https://unifi.invalid CHIME_DIRECT_IP=192.0.2.10 python -W error -m pytest -q tests`
 - [ ] Home Assistant lane uses a separate Python 3.14 environment with `pip install -r requirements-ha-test.txt`, then runs `python -m pytest -q tests_ha` without interpreter-level `-W error` (the HA test stack emits upstream import-time deprecations before `pytest.ini` loads)
 - [ ] `ruff check .`
-- [ ] `python -m compileall -q app scripts tests`
+- [ ] `python -m compileall -q app custom_components`
 - [ ] application modules import without network activity
 - [ ] `git diff --check`
 - [ ] changed-file credential/secret scan
