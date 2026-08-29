@@ -107,6 +107,7 @@ Home Assistant and MCP are optional.
 ```bash
 git clone https://github.com/bdini13/unifi-announcer.git
 cd unifi-announcer
+git checkout v2.1.0
 cp .env.example .env
 ```
 
@@ -166,10 +167,15 @@ docker compose up -d --build
 docker compose logs -f unifi-announcer
 ```
 
-Persistent data defaults to `./data`. To use another host path, set `DATA_PATH`, for example:
+Persistent data defaults to the Docker-managed `unifi-announcer-data` volume,
+which is writable by the non-root container user without host preparation.
 
-```env
-DATA_PATH=/srv/unifi-announcer/data
+To use a host bind mount instead, replace the Compose volume source with the
+desired absolute path and make it writable by container UID/GID `1000:1000`:
+
+```bash
+sudo mkdir -p /srv/unifi-announcer/data
+sudo chown -R 1000:1000 /srv/unifi-announcer/data
 ```
 
 Verify health, version, and fixed-slot readiness:
