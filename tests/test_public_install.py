@@ -13,6 +13,7 @@ def test_readme_uses_next_immutable_release_and_valid_auth_example():
     assert "git checkout v2.1.1" in readme
     assert 'AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")' in readme
     assert "$UNIFI..." not in readme
+    assert Path("docs/RELEASE_NOTES_v2.1.1.md").exists()
 
 
 def test_readme_documents_bind_mount_ownership_when_data_path_is_used():
