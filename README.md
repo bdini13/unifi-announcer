@@ -573,6 +573,7 @@ See [Track registry documentation](docs/TRACKS.md) and [Playback policy](docs/PO
 - [Rules](docs/RULES.md)
 - [Track registry](docs/TRACKS.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
+- [v2.1.0 release notes](docs/RELEASE_NOTES_v2.1.0.md)
 - [v2.1.0-beta.1 release notes](docs/RELEASE_NOTES_v2.1.0-beta.1.md)
 - [v2.1.0-beta.2 release notes](docs/RELEASE_NOTES_v2.1.0-beta.2.md)
 - [v2.1.0-beta.3 release notes](docs/RELEASE_NOTES_v2.1.0-beta.3.md)

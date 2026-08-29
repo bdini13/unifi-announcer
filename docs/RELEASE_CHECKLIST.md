@@ -16,24 +16,21 @@ CI or deploying a commit does not clear approval-gated research blockers.
 - [ ] read-only live checks pass for `/health`, `/version`, capabilities, cache,
       metrics, rules, and recent events
 
-## Open release blockers
+## v2.1.0 release evidence
 
-- **Acoustic benchmark blocked:** Phase 21 implemented and synthetically tested
-  the offline analyzer, but no synchronized microphone recording path was
-  available and no sound-producing benchmark was approved. No acoustic latency
-  numbers may be claimed.
-- **Dynamic-slot A/B overwrite inconclusive:** the two dedicated, pinned,
-  service-owned slots and their NVR-to-device mapping were established. The
-  inactive-slot overwrite and ping-pong test were not run because authenticated
-  raw-MP3 overwrite semantics remain unverified. Production dynamic slots stay
-  default-off and disconnected from I/O.
-- Direct raw-upload authentication and route research is outside the public
-  release scope. Do not probe authentication variants, unknown routes, or reuse
-  controller identity material.
-- **Direct UCP4 blocked:** no legitimate callable Protect module, IPC endpoint,
-  or approved certificate trust path was found. The research client remains a
-  default-off local mock with no transport.
+- [x] Fixed-slot overwrite validated on a physical Smart Chime: both alternating
+      service-owned slots played distinct phrases correctly.
+- [x] Concurrent three-message playback completed without cross-talk or truncation.
+- [x] Simultaneous duplicate requests produced one audible playback.
+- [x] Preset, assigned-default, hardware buzzer, and post-restart TTS playback passed.
+- [x] A 100-unique-message soak preserved exactly two service-owned dynamic identities.
+- [x] Live `/health`, `/version`, slot/cache, metrics, rules, and recent-events checks passed.
 
-Do not tag a release while any blocker relevant to the claimed feature set is
-open. A safe service deployment is not a release tag and must not be represented
-as clearing these blockers.
+## Out-of-scope research limitations
+
+- No synchronized microphone benchmark was available. Do not claim measured acoustic latency.
+- Generic arbitrary raw upload, unknown-route probing, controller identity reuse, direct
+  slot deletion, and direct UCP4 transport remain unsupported and outside v2.1.0.
+- Multi-chime physical playback was not tested because only one Smart Chime was available.
+
+These limitations do not block the validated two-slot implementation shipped in v2.1.0.
