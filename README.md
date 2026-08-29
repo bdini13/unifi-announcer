@@ -520,9 +520,8 @@ chmod 600 "backups/env-$STAMP"
 docker run --rm \
   -v "$DATA_SOURCE:/data:ro" \
   -v "$PWD/backups:/backup" \
-  alpine:3.22 \
-  tar -C /data -czf "/backup/data-$STAMP.tgz" .
-chmod 600 "backups/data-$STAMP.tgz"
+  alpine:3.22 sh -c \
+  'set -eu; tar -C /data -czf "/backup/data-'"$STAMP"'.tgz" .; chmod 600 "/backup/data-'"$STAMP"'.tgz"'
 tar -tzf "backups/data-$STAMP.tgz" >/dev/null
 sha256sum "backups/data-$STAMP.tgz" >"backups/data-$STAMP.tgz.sha256"
 chmod 600 "backups/data-$STAMP.tgz.sha256"
