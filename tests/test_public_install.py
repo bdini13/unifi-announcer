@@ -11,7 +11,7 @@ def test_compose_uses_named_volume_for_writable_default_data():
 def test_readme_uses_next_immutable_release_and_valid_auth_example():
     readme = Path("README.md").read_text()
     assert "git checkout v2.1.1" in readme
-    assert 'AUTH=(-H "X-API-Key: $UNIFI_ANNOUNCER_API_KEY")' in readme
+    assert 'AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")' in readme
     assert "$UNIFI..." not in readme
 
 
@@ -106,3 +106,18 @@ def test_community_health_and_support_files_exist():
     readme = Path("README.md").read_text()
     assert "## Support" in readme
     assert "SECURITY.md" in readme
+
+def test_protected_diagnostic_examples_send_api_key():
+    docs = [
+        Path("README.md").read_text(),
+        Path("docs/HOME_ASSISTANT.md").read_text(),
+        Path("docs/MCP.md").read_text(),
+    ]
+    for text in docs:
+        for line in text.splitlines():
+            if line.startswith("curl -fsS") and (
+                "/tts/slots/status" in line or "/tts/cache/status" in line
+            ):
+                assert '"${AUTH[@]}"' in line
+    combined = "\n".join(docs)
+    assert 'AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")' in combined

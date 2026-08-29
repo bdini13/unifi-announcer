@@ -30,7 +30,9 @@ Home Assistant never receives that credential. Credential-retrieval procedures a
 Verify the Announcer host before troubleshooting Home Assistant:
 
 ```bash
-curl -fsS http://<announcer-host>:8095/tts/slots/status
+export UNIFI_ANNOUNCER_API_KEY="<your-api-key>"
+AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")
+curl -fsS "${AUTH[@]}" http://<announcer-host>:8095/tts/slots/status
 ```
 
 Arbitrary TTS requires `"ready": true` and `"slot_count": 2`. Buzzer/default/preset behavior can remain available when fixed-slot dynamic TTS is not ready.
@@ -160,7 +162,7 @@ The Version sensor reports the semantic UniFi Announcer version. The container g
 | Invalid API key / reauthentication requested | `APP_API_KEY` changed or mismatches | Enter the current application key in the reauth flow |
 | Cannot connect | Home Assistant cannot reach the Docker host/port | Verify the Announcer URL and LAN routing |
 | No preset options | `/presets` failed or state is stale | Verify `/presets`, then reload the integration |
-| Text TTS fails but preset/buzzer works | Fixed slots not ready or direct device credential stale | Check `/tts/slots/status` on the Announcer host |
+| Text TTS fails but preset/buzzer works | Fixed slots not ready or direct device credential stale | Check `/tts/slots/status` with `X-API-Key` on the Announcer host |
 | Slot status reports ownership drift | Physical binding no longer matches persisted proof | Stop dynamic TTS and reconcile; never force an unknown slot |
 | TTS synthesis fails | Piper is unavailable | Check the Piper endpoint separately |
 | Group has no queue sensor | Intentional in v2.1 | Inspect member-chime queue sensors |

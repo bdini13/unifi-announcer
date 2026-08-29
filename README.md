@@ -199,8 +199,8 @@ Verify health, version, and fixed-slot readiness:
 ```bash
 curl -fsS http://<announcer-host-or-ip>:8095/health
 curl -fsS http://<announcer-host-or-ip>:8095/version
-curl -fsS http://<announcer-host-or-ip>:8095/tts/slots/status
-curl -fsS http://<announcer-host-or-ip>:8095/tts/cache/status
+curl -fsS "${AUTH[@]}" http://<announcer-host-or-ip>:8095/tts/slots/status
+curl -fsS "${AUTH[@]}" http://<announcer-host-or-ip>:8095/tts/cache/status
 ```
 
 A healthy fixed-slot deployment reports `"mode":"two_slot_overwrite"`, `"slot_count":2`, and `"ready":true`. Piper may be offline during startup; non-TTS controls remain available.
@@ -355,7 +355,7 @@ http://<announcer-host>:8095/mcp
 Authentication:
 
 ```text
-Authorization: Bearer <MCP_API_KEY>
+Authorization: Bearer ***
 ```
 
 `MCP_API_KEY` is intentionally separate from `APP_API_KEY`. `MCP_ALLOWED_HOSTS` should include the exact LAN hostname/IP MCP clients use; the MCP transport keeps DNS-rebinding protection enabled.
@@ -394,7 +394,7 @@ Set:
 ```bash
 export ANNOUNCER_URL="http://<announcer-host-or-ip>:8095"
 export UNIFI_ANNOUNCER_API_KEY="<your-api-key>"
-AUTH=(-H "X-API-Key: $UNIFI_ANNOUNCER_API_KEY")
+AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")
 ```
 
 Announce text:
@@ -491,8 +491,8 @@ Then verify:
 ```bash
 curl -fsS http://<announcer-host-or-ip>:8095/health
 curl -fsS http://<announcer-host-or-ip>:8095/version
-curl -fsS http://<announcer-host-or-ip>:8095/tts/slots/status
-curl -fsS http://<announcer-host-or-ip>:8095/tts/cache/status
+curl -fsS "${AUTH[@]}" http://<announcer-host-or-ip>:8095/tts/slots/status
+curl -fsS "${AUTH[@]}" http://<announcer-host-or-ip>:8095/tts/cache/status
 ```
 
 With arbitrary TTS configured, slot status should show exactly two persistent
@@ -575,7 +575,7 @@ the current installation data intact for a forward rollback. Verify the absolute
 |---|---|---|
 | UniFi Announcer does not appear in HA | HACS installed `v2.0.0` or an older beta | Select `v2.1.0` or later, reinstall, restart HA |
 | HA reports invalid API key | `APP_API_KEY` changed or mismatches | Complete the integration's reauthentication flow |
-| Buttons/presets work but arbitrary TTS fails | Fixed TTS slots are not ready | Check `/tts/slots/status`; verify current direct-device credential and chime reachability |
+| Buttons/presets work but arbitrary TTS fails | Fixed TTS slots are not ready | Check `/tts/slots/status` with `X-API-Key`; verify current direct-device credential and chime reachability |
 | Slot status reports ownership drift | Physical slot metadata no longer matches proof | Stop TTS and reconcile; do not force/guess a slot |
 | Piper synthesis fails | Piper is unavailable | Check `PIPER_URL` and the Piper service |
 | MCP returns HTTP 401 | Bearer key mismatch | Check `MCP_API_KEY` and Authorization header |
