@@ -133,6 +133,8 @@ python3 -c 'import json,os; print(json.dumps({"username":os.environ["UNIFI_USERN
 curl -ksS -b "$COOKIE_JAR" \
   "$UNIFI_HOST/proxy/protect/api/chimes"
 
+rm -f "$COOKIE_JAR"
+trap - EXIT
 unset UNIFI_USERNAME UNIFI_PASSWORD
 ```
 
@@ -536,9 +538,9 @@ See [Track registry documentation](docs/TRACKS.md) and [Playback policy](docs/PO
 
 ## Validation boundary
 
-The v2.1.0 feature set was validated on one physical Smart Chime, including alternating fixed TTS slots, preset/default/buzzer playback, restart persistence, concurrency/deduplication, and a 100-unique-message live soak that kept dynamic Protect identities fixed at two. v2.1.1 and v2.1.2 are public-installation/release-polish patches and do not change the playback architecture.
+The v2.1.0 feature set was physically validated on one Smart Chime for alternating fixed TTS slots, preset/default/buzzer playback, restart persistence, and service status. A separate 100-unique-message automated regression kept dynamic Protect identities fixed at two and preserved synthetic per-device slot mappings. Automated coverage also includes concurrency and deduplication.
 
-Multi-chime/group behavior has automated fixture coverage but has **not** been physically validated with multiple Smart Chimes. No synchronized microphone benchmark was available, so the project does not claim measured acoustic latency.
+v2.1.1 and v2.1.2 are public-installation/release-polish patches and do not change the playback architecture. Multi-chime/group behavior has automated fixture coverage but has **not** been physically validated with multiple Smart Chimes. No synchronized microphone benchmark was available, so the project does not claim measured acoustic latency.
 
 CI runs the core suite, Home Assistant custom-component tests, Ruff, compile checks, Compose validation, Docker build, HACS validation, and Hassfest. Public CI uses sanitized fixtures and does not contact live UniFi equipment or play audio.
 
