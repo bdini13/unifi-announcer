@@ -3,14 +3,14 @@ from pathlib import Path
 
 def test_compose_uses_named_volume_for_writable_default_data():
     compose = Path("docker-compose.yml").read_text()
-    assert "- unifi-announcer-data:/data" in compose
-    assert "name: unifi-announcer-data" in compose
+    assert "- ${DATA_PATH:-unifi-announcer-data}:/data" in compose
+    assert "name: unifi-announcer-data" not in compose
     assert "${DATA_PATH:-./data}:/data" not in compose
 
 
-def test_readme_uses_immutable_release_checkout_and_valid_auth_example():
+def test_readme_uses_next_immutable_release_and_valid_auth_example():
     readme = Path("README.md").read_text()
-    assert "git checkout v2.1.0" in readme
+    assert "git checkout v2.1.1" in readme
     assert 'AUTH=(-H "X-API-Key: $UNIFI_ANNOUNCER_API_KEY")' in readme
     assert "$UNIFI..." not in readme
 
@@ -44,11 +44,23 @@ def test_readme_documents_backup_and_rollback_for_named_volume():
     readme = Path("README.md").read_text()
     rollback = readme.split("## Roll back", 1)[1].split("## Troubleshooting", 1)[0]
     assert "docker compose stop unifi-announcer" in rollback
-    assert "unifi-announcer-data" in rollback
+    assert "DATA_SOURCE" in rollback
     assert "backup" in rollback.lower()
+    assert "umask 077" in rollback
+    assert "tar -tzf" in rollback
+    assert "sha256sum" in rollback
+    assert "restore-test" in rollback
     assert "git checkout <previous-tag>" in rollback
     assert "restore" in rollback.lower()
     assert "track_registry.json" in rollback
+
+
+def test_public_configuration_fails_closed_without_api_key():
+    readme = Path("README.md").read_text()
+    env_example = Path(".env.example").read_text()
+    assert "APP_API_KEY is required" in readme
+    assert "APP_API_KEY=REPLACE_ME" in env_example
+    assert "If APP_API_KEY is configured" not in readme
 
 
 def test_stable_claims_disclose_physical_validation_boundary():

@@ -12,10 +12,9 @@ services:
     ports:
       - "${HOST_PORT}:8095"
     volumes:
-      - unifi-announcer-data:/data
+      - ${DATA_PATH:-unifi-announcer-data}:/data
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
 
 volumes:
   unifi-announcer-data:
-    name: unifi-announcer-data

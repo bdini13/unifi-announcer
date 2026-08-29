@@ -16,6 +16,7 @@ def main_module(monkeypatch, tmp_path):
     monkeypatch.setenv("CHIME_ID", "chime-fixture")
     monkeypatch.setenv("CHIME_DIRECT_IP", "192.0.2.10")
     monkeypatch.setenv("CHIME_DIRECT_PASSWORD", "test-placeholder")
+    monkeypatch.setenv("APP_API_KEY", "configured-test-key")
     sys.modules.pop("app.main", None)
     module = importlib.import_module("app.main")
     yield module

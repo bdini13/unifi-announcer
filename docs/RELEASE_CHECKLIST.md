@@ -20,10 +20,11 @@ CI or deploying a commit does not clear approval-gated research blockers.
 
 - [x] Fixed-slot overwrite validated on a physical Smart Chime: both alternating
       service-owned slots played distinct phrases correctly.
-- [x] Concurrent three-message playback completed without cross-talk or truncation.
-- [x] Simultaneous duplicate requests produced one audible playback.
+- [x] Concurrent three-message behavior passed automated regression coverage.
+- [x] Duplicate-request deduplication passed automated regression coverage.
 - [x] Preset, assigned-default, hardware buzzer, and post-restart TTS playback passed.
-- [x] A 100-unique-message soak preserved exactly two service-owned dynamic identities.
+- [x] A 100-unique-message automated synthetic regression preserved exactly two
+      service-owned dynamic identities.
 - [x] Live `/health`, `/version`, slot/cache, metrics, rules, and recent-events checks passed.
 
 ## Out-of-scope research limitations

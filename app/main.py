@@ -1316,13 +1316,11 @@ _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 def require_api_key(x_api_key: str = Security(_api_key_header)) -> None:
     """Dependency guarding write/diagnostic routes.
 
-    If APP_API_KEY is unset the service runs in OPEN mode (LAN trust) and logs
-    a warning at startup; when set, every protected route demands the header
-    `X-API-Key: <key>`. Bearer-style Authorization headers are also accepted
-    for curl friendliness.
+    APP_API_KEY must be configured before protected routes are enabled. When
+    configured, every protected route demands the ``X-API-Key`` header.
     """
     if not APP_API_KEY:
-        return  # open mode - explicitly configured
+        raise _HTTPException(status_code=503, detail="APP_API_KEY is not configured")
     provided = x_api_key or ""
     # constant-time compare to avoid timing side-channels
     import hmac as _hmac
@@ -1371,14 +1369,18 @@ async def api_key_guard(request, call_next):
     """Phase 0 security gate: when APP_API_KEY is set, every mutating request
     (POST/PUT/PATCH/DELETE) and the sensitive /chime/direct-log diagnostic must
     present header X-API-Key matching the configured value. Read-only status
-    endpoints stay open for dashboards. If APP_API_KEY is empty the service
-    runs in trusted-LAN open mode.
+    endpoints stay open for dashboards. If APP_API_KEY is empty, sensitive
+    routes fail closed rather than trusting every host on the LAN.
     """
     path = request.url.path
     is_sensitive = request.method != "GET" or path == "/chime/direct-log"
-    if APP_API_KEY and is_sensitive:
+    if is_sensitive:
         import hmac as _hmac2
         provided = request.headers.get("x-api-key", "")
+        if not APP_API_KEY:
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"detail": "APP_API_KEY is not configured"},
+                                status_code=503)
         if not _hmac2.compare_digest(provided, APP_API_KEY):
             from fastapi.responses import JSONResponse
             return JSONResponse({"detail": "invalid or missing API key"},

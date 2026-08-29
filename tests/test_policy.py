@@ -116,7 +116,8 @@ async def test_rest_preset_accepts_same_policy_fields_as_mqtt(main_module):
     main_module.app.state.services = SimpleNamespace(dispatcher=SimpleNamespace(dispatch=dispatch))
 
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=main_module.app), base_url="http://test"
+        transport=httpx.ASGITransport(app=main_module.app), base_url="http://test",
+        headers={"X-API-Key": "configured-test-key"},
     ) as client:
         response = await client.post(
             "/presets/tone/play?volume=33&repeat_times=2&profile=night&priority=10&target=all"
