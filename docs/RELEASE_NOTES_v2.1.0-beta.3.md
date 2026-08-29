@@ -44,7 +44,7 @@ TTS_CACHE_MAX_FILES=256
 TTS_CACHE_MAX_BYTES=268435456
 ```
 
-This prevents conversational workloads from moving the unbounded-growth problem from the Smart Chime to `/data/cache/tts`.
+This prunes conversational workloads toward bounded use of `/data/cache/tts`. The limits are best-effort targets rather than hard quotas: undeletable files remain counted, cache status may exceed either maximum, and filesystem permission or deletion errors must be corrected before pruning can reach the targets.
 
 ## New status endpoints
 
