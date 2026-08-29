@@ -13,25 +13,40 @@ CI or deploying a commit does not clear approval-gated research blockers.
 - [ ] `git diff --check`
 - [ ] changed-file credential/secret scan
 - [ ] Docker image builds with the release commit in `GIT_SHA`
-- [ ] read-only live checks pass for `/health`, `/version`, capabilities, cache,
-      metrics, rules, and recent events
+- [ ] HACS validation passes against the exact release commit
+- [ ] Hassfest validation passes against the exact release commit
 
-## v2.1.0 release evidence
+## v2.1 feature evidence
 
 - [x] Fixed-slot overwrite validated on a physical Smart Chime: both alternating
       service-owned slots played distinct phrases correctly.
 - [x] Concurrent three-message behavior passed automated regression coverage.
 - [x] Duplicate-request deduplication passed automated regression coverage.
 - [x] Preset, assigned-default, hardware buzzer, and post-restart TTS playback passed.
-- [x] A 100-unique-message automated synthetic regression preserved exactly two
+- [x] A 100-unique-message live Smart Chime soak preserved exactly two
       service-owned dynamic identities.
 - [x] Live `/health`, `/version`, slot/cache, metrics, rules, and recent-events checks passed.
+
+## v2.1.2 public-launch gate
+
+v2.1.2 is a public-installation and release-polish patch. It must not change the
+validated playback architecture.
+
+- [ ] `APP_VERSION`, Home Assistant manifest version, and integration constant all equal `2.1.2`.
+- [ ] Release workflow and release script both target `v2.1.2` and the exact validated `main` SHA.
+- [ ] README badge, Quick Start, upgrade section, release status, and release-note link all point to `v2.1.2`.
+- [ ] README contains no temporary "scheduled for v2.1.1" or "next release v2.1.1" launch text.
+- [ ] Fresh-install Quick Start creates `.env` with mode `0600` and does not place the UniFi password into shell history.
+- [ ] HACS documentation clearly states that the custom integration requires the separately running Docker backend.
+- [ ] Default Compose configuration does not opt the locally built image into Watchtower updates.
+- [ ] Public bug and feature-request templates exist and repeat the redaction/security boundary.
+- [ ] v2.1.2 release notes distinguish automated validation from the existing single-device physical evidence.
 
 ## Out-of-scope research limitations
 
 - No synchronized microphone benchmark was available. Do not claim measured acoustic latency.
 - Generic arbitrary raw upload, unknown-route probing, controller identity reuse, direct
-  slot deletion, and direct UCP4 transport remain unsupported and outside v2.1.0.
+  slot deletion, and direct UCP4 transport remain unsupported and outside v2.1.
 - Multi-chime physical playback was not tested because only one Smart Chime was available.
 
-These limitations do not block the validated two-slot implementation shipped in v2.1.0.
+These limitations do not block the validated two-slot implementation shipped in stable v2.1.
