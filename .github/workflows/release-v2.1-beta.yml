@@ -32,10 +32,10 @@ jobs:
       - name: Hassfest validation
         uses: home-assistant/actions/hassfest@a7c616ce81ccda50150bf1595786c71b1883fabb # master, pinned 2026-08-29
 
-      - name: Publish v2.1.1 release
+      - name: Publish v2.1.2 release
         env:
           GH_TOKEN: ${{ github.token }}
-          EXPECTED_VERSION: 2.1.1
+          EXPECTED_VERSION: 2.1.2
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail

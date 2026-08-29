@@ -18,7 +18,7 @@
 
 ## v2.1 fixed-slot compatibility boundary
 
-Dynamic TTS in `v2.1.0` requires all of the following:
+Dynamic TTS in stable `v2.1` releases requires all of the following:
 
 - a compatible Smart Chime firmware whose direct info capability permits custom ringtone storage;
 - a current per-device adoption credential supplied locally to the Announcer host;

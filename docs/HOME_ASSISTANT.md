@@ -2,28 +2,32 @@
 
 UniFi Announcer includes a HACS-compatible custom integration under `custom_components/unifi_announcer` for Home Assistant 2026.3+.
 
+> [!IMPORTANT]
+> The HACS integration is a **client for the UniFi Announcer Docker service**. Run and configure the Docker backend first; installing the HACS integration alone does not provide Smart Chime playback or TTS.
+
 > [!WARNING]
-> Native Home Assistant support is included in stable `v2.1.0` and later. Beta.2 can leave device-side artifacts when many unique phrases are spoken; use v2.1.0 or later for high-cardinality or conversational TTS.
+> Use stable `v2.1.2` or later for new public installations. `v2.1.0-beta.2` and earlier can leave device-side artifacts when many unique phrases are spoken; current stable releases use fixed service-owned TTS slots instead.
 
 ## Install
 
 ### HACS custom repository
 
-1. In HACS, add `https://github.com/bdini13/unifi-announcer` as an **Integration** custom repository.
-2. Select the latest stable release.
-3. Install **UniFi Announcer**.
-4. Restart Home Assistant.
-5. Go to **Settings → Devices & services → Add integration → UniFi Announcer**.
-6. Enter the Announcer URL, for example `http://announcer.local:8095`.
-7. Enter the required `APP_API_KEY` configured on the Announcer service.
+1. Install and start the UniFi Announcer Docker service using the repository Quick Start.
+2. In HACS, add `https://github.com/bdini13/unifi-announcer` as an **Integration** custom repository.
+3. Select the latest stable release.
+4. Install **UniFi Announcer**.
+5. Restart Home Assistant.
+6. Go to **Settings → Devices & services → Add integration → UniFi Announcer**.
+7. Enter the Announcer URL, for example `http://announcer.local:8095`.
+8. Enter the required `APP_API_KEY` configured on the Announcer service.
 
 ### Manual
 
-Copy `custom_components/unifi_announcer` into Home Assistant's `/config/custom_components/` directory and restart Home Assistant.
+Copy `custom_components/unifi_announcer` into Home Assistant's `/config/custom_components/` directory and restart Home Assistant. The Docker backend is still required.
 
 ## Announcer-side requirement for arbitrary TTS
 
-Beta.3 changes dynamic speech storage to exactly two persistent service-owned Smart Chime slots. The Announcer container must be able to prove and overwrite those exact slots, which requires a current per-device Smart Chime credential supplied on the Announcer host through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`.
+v2.1+ uses exactly two persistent service-owned Smart Chime slots for dynamic speech. The Announcer container must be able to prove and overwrite those exact slots, which requires a current per-device Smart Chime credential supplied on the Announcer host through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`.
 
 Home Assistant never receives that credential. Credential-retrieval procedures and raw authentication research are intentionally not part of the public repository.
 
@@ -158,7 +162,7 @@ The Version sensor reports the semantic UniFi Announcer version. The container g
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Integration not offered after HACS install | `v2.0.0` or an older beta was installed | Select `v2.1.0` or later, reinstall, restart HA |
+| Integration not offered after HACS install | Docker backend not running, or an older integration release was installed | Start the Announcer service; select the latest stable release in HACS; reinstall and restart HA |
 | Invalid API key / reauthentication requested | `APP_API_KEY` changed or mismatches | Enter the current application key in the reauth flow |
 | Cannot connect | Home Assistant cannot reach the Docker host/port | Verify the Announcer URL and LAN routing |
 | No preset options | `/presets` failed or state is stale | Verify `/presets`, then reload the integration |
