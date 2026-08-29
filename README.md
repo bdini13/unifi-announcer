@@ -18,7 +18,7 @@ It synthesizes speech with Piper or Edge TTS, caches it on the Announcer host, o
 > UniFi Announcer is an unofficial community project and is not affiliated with or endorsed by Ubiquiti.
 
 > [!WARNING]
-> `v2.1.0-beta.2` and earlier can leave device-side ringtone artifacts when many unique TTS phrases are used. This is especially easy to trigger with conversational AI/MCP workloads. `v2.1.0-beta.3` replaces per-phrase device allocation with exactly two service-owned overwrite slots. Do not promote beta.2 to a high-cardinality TTS deployment.
+> `v2.1.0-beta.2` and earlier can leave device-side ringtone artifacts when many unique TTS phrases are used. This is especially easy to trigger with conversational AI/MCP workloads. `v2.1.0` replaces per-phrase device allocation with exactly two service-owned overwrite slots. Upgrade older betas before using high-cardinality TTS workloads.
 
 > [!NOTE]
 > Native Home Assistant `tts.speak` / `media-source://` audio ingestion is planned for v2.2; v2.1 supports native notify actions plus text and preset `media_player.play_media`.
@@ -72,7 +72,7 @@ MCP ────────────┤            │                      
 Protect rules ──┘       queue / policy          fixed TTS slot ID
 ```
 
-For arbitrary TTS in beta.3:
+For arbitrary TTS in v2.1:
 
 ```text
 text
@@ -94,7 +94,7 @@ The playback command still goes through Protect. Direct Smart Chime HTTPS is use
 - TTS engine:
   - [Wyoming Piper](https://github.com/rhasspy/wyoming-piper), recommended for local TTS
   - Edge TTS with internet access
-- For beta.3 arbitrary TTS: current Smart Chime per-device adoption credential supplied through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`
+- For v2.1 arbitrary TTS: current Smart Chime per-device adoption credential supplied through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`
 
 Credential-retrieval procedures and raw authentication research are intentionally not published in this repository. Buzzer/default/preset behavior remains available independently of fixed-slot dynamic TTS readiness.
 
@@ -266,13 +266,13 @@ The media player intentionally does not pretend the Smart Chime is a normal stre
 
 Native `tts.speak` media-source ingestion is planned for v2.2.
 
-### v2.1 beta limitations
+### v2.1 limitations
 
 - Home Assistant supports one UniFi Announcer integration instance in v2.1.
 - Native `tts.speak` and binary/media-source ingestion are deferred to v2.2.
 - Queue depth is exposed per physical chime; groups intentionally do not expose a fake aggregate queue-depth sensor.
 - Changes to `CHIMES_CONFIG` or `GROUPS_CONFIG` require reloading or restarting the Home Assistant integration before its entity topology is rebuilt.
-- Beta.3 arbitrary TTS requires fixed-slot readiness and current direct-device credentials on every target chime.
+- Arbitrary TTS requires fixed-slot readiness and current direct-device credentials on every target chime.
 - MCP is disabled by default and is independent of Home Assistant.
 
 ## What UniFi Announcer adds beyond native Home Assistant UniFi Protect
@@ -356,7 +356,7 @@ play_default
 buzzer
 ```
 
-`get_status` includes fixed-slot and TTS-cache status in beta.3. Internal `UA-TTS-*` slot identities are excluded from `list_presets`.
+`get_status` includes fixed-slot and TTS-cache status in v2.1. Internal `UA-TTS-*` slot identities are excluded from `list_presets`.
 
 The MCP surface deliberately excludes credential retrieval, raw Protect administration, reboot/reset/adoption, arbitrary direct staging, firmware research, and arbitrary URL/file playback.
 
@@ -448,7 +448,7 @@ git checkout v2.1.0
 docker compose up -d --build
 ```
 
-Beta.3 additionally requires a current per-device Smart Chime credential for arbitrary TTS. Supply it through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`. Retrieval procedures are intentionally outside the public repository.
+v2.1 additionally requires a current per-device Smart Chime credential for arbitrary TTS. Supply it through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`. Retrieval procedures are intentionally outside the public repository.
 
 Then verify:
 
@@ -584,7 +584,7 @@ Keep UniFi credentials and API keys out of Git. Store them in `.env`, Docker sec
 
 Do **not** expose UniFi Announcer or its MCP endpoint directly to the public internet. Use a VPN or deliberately configured authenticated reverse proxy for remote access.
 
-Beta.3 dynamic TTS requires a current device adoption credential solely for exact service-owned slot overwrite. The public service does not expose that credential, and MCP/Home Assistant do not receive it. Credential-extraction procedures and raw authentication research are intentionally not documented in the public repository.
+Dynamic TTS requires a current device adoption credential solely for exact service-owned slot overwrite. The public service does not expose that credential, and MCP/Home Assistant do not receive it. Credential-extraction procedures and raw authentication research are intentionally not documented in the public repository.
 
 The public repository intentionally excludes deployment-specific credentials, certificate fingerprints, raw authentication research, and private support data.
 

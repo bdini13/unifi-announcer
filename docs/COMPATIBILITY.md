@@ -5,20 +5,20 @@
 | Component / capability | Evidence level | Status |
 |---|---|---|
 | UniFi Protect 7.2.105 private session API | Existing implementation + live use + mocked tests | Protect auth, persistent ringtone identity and playback backend |
-| Smart Chime firmware 1.7.20 `/api/info` | Existing recorded/live evidence | Used to capability-gate beta.3 fixed-slot TTS writes |
+| Smart Chime firmware 1.7.20 `/api/info` | Existing recorded/live evidence | Used to capability-gate fixed-slot TTS writes |
 | Smart Chime firmware 1.7.20 `/api/support` | Existing recorded evidence | Sensitive diagnostic read; not part of normal playback |
-| Exact owned ringtone-slot overwrite | Controlled local research on fw 1.7.20 + beta.3 ownership gates | Used only for two proven service-owned dynamic TTS slots |
+| Exact owned ringtone-slot overwrite | Controlled local research on fw 1.7.20 + v2.1 ownership gates | Used only for two proven service-owned dynamic TTS slots |
 | Generic arbitrary direct staging | Insufficient safe ownership model | Disabled |
 | Direct HTTP playback | No verified route | Unsupported; playback remains Protect `play-speaker` |
-| Direct slot deletion | Semantics not proven | Unsupported; beta.3 migration overwrites proven legacy bytes with silence rather than guessing deletion |
+| Direct slot deletion | Semantics not proven | Unsupported; v2.1 migration overwrites proven legacy bytes with silence rather than guessing deletion |
 | Protect-internal UCP4 transport/trust | No supported transport or trust path found | Unsupported; disconnected research interface only |
 | Python | 3.12 container target; HA validation uses its pinned environment | Supported by CI |
 | aiomqtt | 2.3.0 | Optional MQTT path |
 | MCP Python SDK | 2.0.0 | Optional Streamable HTTP MCP path |
 
-## Beta.3 fixed-slot compatibility boundary
+## v2.1 fixed-slot compatibility boundary
 
-Dynamic TTS in `v2.1.0-beta.3` requires all of the following:
+Dynamic TTS in `v2.1.0` requires all of the following:
 
 - a compatible Smart Chime firmware whose direct info capability permits custom ringtone storage;
 - a current per-device adoption credential supplied locally to the Announcer host;
@@ -26,13 +26,13 @@ Dynamic TTS in `v2.1.0-beta.3` requires all of the following:
 - an exact, persisted physical slot binding for each configured target;
 - ownership evidence that still matches immediately before each overwrite.
 
-If any write precondition fails, arbitrary TTS fails closed. The service never falls back to beta.2's per-phrase ringtone allocation because that can accumulate device-side artifacts under high-cardinality workloads.
+If any write precondition fails, arbitrary TTS fails closed. The service never falls back to the beta.2 per-phrase ringtone allocation because that can accumulate device-side artifacts under high-cardinality workloads.
 
 Buzzer/default/persistent preset operations can remain available independently when their existing Protect paths are healthy.
 
 ## Protect + direct responsibilities
 
-The beta.3 path intentionally uses both sides:
+The v2.1 path intentionally uses both sides:
 
 ```text
 Direct Smart Chime HTTPS

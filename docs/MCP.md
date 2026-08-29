@@ -6,7 +6,7 @@ The MCP layer is deliberately thin: every playback tool submits the same `Announ
 
 ## Dynamic TTS and conversational workloads
 
-`v2.1.0-beta.3` specifically hardens MCP/conversational use. Beta.2 created a distinct Protect ringtone identity for each new phrase, which could leave device-side artifacts even after safe NVR cleanup. Beta.3 provisions exactly two persistent service-owned TTS slots and overwrites them in place.
+`v2.1.0` hardens MCP/conversational use. Beta.2 created a distinct Protect ringtone identity for each new phrase, which could leave device-side artifacts even after safe NVR cleanup. Stable v2.1 provisions exactly two persistent service-owned TTS slots and overwrites them in place.
 
 After initial provisioning, 1 or 100 unique `announce` tool calls create **zero additional Protect ringtone identities**.
 
@@ -62,7 +62,7 @@ Playback:
 - `play_default`
 - `buzzer`
 
-`get_status` includes `dynamic_tts` and `tts_cache` data in beta.3. Internal `UA-TTS-*` identities are omitted from `list_presets`.
+`get_status` includes `dynamic_tts` and `tts_cache` data in v2.1. Internal `UA-TTS-*` identities are omitted from `list_presets`.
 
 Playback results return canonical dispositions such as `played`, `suppressed`, `deduped`, `partial`, or `failed`. Quiet-hours suppression and deduplication are application outcomes rather than generic MCP protocol failures.
 
@@ -92,7 +92,7 @@ mcp_servers:
 
 Verify the exact field names with the Hermes version in use, then run its MCP connection/tool-discovery test before enabling playback tools in normal agent workflows.
 
-For beta.3 acceptance, send a high-cardinality sequence (for example 100 unique messages) and verify the service-owned Protect dynamic identity count remains exactly two and device storage remains stable.
+For v2.1 acceptance, send a high-cardinality sequence (for example 100 unique messages) and verify the service-owned Protect dynamic identity count remains exactly two and device storage remains stable.
 
 ## Architecture notes
 

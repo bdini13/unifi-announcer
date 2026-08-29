@@ -6,7 +6,7 @@ UniFi Announcer models three separate identities: the caller's logical object, t
 
 Only artifacts explicitly created and persisted by this service use `owner: unifi_announcer`. Records upgraded from an older schema become `owner: unknown`; discovery never imports or claims built-in, unknown, or user-created tones. Presets remain persistent and should be pinned.
 
-## Dynamic TTS in v2.1.0-beta.3
+## Dynamic TTS in v2.1.0
 
 Arbitrary TTS no longer creates one Protect ringtone per unique phrase.
 
@@ -40,7 +40,7 @@ When the selected slot already contains the same content fingerprint, the device
 
 ## Provisioning
 
-A clean beta.3 installation:
+A clean v2.1 installation:
 
 1. loads or creates the persistent installation UUID;
 2. proves the direct-device write capability for every configured target before allocation;
@@ -62,7 +62,7 @@ The user-facing `/presets` and MCP `list_presets` responses hide internal `UA-TT
 
 Beta.2 represented every unique spoken phrase as an owned `dynamic_tts` record. NVR garbage collection could delete the Protect object, but direct device deletion was intentionally prohibited because deletion semantics were unproven. High-cardinality workloads could therefore leave physical flash artifacts.
 
-Beta.3 preserves the legacy registry through startup and performs migration only after both new fixed-slot identities and physical bindings are proven.
+v2.1 preserves the legacy registry through startup and performs migration only after both new fixed-slot identities and physical bindings are proven.
 
 For each proven legacy dynamic record:
 
@@ -78,7 +78,7 @@ This is intentionally conservative: ambiguous orphaned flash entries may require
 
 ## Host-side TTS cache
 
-The host MP3 cache is independent from Smart Chime slot count. It remains content-addressed so repeated phrases can bypass synthesis and encoding, but beta.3 bounds it with:
+The host MP3 cache is independent from Smart Chime slot count. It remains content-addressed so repeated phrases can bypass synthesis and encoding, but v2.1 bounds it with:
 
 ```text
 TTS_CACHE_MAX_FILES=256
@@ -93,7 +93,7 @@ Pruning is least-recently-used by file timestamp and occurs at startup and after
 
 Routine arbitrary TTS after provisioning creates **zero new Protect ringtone identities**.
 
-`MAX_DYNAMIC_TRACKS` is deprecated in beta.3. It is retained temporarily only for compatibility with legacy registry/startup behavior; physical dynamic TTS usage is fixed at exactly two slots.
+`MAX_DYNAMIC_TRACKS` is deprecated in v2.1. It is retained temporarily only for compatibility with legacy registry/startup behavior; physical dynamic TTS usage is fixed at exactly two slots.
 
 ## Direct overwrite boundary
 
@@ -115,7 +115,7 @@ Credential-retrieval procedures and raw authentication research are intentionall
 
 ## Status and diagnostics
 
-Beta.3 exposes:
+v2.1 exposes:
 
 ```text
 GET /tts/slots/status
