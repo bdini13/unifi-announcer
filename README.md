@@ -120,24 +120,20 @@ read -r -p "UniFi console URL (for example https://192.0.2.1): " UNIFI_HOST
 read -r -p "Local UniFi username: " UNIFI_USERNAME
 read -r -s -p "Local UniFi password: " UNIFI_PASSWORD
 echo
+export UNIFI_USERNAME UNIFI_PASSWORD
 COOKIE_JAR="$(mktemp)"
 trap 'rm -f "$COOKIE_JAR"' EXIT
 
-curl -ksS -c "$COOKIE_JAR" \
-  -H 'Content-Type: application/json' \
-  --data-binary "$(python3 -c 'import json,os; print(json.dumps({"username":os.environ["UNIFI_USERNAME"],"password":os.environ["UNIFI_PASSWORD"],"remember":False}))')" \
-  "$UNIFI_HOST/api/auth/login" >/dev/null
+python3 -c 'import json,os; print(json.dumps({"username":os.environ["UNIFI_USERNAME"],"password":os.environ["UNIFI_PASSWORD"],"remember":False}))' | \
+  curl -ksS -c "$COOKIE_JAR" \
+    -H 'Content-Type: application/json' \
+    --data-binary @- \
+    "$UNIFI_HOST/api/auth/login" >/dev/null
 
 curl -ksS -b "$COOKIE_JAR" \
   "$UNIFI_HOST/proxy/protect/api/chimes"
 
-unset UNIFI_PASSWORD
-```
-
-Because the Python helper reads exported environment variables, export the two credential variables only for the command block when using this example:
-
-```bash
-export UNIFI_USERNAME UNIFI_PASSWORD
+unset UNIFI_USERNAME UNIFI_PASSWORD
 ```
 
 Alternatively, retrieve the chime ID with your normal authorized Protect tooling and skip the temporary login example entirely.
