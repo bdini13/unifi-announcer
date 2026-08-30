@@ -124,6 +124,8 @@ class DynamicTtsSlotManager:
         minimum_guard_ms: int = 1750,
         provisioning_timeout_s: float = 15.0,
         poll_interval_s: float = 0.5,
+        device_sync_timeout_s: float = 10.0,
+        device_settle_delay_s: float = 0.75,
     ) -> None:
         self.data_dir = Path(data_dir)
         self.identity_path = self.data_dir / "installation.json"
@@ -141,6 +143,8 @@ class DynamicTtsSlotManager:
         self.minimum_guard_ms = max(0, int(minimum_guard_ms))
         self.provisioning_timeout_s = max(1.0, float(provisioning_timeout_s))
         self.poll_interval_s = max(0.05, float(poll_interval_s))
+        self.device_sync_timeout_s = max(0.1, float(device_sync_timeout_s))
+        self.device_settle_delay_s = max(0.0, float(device_settle_delay_s))
         self.installation_id = ""
         self.slots: dict[int, DynamicTtsSlot] = {}
         self.ready = False
@@ -470,6 +474,9 @@ class DynamicTtsSlotManager:
                     builtin=False,
                     experiment_enabled=True,
                 )
+                await self._wait_for_device_sync(
+                    binding, expected_md5=md5, expected_size=size
+                )
                 binding.current_md5 = md5
                 binding.current_size = size
                 binding.verified_at = time.time()
@@ -486,6 +493,41 @@ class DynamicTtsSlotManager:
         except Exception:
             await self.release_now(number)
             raise
+
+    async def _wait_for_device_sync(
+        self,
+        binding: DeviceSlotBinding,
+        *,
+        expected_md5: str,
+        expected_size: int,
+    ) -> None:
+        """Wait until Protect reports the overwritten bytes on the physical slot."""
+        deadline = asyncio.get_running_loop().time() + self.device_sync_timeout_s
+        while True:
+            chime = await self.get_chime(binding.chime_id)
+            tracks = chime.get("speakerTrackList") or []
+            numbered = [
+                track
+                for track in tracks
+                if int(track.get("track_no") or track.get("trackNo") or 0)
+                == binding.device_slot
+            ]
+            track = numbered[0] if len(numbered) == 1 else (
+                tracks[binding.device_slot - 1]
+                if not numbered and binding.device_slot <= len(tracks)
+                else None
+            )
+            if track is not None and _fingerprint(track) == (expected_md5, expected_size):
+                if self.device_settle_delay_s:
+                    await asyncio.sleep(self.device_settle_delay_s)
+                self._metric("tts_slot_sync_successes")
+                return
+            if asyncio.get_running_loop().time() >= deadline:
+                self._metric("tts_slot_sync_timeouts")
+                raise DynamicSlotUnavailable(
+                    f"chime {binding.chime_id}: overwritten TTS slot did not synchronize"
+                )
+            await asyncio.sleep(self.poll_interval_s)
 
     async def refresh_ringtone_id(self, number: int) -> str:
         slot = self.slots[number]

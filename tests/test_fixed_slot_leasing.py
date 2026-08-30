@@ -91,6 +91,7 @@ def manager(tmp_path, world):
         reuse_margin_ms=0,
         provisioning_timeout_s=0.2,
         poll_interval_s=0.01,
+        device_settle_delay_s=0,
     )
 
 

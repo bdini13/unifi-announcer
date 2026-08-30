@@ -610,7 +610,7 @@ This project was developed with the assistance of AI coding and research tools f
 - **Stable:** `v2.1.2` — public-launch polish over the physically validated v2.1 feature set
 - **Planned:** `v2.2.0` — native Home Assistant `tts.speak`, binary media ingestion, and optional SSE integration
 
-See the [Releases page](https://github.com/bdini13/unifi-announcer/releases).
+See the [Roadmap](ROADMAP.md) and [Releases page](https://github.com/bdini13/unifi-announcer/releases).
 
 ## License
 
