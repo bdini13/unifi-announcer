@@ -1,3 +1,3 @@
 """UniFi Announcer release identity."""
 
-APP_VERSION = "2.1.5"
+APP_VERSION = "2.1.6"
