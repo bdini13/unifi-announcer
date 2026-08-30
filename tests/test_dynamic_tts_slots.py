@@ -326,6 +326,36 @@ async def test_repeat_content_skips_flash_overwrite(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_repeat_content_rewrites_when_persisted_fingerprint_is_stale(tmp_path):
+    world = FakeProtectWorld()
+    target = make_target(world)
+    metrics = FakeMetrics()
+    manager = make_manager(tmp_path, world, metrics)
+    manager.device_settle_delay_s = 0
+    await manager.startup([target], bootstrap_audio_factory=bootstrap)
+
+    first = await manager.prepare(b"same-message", [target])
+    first_slot = first.logical_slot
+    await first.release_now()
+    second = await manager.prepare(b"different", [target])
+    await second.release_now()
+
+    binding = manager.slots[first_slot].bindings["chime-1"]
+    physical = world.chimes["chime-1"]["speakerTrackList"][binding.device_slot - 1]
+    physical["md5"] = "externally-changed"
+    physical["size"] = 999
+    before = len(target.direct_client.overwrites)
+
+    repaired = await manager.prepare(b"same-message", [target])
+    await repaired.release_now()
+
+    assert len(target.direct_client.overwrites) == before + 1
+    assert physical["md5"] == hashlib.md5(b"same-message").hexdigest()
+    assert physical["size"] == len(b"same-message")
+    assert metrics.counters.get("tts_slot_overwrite_skips", 0) == 0
+
+
+@pytest.mark.asyncio
 async def test_prepare_waits_for_overwritten_audio_to_reach_physical_slot(tmp_path):
     world = FakeProtectWorld()
     target = make_target(world)
