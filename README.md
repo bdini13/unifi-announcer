@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/bdini13/unifi-announcer/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/bdini13/unifi-announcer/actions/workflows/test.yml)
 [![HA validation](https://github.com/bdini13/unifi-announcer/actions/workflows/validate-ha.yml/badge.svg?branch=main)](https://github.com/bdini13/unifi-announcer/actions/workflows/validate-ha.yml)
-[![Stable](https://img.shields.io/badge/stable-v2.1.4-blue)](https://github.com/bdini13/unifi-announcer/releases/tag/v2.1.4)
+[![Stable](https://img.shields.io/badge/stable-v2.1.5-blue)](https://github.com/bdini13/unifi-announcer/releases/tag/v2.1.5)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.3%2B-blue)](docs/HOME_ASSISTANT.md)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -107,7 +107,7 @@ Home Assistant, MQTT, and MCP are optional.
 ```bash
 git clone https://github.com/bdini13/unifi-announcer.git
 cd unifi-announcer
-git checkout v2.1.4
+git checkout v2.1.5
 install -m 600 .env.example .env
 ```
 
@@ -410,7 +410,7 @@ MQTT remains optional. Set `MQTT_URL`, `MQTT_USERNAME`, and `MQTT_PASSWORD` to e
 
 Local rules can react directly to Protect events without a Home Assistant round trip. See [Rules documentation](docs/RULES.md).
 
-## Upgrade to v2.1.4
+## Upgrade to v2.1.5
 
 Keep the existing `.env` and persistent data. New installations default to the project-scoped Docker volume, while explicit `DATA_PATH` bind mounts remain supported.
 
@@ -428,7 +428,7 @@ Confirm the rendered `/data` source is the expected existing directory before st
 ```bash
 cd unifi-announcer
 git fetch --tags
-git checkout v2.1.4
+git checkout v2.1.5
 docker compose up -d --build
 ```
 
@@ -540,7 +540,7 @@ See [Track registry documentation](docs/TRACKS.md) and [Playback policy](docs/PO
 
 The v2.1.0 feature set was physically validated on one Smart Chime for alternating fixed TTS slots, preset/default/buzzer playback, restart persistence, and service status. A separate 100-unique-message automated regression kept dynamic Protect identities fixed at two and preserved synthetic per-device slot mappings. Automated coverage also includes concurrency and deduplication.
 
-v2.1.1 and v2.1.4 are public-installation/release-polish patches and do not change the playback architecture. Multi-chime/group behavior has automated fixture coverage but has **not** been physically validated with multiple Smart Chimes. No synchronized microphone benchmark was available, so the project does not claim measured acoustic latency.
+v2.1.1, v2.1.4, and v2.1.5 are patch releases over the same playback architecture. Multi-chime/group behavior has automated fixture coverage but has **not** been physically validated with multiple Smart Chimes. No synchronized microphone benchmark was available, so the project does not claim measured acoustic latency.
 
 CI runs the core suite, Home Assistant custom-component tests, Ruff, compile checks, Compose validation, Docker build, HACS validation, and Hassfest. Public CI uses sanitized fixtures and does not contact live UniFi equipment or play audio.
 
@@ -556,6 +556,7 @@ CI runs the core suite, Home Assistant custom-component tests, Ruff, compile che
 - [Rules](docs/RULES.md)
 - [Track registry](docs/TRACKS.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
+- [v2.1.5 release notes](docs/RELEASE_NOTES_v2.1.5.md)
 - [v2.1.4 release notes](docs/RELEASE_NOTES_v2.1.4.md)
 - [v2.1.1 release notes](docs/RELEASE_NOTES_v2.1.1.md)
 - [v2.1.0 release notes](docs/RELEASE_NOTES_v2.1.0.md)
@@ -607,7 +608,7 @@ This project was developed with the assistance of AI coding and research tools f
 
 ## Release status
 
-- **Stable:** `v2.1.4` — public-launch polish over the physically validated v2.1 feature set
+- **Stable:** `v2.1.5` — verifies live physical-slot contents before cached playback
 - **Planned:** `v2.2.0` — native Home Assistant `tts.speak`, binary media ingestion, and optional SSE integration
 
 See the [Roadmap](ROADMAP.md) and [Releases page](https://github.com/bdini13/unifi-announcer/releases).
