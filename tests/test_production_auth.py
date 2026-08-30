@@ -45,6 +45,30 @@ async def test_production_outer_diagnostics_accept_api_key(monkeypatch, path):
 
 
 @pytest.mark.asyncio
+async def test_presets_exposes_slot_backed_preset_names(monkeypatch):
+    from app import server
+
+    monkeypatch.setattr(server.core, "APP_API_KEY", "configured-test-key")
+    monkeypatch.setattr(server, "SLOT_BACKED_PRESETS", ("package-delivered",))
+    monkeypatch.setattr(
+        server.core.protect_backends.ringtone,
+        "list_ringtones",
+        AsyncMock(return_value=[]),
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=server.app), base_url="http://test"
+    ) as client:
+        response = await client.get(
+            "/presets", headers={"X-API-Key": "configured-test-key"}
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "presets": [{"name": "package-delivered", "slot_backed": True}]
+    }
+
+
+@pytest.mark.asyncio
 async def test_public_health_exposes_only_coarse_readiness(monkeypatch):
     from app import server
 

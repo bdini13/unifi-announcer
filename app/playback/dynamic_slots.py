@@ -395,8 +395,22 @@ class DynamicTtsSlotManager:
         # persisted mapping. When the physical position is reported, either its
         # exact filename must still match or its exact provisioning fingerprint
         # must prove that Protect renamed the same service-owned slot.
-        if binding.device_slot <= len(tracks):
-            track = tracks[binding.device_slot - 1]
+        numbered = [
+            track
+            for track in tracks
+            if int(track.get("track_no") or track.get("trackNo") or 0)
+            == binding.device_slot
+        ]
+        if len(numbered) > 1:
+            raise DynamicSlotUnavailable(
+                f"chime {binding.chime_id}: physical TTS slot is ambiguous"
+            )
+        track = numbered[0] if numbered else (
+            tracks[binding.device_slot - 1]
+            if binding.device_slot <= len(tracks)
+            else None
+        )
+        if track is not None:
             raw_filename = (
                 track.get("fileName") or track.get("filename") or track.get("name") or ""
             )
@@ -404,10 +418,10 @@ class DynamicTtsSlotManager:
             if filename and not filename.endswith(".mp3"):
                 filename = f"{filename}.mp3"
             if filename != binding.filename:
-                if filename and _fingerprint(track) in {
-                    (binding.provisioning_md5, binding.provisioning_size),
-                    (slot.bootstrap_md5, slot.bootstrap_size),
-                }:
+                if filename and (
+                    binding.accepts_track(track)
+                    or _fingerprint(track) == (slot.bootstrap_md5, slot.bootstrap_size)
+                ):
                     binding.filename = filename
                 else:
                     raise DynamicSlotUnavailable(

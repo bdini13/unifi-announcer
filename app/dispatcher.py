@@ -72,7 +72,8 @@ class AnnouncementDispatcher:
                  track_reconciler: Any | None = None,
                  ringtone_backend: Any | None = None,
                  upload_lock: asyncio.Lock | None = None,
-                 dynamic_slots: Any | None = None) -> None:
+                 dynamic_slots: Any | None = None,
+                 synthesize_preset: Callable[[str], Awaitable[bytes]] | None = None) -> None:
         self.protect = protect
         self.ringtone_backend = ringtone_backend or protect
         self.chime = chime
@@ -91,6 +92,7 @@ class AnnouncementDispatcher:
         self.track_registry = track_registry
         self.track_reconciler = track_reconciler
         self.dynamic_slots = dynamic_slots
+        self.synthesize_preset = synthesize_preset
         self._creation_locks: dict[str, asyncio.Lock] = {}
         self._creation_lock_users: dict[str, int] = {}
         self._upload_lock = upload_lock or asyncio.Lock()
@@ -141,7 +143,17 @@ class AnnouncementDispatcher:
             ringtone_name: str | None = None
             if command.action == "play_preset":
                 ringtone_name = command.preset or ""
-                ringtone_id = await self.resolve_preset(command.preset or "")
+                if self.dynamic_slots is not None and self.synthesize_preset is not None:
+                    mp3 = await self._timed(
+                        timing, "tts", self.synthesize_preset(ringtone_name)
+                    )
+                    self._capture_audio_timings(timing, mp3)
+                    dynamic_lease = await self._timed(
+                        timing, "upload", self.dynamic_slots.prepare(mp3, targets)
+                    )
+                    ringtone_id = dynamic_lease.ringtone_id
+                else:
+                    ringtone_id = await self.resolve_preset(ringtone_name)
             elif command.action == "announce":
                 if self.dynamic_slots is not None:
                     mp3 = await self._timed(timing, "tts", self.synthesize(command.text or ""))

@@ -850,6 +850,48 @@ async def test_rest_play_routes_accept_target(main_module, path, json):
 
 
 @pytest.mark.asyncio
+async def test_preset_can_use_fixed_dynamic_tts_slot_without_new_ringtone():
+    dynamic = SimpleNamespace(prepare=AsyncMock(return_value=SimpleNamespace(
+        ringtone_id="slot-tone",
+        logical_slot=1,
+        release_after=lambda repeat: None,
+        release_now=AsyncMock(),
+        refresh_ringtone_id=AsyncMock(return_value="slot-tone"),
+    )))
+    protect = SimpleNamespace(play=AsyncMock(return_value={}))
+    target = SimpleNamespace(
+        desc=SimpleNamespace(name="default", chime_id="chime-1"),
+        queue=SimpleNamespace(submit=lambda request: request.run()),
+    )
+    dispatcher = AnnouncementDispatcher(
+        protect=protect,
+        chime=SimpleNamespace(),
+        ringtone_index=SimpleNamespace(),
+        synthesize=AsyncMock(return_value=b"preset-mp3"),
+        slug=lambda text: text,
+        resolve_preset=AsyncMock(side_effect=KeyError("no persistent preset")),
+        resolve_targets=lambda selected: [target],
+        profile=lambda values: values,
+        quiet=lambda: False,
+        metrics=_Metrics(),
+        volume_default=50,
+        repeat_default=1,
+        dynamic_slots=dynamic,
+        synthesize_preset=AsyncMock(return_value=b"preset-mp3"),
+    )
+
+    result = await dispatcher.dispatch(AnnouncementCommand(
+        action="play_preset", preset="package-delivered", target="default"
+    ))
+
+    assert result.disposition == "played"
+    dynamic.prepare.assert_awaited_once_with(b"preset-mp3", [target])
+    protect.play.assert_awaited_once_with(
+        "slot-tone", 50, 1, chime_id="chime-1"
+    )
+
+
+@pytest.mark.asyncio
 async def test_missing_default_chime_id_returns_config_error_without_playback(main_module, monkeypatch):
     play = AsyncMock()
     monkeypatch.setattr(main_module, "chime_runtimes", {})

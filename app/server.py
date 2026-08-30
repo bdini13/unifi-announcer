@@ -20,6 +20,12 @@ from app.audio.tts import normalized_cache_key
 from app.playback.fixed_slots import DynamicTtsSlotManager
 from app.version import APP_VERSION
 
+SLOT_BACKED_PRESETS = tuple(
+    name.strip()
+    for name in os.getenv("SLOT_BACKED_PRESETS", "package-delivered").split(",")
+    if name.strip()
+)
+
 # Keep FastAPI/OpenAPI metadata aligned with the released container even though
 # the legacy core module is intentionally not a packaging/version source.
 core.app.version = APP_VERSION
@@ -118,6 +124,14 @@ dynamic_slots = DynamicTtsSlotManager(
 core.synthesize_tts_cached = tts_cache
 core.dispatcher.synthesize = tts_cache
 core.dispatcher.dynamic_slots = dynamic_slots
+
+
+async def _synthesize_preset(name: str) -> bytes:
+    """Render a named preset through the fixed TTS slots."""
+    return await tts_cache(name.replace("-", " "))
+
+
+core.dispatcher.synthesize_preset = _synthesize_preset
 setattr(core.app.state.services, "synthesize", tts_cache)
 setattr(core.app.state.services, "dynamic_slots", dynamic_slots)
 setattr(core.app.state.services, "tts_cache", tts_cache)
@@ -159,6 +173,12 @@ async def filtered_presets(request) -> JSONResponse:
             if not tone.get("isDefault")
             and not DynamicTtsSlotManager.is_slot_name(str(tone.get("name", "")))
         ]
+        existing = {str(tone.get("name", "")).lower() for tone in tones}
+        tones.extend(
+            {"name": name, "slot_backed": True}
+            for name in SLOT_BACKED_PRESETS
+            if name.lower() not in existing
+        )
         return JSONResponse({"presets": tones})
     except Exception as exc:
         return JSONResponse({"detail": str(exc)}, status_code=502)
