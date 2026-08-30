@@ -36,7 +36,7 @@ async def _setup(hass, play_preset):
         patch.object(
             UniFiAnnouncerClient,
             "async_get_version",
-            AsyncMock(return_value={"version": "2.1.5", "service": "unifi-announcer"}),
+            AsyncMock(return_value={"version": "2.1.6", "service": "unifi-announcer"}),
         ),
         patch.object(
             UniFiAnnouncerClient,
@@ -115,6 +115,23 @@ async def test_preset_button_updates_last_playback_result_to_failure(hass):
         await hass.async_block_till_done()
 
         assert hass.states.get(sensor_entity).state == "failure"
+    finally:
+        play_patch.stop()
+        await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_preset_button_preserves_nonplayed_dispatch_disposition(hass):
+    play = AsyncMock(return_value=CommandResult(
+        "suppressed", {"disposition": "suppressed"}, 200
+    ))
+    entry, button_entity, sensor_entity, play_patch = await _setup(hass, play)
+    try:
+        await hass.services.async_call(
+            "button", "press", {"entity_id": button_entity}, blocking=True
+        )
+        await hass.async_block_till_done()
+
+        assert hass.states.get(sensor_entity).state == "suppressed"
     finally:
         play_patch.stop()
         await hass.config_entries.async_unload(entry.entry_id)
