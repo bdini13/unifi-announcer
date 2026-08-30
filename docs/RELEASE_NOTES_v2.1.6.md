@@ -26,7 +26,11 @@ Automated release evidence includes:
 - Docker image build with an injected git SHA;
 - HACS validation and Hassfest.
 
-The release must not be published until the live single-device Home Assistant gate also passes on the exact release candidate: the normal HA playback action returns successfully, Protect `play-speaker` returns HTTP 200, the announcement is audible on the physical Smart Chime, and **Last playback result** becomes `success`. A deliberate failed HA playback must also produce `failure`.
+The live single-device release gate also passed before publication on the exact release candidate. The normal Home Assistant path reached UniFi Announcer successfully, Protect `play-speaker` returned HTTP 200, the expected announcement was physically audible on the Smart Chime, and **Last playback result** changed immediately to `success`. A deliberate safe failed HA action produced `failure`, and a subsequent valid action returned the result to `success`. Multiple unique HA phrases preserved exactly two dynamic TTS identities without modifying built-in, user-created, preset, or unknown tracks.
+
+After publication, the immutable `v2.1.6` tag was deployed at commit `11b2a318e49f57f5c53d5afd4f80a427dae7d618`. The final tagged smoke test confirmed `/version` and the Docker OCI revision matched that commit, runtime/cache health remained good, the HA component reported `2.1.6`, Protect playback returned HTTP 200, audible Smart Chime playback succeeded, and the two-slot ownership/cardinality invariant remained intact. Rollback was not required.
+
+A usability observation from physical testing was low apparent volume while the Smart Chime's stored volume was 34; this was not treated as a release blocker.
 
 ## Compatibility and safety
 
