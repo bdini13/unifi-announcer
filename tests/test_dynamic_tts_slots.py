@@ -343,6 +343,27 @@ async def test_slot_drift_fails_closed_before_overwrite(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_preflight_uses_physical_track_number_when_slots_are_sparse(tmp_path):
+    world = FakeProtectWorld()
+    target = make_target(world)
+    manager = make_manager(tmp_path, world)
+    await manager.startup([target], bootstrap_audio_factory=bootstrap)
+    binding = manager.slots[1].bindings["chime-1"]
+    binding.device_slot = 6
+    owned = world.chimes["chime-1"]["speakerTrackList"][0]
+    owned["track_no"] = binding.device_slot
+    world.chimes["chime-1"]["speakerTrackList"] = [
+        {"track_no": 1, "md5": "builtin", "size": 1, "name": "Default"},
+        owned,
+    ]
+
+    expected_filename = binding.filename
+    await manager._preflight_binding(manager.slots[1], binding)
+
+    assert binding.filename == expected_filename
+
+
+@pytest.mark.asyncio
 async def test_corrupt_installation_identity_fails_without_allocating_slots(tmp_path):
     Path(tmp_path, "installation.json").write_text('{"installation_id":"not-a-uuid"}')
     world = FakeProtectWorld()
