@@ -13,15 +13,10 @@ UniFi Announcer is a self-hosted announcement service for UniFi Protect Smart Ch
 For arbitrary speech it synthesizes audio with Piper or Edge TTS, stores MP3s in a bounded host cache, overwrites one of exactly two persistent service-owned Smart Chime slots, then asks Protect to play that persistent ringtone ID. New phrases do **not** create a new Protect ringtone each time.
 
 > [!IMPORTANT]
-> UniFi Protect interfaces used by this project are undocumented and can change. The current v2.1 feature set has been physically validated on Protect 7.2.105 with Smart Chime firmware 1.7.20. Review [Compatibility](docs/COMPATIBILITY.md) before upgrading Protect or chime firmware.
->
-> UniFi Announcer is an unofficial community project and is not affiliated with or endorsed by Ubiquiti.
+> UniFi Announcer relies on undocumented UniFi Protect and Smart Chime interfaces that can change between releases. v2.1.6 has been physically validated on Protect 7.2.105 with Smart Chime firmware 1.7.20. Review [Compatibility](docs/COMPATIBILITY.md) before upgrading Protect or chime firmware.
 
 > [!CAUTION]
-> Arbitrary TTS requires a current per-device Smart Chime adoption credential that you already maintain through an authorized method. This project does **not** retrieve that credential and does not document enabling console/device SSH, querying internal UniFi databases, or weakening console security to obtain it. Without that credential, use `TTS_ENGINE=none`; preset/default/buzzer playback remains available.
-
-> [!NOTE]
-> Native Home Assistant `tts.speak` / `media-source://` ingestion is planned for v2.2. Stable v2.1 supports `notify.send_message`, text/preset `media_player.play_media`, buttons, selectors, sensors, and the `unifi_announcer.announce` action.
+> Arbitrary TTS requires a current per-device Smart Chime adoption credential supplied through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`. UniFi Announcer does **not** retrieve that credential. Without it, use `TTS_ENGINE=none`; preset/default/buzzer playback remains available.
 
 ## Why this exists
 
@@ -147,6 +142,7 @@ TTS_ENGINE=none
 
 # Advanced arbitrary TTS only when you already maintain the device credential:
 # CHIME_DIRECT_PASSWORD=<current-device-adoption-credential>
+# CHIME_CREDENTIAL_FILE=/run/secrets/unifi_chime_password
 # TTS_ENGINE=piper
 PIPER_URL=tcp://<piper-host-or-ip>:10200
 PIPER_SYNTH_TIMEOUT=15
