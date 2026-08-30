@@ -6,7 +6,6 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.unifi_announcer import async_setup_entry
 from custom_components.unifi_announcer.api import (
     CommandResult,
     PlaybackFailed,
