@@ -552,7 +552,7 @@ This project was developed with assistance from AI coding and research tools for
 
 ## Release status
 
-- **Stable target:** `v2.1.6` — HA playback reliability, immediate playback-result reporting, and build provenance
+- **Stable:** `v2.1.6` — HA playback reliability, immediate playback-result reporting, and build provenance
 - **Planned:** `v2.2.0` — native Home Assistant `tts.speak`, binary media ingestion, and optional SSE integration
 
 See [ROADMAP.md](ROADMAP.md) and the [Releases page](https://github.com/bdini13/unifi-announcer/releases).
