@@ -1,13 +1,12 @@
-"""UniFi Announcer — TTS + preset tones on your UniFi Protect Chime, on demand.
+"""UniFi Announcer — bounded TTS and preset playback for UniFi Protect Chimes.
 
-Pipeline (latency-optimized):
-    text --> TTS engine (Piper local / edge-tts cloud) --> MP3 (<1MB)
-          --> POST /proxy/protect/api/ringtones  (upload, "TTS slot")
-          --> POST /proxy/protect/api/chimes/{id}/play-speaker {ringtoneId}
-          --> chime plays
+Dynamic TTS follows the production fixed-slot path:
+    text -> TTS engine -> bounded cache -> overwrite one proven UA-TTS slot
+         -> Protect play-speaker -> chime plays
 
-Named presets ("package-delivered", etc.) are uploaded once and cached by ID,
-so replaying a preset is a single play-speaker call (~200ms).
+Persistent preset identities are created through Protect and normal playback
+uses Protect ringtone IDs. ``DynamicTtsSlotManager`` exclusively owns production
+overwrites of the fixed UA-TTS slots.
 """
 
 from __future__ import annotations
@@ -23,6 +22,7 @@ from app.observability import MetricsRegistry
 from app.health import BackgroundHealth
 from app.dispatcher import AnnouncementDispatcher, StaleRingtoneError
 from app.routes.commands import announce_command, buzzer_command, default_command, preset_command
+from app.version import APP_VERSION
 import io
 import json
 import logging
@@ -157,7 +157,7 @@ async def _lifespan(app):
 
 
 
-app = FastAPI(lifespan=_lifespan, title="UniFi Announcer", version="2.0.0",
+app = FastAPI(lifespan=_lifespan, title="UniFi Announcer", version=APP_VERSION,
               description="On-demand TTS and preset tones for UniFi Protect Chimes")
 
 
@@ -613,12 +613,13 @@ _direct_http = LazyAsyncClient(verify=CHIME_VERIFY_SSL, timeout=DIRECT_TIMEOUT)
 
 
 class ChimeClient:
-    """Facade choosing between direct-device (primary) and NVR-relay (standby).
+    """Facade for Protect-owned playback and persistent preset identities.
 
-    Every result includes a `via` key ("direct" or "nvr") so callers and logs
-    always show which path served the request. If the direct path errors -
-    device offline, firmware change closing the endpoint, bad creds - we fall
-    back to the NVR route transparently rather than failing.
+    Normal playback uses Protect ringtone IDs, and persistent preset identity
+    creation is completed through Protect. Production fixed-slot overwrites are
+    not owned here; ``DynamicTtsSlotManager`` exclusively manages the proven
+    UA-TTS slots. Direct-device access remains limited to diagnostics and
+    explicitly gated experimental operations.
     """
 
     def __init__(self) -> None:

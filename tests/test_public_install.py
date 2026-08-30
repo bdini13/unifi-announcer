@@ -146,6 +146,12 @@ def test_release_identity_is_v2_1_6():
     ).read_text()
 
 
+def test_fastapi_metadata_uses_release_identity(main_module):
+    from app.version import APP_VERSION
+
+    assert main_module.app.version == APP_VERSION
+
+
 def test_stable_claims_disclose_physical_validation_boundary():
     readme = Path("README.md").read_text()
     notes = Path("docs/RELEASE_NOTES_v2.1.0.md").read_text()
