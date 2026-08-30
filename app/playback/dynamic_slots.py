@@ -386,7 +386,7 @@ class DynamicTtsSlotManager:
 
     async def _preflight_binding(
         self, slot: DynamicTtsSlot, binding: DeviceSlotBinding
-    ) -> None:
+    ) -> dict[str, Any] | None:
         chime = await self.get_chime(binding.chime_id)
         tracks = chime.get("speakerTrackList") or []
         if binding.device_slot < 1 or not binding.filename.endswith(".mp3"):
@@ -432,6 +432,7 @@ class DynamicTtsSlotManager:
                         f"chime {binding.chime_id}: TTS slot ownership proof no longer matches"
                     )
         binding.verified_at = time.time()
+        return track
 
     async def _acquire_slot_number(self) -> int:
         async with self._condition:
@@ -462,8 +463,13 @@ class DynamicTtsSlotManager:
                     raise DynamicSlotUnavailable(
                         f"slot {number}: no proven binding for {target.desc.name}"
                     )
-                await self._preflight_binding(slot, binding)
-                if binding.current_md5 == md5 and binding.current_size == size:
+                physical_track = await self._preflight_binding(slot, binding)
+                if (
+                    binding.current_md5 == md5
+                    and binding.current_size == size
+                    and physical_track is not None
+                    and _fingerprint(physical_track) == (md5, size)
+                ):
                     self._metric("tts_slot_overwrite_skips")
                     continue
                 await target.direct_client.overwrite_owned_slot(
