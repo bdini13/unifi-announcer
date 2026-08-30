@@ -1,4 +1,9 @@
-"""Idempotently publish the fixed v2.1.2 GitHub release."""
+"""Idempotently publish the fixed v2.1.6 GitHub release.
+
+The release workflow calls this only after the exact main commit has passed the
+core test lane plus HACS and Hassfest validation. Existing tags/releases are
+never moved or replaced: inconsistent states fail closed for manual review.
+"""
 
 from __future__ import annotations
 
@@ -8,9 +13,9 @@ import subprocess
 from collections.abc import Callable, Sequence
 from typing import Protocol
 
-TAG = "v2.1.2"
-TITLE = "v2.1.2 — Public launch polish"
-NOTES_FILE = "docs/RELEASE_NOTES_v2.1.2.md"
+TAG = "v2.1.6"
+TITLE = "v2.1.6 — Home Assistant playback reliability"
+NOTES_FILE = "docs/RELEASE_NOTES_v2.1.6.md"
 
 
 class Result(Protocol):
@@ -49,6 +54,7 @@ def publish_release(
     *,
     runner: Callable[[Sequence[str]], Result] = _run,
 ) -> str:
+    """Publish exactly ``TAG`` at ``validated_sha`` without mutating old releases."""
     tag = runner(
         ["git", "ls-remote", "--exit-code", "--tags", "origin", f"refs/tags/{TAG}"]
     )

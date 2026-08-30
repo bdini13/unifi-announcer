@@ -4,7 +4,7 @@ from __future__ import annotations
 from homeassistant.components.notify import NotifyEntity
 from homeassistant.exceptions import HomeAssistantError
 
-from .api import PlaybackFailed
+from .api import UniFiAnnouncerError
 from .entity import UniFiAnnouncerEntity, configured_targets
 
 
@@ -29,6 +29,7 @@ class UniFiAnnouncerNotify(UniFiAnnouncerEntity, NotifyEntity):
 
     async def async_send_message(self, message: str, title: str | None = None) -> None:
         if not message or not message.strip():
+            self.runtime.record_playback_result(self.target, "failed")
             raise HomeAssistantError("Announcement message cannot be empty")
         options = self.entry.options
         try:
@@ -38,6 +39,7 @@ class UniFiAnnouncerNotify(UniFiAnnouncerEntity, NotifyEntity):
                 volume=options.get("default_volume"),
                 repeat_times=options.get("default_repeat"),
             )
-        except PlaybackFailed as exc:
+        except UniFiAnnouncerError as exc:
+            self.runtime.record_playback_result(self.target, "failed")
             raise HomeAssistantError(str(exc)) from exc
-        self.runtime.last_disposition[self.target] = result.disposition
+        self.runtime.record_playback_result(self.target, result.disposition)

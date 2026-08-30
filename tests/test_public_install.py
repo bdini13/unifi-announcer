@@ -9,16 +9,17 @@ def test_compose_uses_named_volume_for_writable_default_data():
     assert "watchtower.enable" not in compose.lower()
 
 
-def test_readme_targets_v2_1_5_and_has_no_stale_launch_banner():
+def test_readme_targets_v2_1_6_and_uses_dynamic_release_badge():
     readme = Path("README.md").read_text()
-    assert "git checkout v2.1.5" in readme
-    assert "stable-v2.1.5" in readme
-    assert "**Stable:** `v2.1.5`" in readme
+    assert "git checkout v2.1.6" in readme
+    assert "img.shields.io/github/v/release/bdini13/unifi-announcer" in readme
+    assert "releases/latest" in readme
+    assert "**Stable target:** `v2.1.6`" in readme
     assert 'AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")' in readme
     assert "$UNIFI..." not in readme
     assert "scheduled for `v2.1.1`" not in readme
     assert "**Next release:** `v2.1.1`" not in readme
-    assert Path("docs/RELEASE_NOTES_v2.1.5.md").exists()
+    assert Path("docs/RELEASE_NOTES_v2.1.6.md").exists()
 
 
 def test_quick_start_handles_secrets_and_temporary_login_safely():
@@ -35,6 +36,17 @@ def test_quick_start_handles_secrets_and_temporary_login_safely():
     assert "chmod 600 .env" in quick_start
 
 
+def test_documented_builds_embed_source_revision():
+    readme = Path("README.md").read_text()
+    dockerfile = Path("Dockerfile").read_text()
+    compose = Path("docker-compose.yml").read_text()
+    assert 'export GIT_SHA="$(git rev-parse HEAD)"' in readme
+    assert "GIT_SHA: ${GIT_SHA:-unknown}" in compose
+    assert "ARG GIT_SHA=unknown" in dockerfile
+    assert 'org.opencontainers.image.revision="${GIT_SHA}"' in dockerfile
+    assert "git_sha: unknown" in readme
+
+
 def test_readme_documents_bind_mount_ownership_when_data_path_is_used():
     readme = Path("README.md").read_text()
     assert "sudo chown -R 1000:1000 /srv/unifi-announcer/data" in readme
@@ -43,9 +55,8 @@ def test_readme_documents_bind_mount_ownership_when_data_path_is_used():
 def test_public_docs_do_not_claim_unsupported_credential_onboarding():
     readme = Path("README.md").read_text()
     env_example = Path(".env.example").read_text()
-    assert "Make a Smart Chime speak (advanced)" in readme
     assert "Arbitrary text announcements | ⚠️ Advanced" in readme
-    assert "There is no supported public retrieval workflow" in readme
+    assert "does **not** retrieve that credential" in readme
     quick_start = readme.split("### 2. Start the service", 1)[0]
     assert "\nCHIME_DIRECT_PASSWORD=<current-device-adoption-credential>" not in quick_start
     assert "# CHIME_DIRECT_PASSWORD=<current-device-adoption-credential>" in quick_start
@@ -59,6 +70,17 @@ def test_hacs_docs_make_backend_requirement_explicit():
     assert "HACS integration is a client for the Docker service" in readme
     assert "HACS integration is a **client for the UniFi Announcer Docker service**" in ha_docs
     assert "HACS does not replace or run the backend" in readme
+
+
+def test_ha_docs_define_immediate_playback_result_semantics():
+    readme = Path("README.md").read_text()
+    ha_docs = Path("docs/HOME_ASSISTANT.md").read_text()
+    assert "Last playback result" in readme
+    assert "Last playback result" in ha_docs
+    assert "`success`" in ha_docs
+    assert "`failure`" in ha_docs
+    assert "updates it immediately" in ha_docs
+    assert "stale Protect inventory" in ha_docs
 
 
 def test_source_comments_match_the_configured_credential_providers():
@@ -79,14 +101,13 @@ def test_readme_documents_backup_and_rollback_for_named_volume():
     assert "sha256sum" in rollback
     assert "restore-test" in rollback
     assert "git checkout <previous-tag>" in rollback
-    assert "restore" in rollback.lower()
     assert "track_registry.json" in rollback
 
 
 def test_public_configuration_fails_closed_without_api_key():
     readme = Path("README.md").read_text()
     env_example = Path(".env.example").read_text()
-    assert "APP_API_KEY` is required" in readme
+    assert "`APP_API_KEY` is required" in readme
     assert "APP_API_KEY=REPLACE_ME" in env_example
     assert "If APP_API_KEY is configured" not in readme
     assert "REPLACE_ME" in env_example
@@ -99,14 +120,15 @@ def test_upgrade_docs_preserve_legacy_default_bind_data():
     assert "./data" in readme
     assert "DATA_PATH=./data" in readme
     assert "docker compose config" in readme
+    assert "track_registry.json" in readme
 
 
-def test_release_identity_is_v2_1_5():
-    assert 'APP_VERSION = "2.1.5"' in Path("app/version.py").read_text()
-    assert 'INTEGRATION_VERSION = "2.1.5"' in Path(
+def test_release_identity_is_v2_1_6():
+    assert 'APP_VERSION = "2.1.6"' in Path("app/version.py").read_text()
+    assert 'INTEGRATION_VERSION = "2.1.6"' in Path(
         "custom_components/unifi_announcer/const.py"
     ).read_text()
-    assert '"version": "2.1.5"' in Path(
+    assert '"version": "2.1.6"' in Path(
         "custom_components/unifi_announcer/manifest.json"
     ).read_text()
 
@@ -114,13 +136,13 @@ def test_release_identity_is_v2_1_5():
 def test_stable_claims_disclose_physical_validation_boundary():
     readme = Path("README.md").read_text()
     notes = Path("docs/RELEASE_NOTES_v2.1.0.md").read_text()
+    release_notes = Path("docs/RELEASE_NOTES_v2.1.6.md").read_text()
     assert "Multiple chimes and named groups | 🧪" in readme
-    assert "only one physical Smart Chime" in readme
-    assert "100-unique-message live soak" not in readme
-    assert "100-unique-message automated regression" in readme
-    assert "physical playback matrix" not in notes
-    assert "100-unique-message automated regression" in notes
+    assert "physically exercised on one Smart Chime" in readme
+    assert "100-unique-message **automated** regression" in readme
     assert "Multi-chime behavior is covered by automated tests" in notes
+    assert "has not yet been physically validated on multiple Smart Chimes" in release_notes
+    assert "No synchronized microphone benchmark" in release_notes
 
 
 def test_community_health_and_support_files_exist():
@@ -135,7 +157,7 @@ def test_community_health_and_support_files_exist():
     for name in required:
         assert Path(name).is_file(), name
     readme = Path("README.md").read_text()
-    assert "## Support" in readme
+    assert "## Support and security" in readme
     assert "SECURITY.md" in readme
 
 

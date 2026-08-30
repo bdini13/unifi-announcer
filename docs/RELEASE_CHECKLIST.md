@@ -1,52 +1,100 @@
 # Release checklist
 
-This checklist records the evidence required before a tagged release. Passing
-CI or deploying a commit does not clear approval-gated research blockers.
+This file defines the evidence required before a UniFi Announcer release is tagged. CI success is necessary but does not replace release-specific physical validation when a patch changes playback behavior.
 
-## Automated gates
+## Automated gates for the exact release commit
 
-- [ ] Core lane uses Python 3.12 with `pip install -r requirements-dev.txt`, then runs `EVENTS_ENABLED=false TTS_ENGINE=none UNIFI_HOST=https://unifi.invalid CHIME_DIRECT_IP=192.0.2.10 python -W error -m pytest -q tests`
-- [ ] Home Assistant lane uses a separate Python 3.14 environment with `pip install -r requirements-ha-test.txt`, then runs `python -m pytest -q tests_ha` without interpreter-level `-W error` (the HA test stack emits upstream import-time deprecations before `pytest.ini` loads)
-- [ ] `ruff check .`
-- [ ] `python -m compileall -q app custom_components`
-- [ ] application modules import without network activity
-- [ ] `git diff --check`
-- [ ] changed-file credential/secret scan
-- [ ] Docker image builds with the release commit in `GIT_SHA`
-- [ ] HACS validation passes against the exact release commit
-- [ ] Hassfest validation passes against the exact release commit
+- [ ] Core lane uses Python 3.12 and runs `python -W error -m pytest -q tests` with sanitized non-live environment values.
+- [ ] Home Assistant lane uses the pinned HA test requirements and runs `python -m pytest -q tests_ha`.
+- [ ] `ruff check .` passes.
+- [ ] `python -m compileall -q app custom_components` passes.
+- [ ] JSON metadata validation passes for HA/HACS files.
+- [ ] `docker compose config` succeeds.
+- [ ] Docker image builds with the exact release commit supplied through `GIT_SHA`.
+- [ ] HACS validation passes against the exact release commit.
+- [ ] Hassfest validation passes against the exact release commit.
+- [ ] Application modules import without contacting live UniFi equipment.
+- [ ] Public test fixtures and docs contain no private credentials, private device data, or deployment-specific secrets.
 
-## v2.1 feature evidence
+## Stable v2.1 architecture evidence
 
-- [x] Fixed-slot overwrite validated on a physical Smart Chime: both alternating
-      service-owned slots played distinct phrases correctly.
-- [x] Concurrent three-message behavior passed automated regression coverage.
-- [x] Duplicate-request deduplication passed automated regression coverage.
-- [x] Preset, assigned-default, hardware buzzer, and post-restart TTS playback passed.
-- [x] A 100-unique-message automated regression preserved exactly two service-owned
-      dynamic identities and synthetic per-device slot mappings.
-- [x] Live single-device `/health`, `/version`, slot/cache, metrics, rules, and recent-events checks passed.
+These checks establish the playback architecture that patch releases must preserve:
 
-## v2.1.2 public-launch gate
+- [x] Fixed-slot overwrite exercised on a physical Smart Chime with both alternating service-owned slots producing distinct speech.
+- [x] Preset, assigned-default, hardware buzzer, and post-restart TTS playback exercised on the physical single-device setup.
+- [x] Concurrent three-message behavior covered by automated regression tests.
+- [x] Duplicate-request deduplication covered by automated regression tests.
+- [x] A 100-unique-message automated regression preserves exactly two service-owned dynamic identities and synthetic per-device mappings.
+- [x] Live single-device health/version/slot/cache/metrics/rules/events checks have been exercised during v2.1 development.
 
-v2.1.2 is a public-installation and release-polish patch. It must not change the
-validated playback architecture.
+## v2.1.6 release gate
 
-- [ ] `APP_VERSION`, Home Assistant manifest version, and integration constant all equal `2.1.2`.
-- [ ] Release workflow and release script both target `v2.1.2` and the exact validated `main` SHA.
-- [ ] README badge, Quick Start, upgrade section, release status, and release-note link all point to `v2.1.2`.
-- [ ] README contains no temporary "scheduled for v2.1.1" or "next release v2.1.1" launch text.
-- [ ] Fresh-install Quick Start creates `.env` with mode `0600` and does not place the UniFi password into shell history.
-- [ ] HACS documentation clearly states that the custom integration requires the separately running Docker backend.
-- [ ] Default Compose configuration does not opt the locally built image into Watchtower updates.
-- [ ] Public bug and feature-request templates exist and repeat the redaction/security boundary.
-- [ ] v2.1.2 release notes distinguish automated validation from the existing single-device physical evidence.
+v2.1.6 fixes the normal Home Assistant playback path when Protect's ringtone inventory remains stale after the Smart Chime already accepted an owned-slot overwrite. It also makes the HA Last playback result sensor update immediately and adds exact build provenance to the documented deployment path.
 
-## Out-of-scope research limitations
+The candidate must preserve these safety conditions:
 
-- No synchronized microphone benchmark was available. Do not claim measured acoustic latency.
-- Generic arbitrary raw upload, unknown-route probing, controller identity reuse, direct
-  slot deletion, and direct UCP4 transport remain unsupported and outside v2.1.
-- Multi-chime physical playback was not tested because only one Smart Chime was available.
+- [ ] Fresh Protect fingerprint evidence is preferred when it becomes available within the bounded synchronization wait.
+- [ ] Stale fingerprint fallback is allowed only for the exact previously proven physical slot and exact persisted UniFi Announcer-owned filename.
+- [ ] Filename drift fails closed.
+- [ ] Ambiguous physical-slot evidence fails closed.
+- [ ] Missing ownership evidence fails closed.
+- [ ] No new dynamic Protect ringtone identity is created for each phrase.
+- [ ] Exactly two persistent dynamic TTS slots remain owned by the installation.
 
-These limitations do not block the validated two-slot implementation shipped in stable v2.1.
+Home Assistant behavior on the exact candidate:
+
+- [ ] Normal HA button/action reaches the Announcer endpoint and receives HTTP 200.
+- [ ] Protect `play-speaker` returns HTTP 200 for the same request.
+- [ ] The expected announcement is audible on the physical Smart Chime.
+- [ ] Last playback result changes immediately to `success` after successful playback.
+- [ ] A deliberate failed playback path changes Last playback result immediately to `failure`.
+- [ ] Other canonical queue outcomes (`suppressed`, `deduped`, `dropped`, `partial`) remain distinct rather than being flattened to success/failure.
+
+Build/release identity:
+
+- [ ] `APP_VERSION`, HA `INTEGRATION_VERSION`, and HA manifest version all equal `2.1.6`.
+- [ ] Release script targets `v2.1.6` and `docs/RELEASE_NOTES_v2.1.6.md`.
+- [ ] Release workflow checks the exact validated `main` SHA and expects version `2.1.6` before publishing.
+- [ ] Candidate Docker image is built with `GIT_SHA=<candidate SHA>`.
+- [ ] `/version` reports the candidate/release SHA rather than `unknown`.
+- [ ] OCI image label `org.opencontainers.image.revision` matches that same SHA.
+- [ ] README Quick Start/upgrade commands pin `v2.1.6` and inject `git rev-parse HEAD` into the build.
+
+## Publish/deploy sequence
+
+Do not merge/tag until every required v2.1.6 physical gate above is satisfied.
+
+1. Freeze an exact candidate SHA and run all automated gates.
+2. Back up `.env` and persistent `/data` state on the live host.
+3. Deploy that exact candidate SHA with `GIT_SHA` embedded.
+4. Install/reload the matching HA candidate component.
+5. Complete the live HA success/failure gate and record evidence on the release PR.
+6. Update release notes/checklist if the observed live result changes any claim.
+7. Merge only the validated candidate code/docs into `main`.
+8. Let trusted `main` CI complete successfully.
+9. Release workflow reruns HACS/Hassfest against `workflow_run.head_sha` and publishes `v2.1.6` at that exact SHA.
+10. Deploy the immutable release tag/source using `GIT_SHA="$(git rev-parse HEAD)"` and repeat the HA audible playback smoke test.
+11. Verify GitHub tag/release, app version, HA manifest version, `/version`, and deployed image revision all agree.
+
+## Rollback gate
+
+Before live candidate or release deployment:
+
+- [ ] `.env` is backed up with restrictive permissions.
+- [ ] Actual `/data` mount source is discovered from the running container and backed up.
+- [ ] Backup archive lists successfully with `tar -tzf`.
+- [ ] Backup checksum is recorded.
+- [ ] `track_registry.json` is preserved as ownership evidence.
+- [ ] Previous known-good release tag is known and available.
+
+If any candidate gate fails, restore the previous code/HA component first. Do not delete or hand-edit slot ownership registries to make a failing candidate appear healthy.
+
+## Validation limitations that must remain public
+
+- Multi-chime behavior is covered by automated tests but has not been physically validated on multiple Smart Chimes.
+- No synchronized microphone benchmark is available; do not claim measured acoustic latency.
+- Public CI uses sanitized fixtures and cannot prove physical audibility.
+- Generic arbitrary raw upload, unknown-route probing, controller identity reuse, direct slot deletion, and direct UCP4 transport remain unsupported and outside stable v2.1.
+- The public project does not retrieve or document extraction of the per-device Smart Chime credential required for arbitrary TTS.
+
+These limitations do not block the validated single-device fixed-slot implementation, but they must not be rewritten as broader physical validation claims.

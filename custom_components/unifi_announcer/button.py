@@ -4,7 +4,7 @@ from __future__ import annotations
 from homeassistant.components.button import ButtonEntity
 from homeassistant.exceptions import HomeAssistantError
 
-from .api import PlaybackFailed
+from .api import UniFiAnnouncerError
 from .entity import UniFiAnnouncerEntity, configured_targets
 
 
@@ -43,8 +43,10 @@ class UniFiAnnouncerButton(UniFiAnnouncerEntity, ButtonEntity):
             else:
                 preset = self.runtime.preset_selection.get(self.target)
                 if not preset:
+                    self.runtime.record_playback_result(self.target, "failed")
                     raise HomeAssistantError("Select a preset first")
                 result = await self.runtime.client.async_play_preset(preset, target=self.target)
-        except PlaybackFailed as exc:
+        except UniFiAnnouncerError as exc:
+            self.runtime.record_playback_result(self.target, "failed")
             raise HomeAssistantError(str(exc)) from exc
-        self.runtime.last_disposition[self.target] = result.disposition
+        self.runtime.record_playback_result(self.target, result.disposition)

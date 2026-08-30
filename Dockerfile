@@ -1,9 +1,12 @@
 # syntax=docker/dockerfile:1
-# UniFi Announcer — TTS + preset tones for UniFi Protect Chimes
+# UniFi Announcer — TTS + preset tones for UniFi Protect Smart Chimes
 FROM python:3.12-slim
 
 ARG GIT_SHA=unknown
 ENV GIT_SHA=${GIT_SHA}
+LABEL org.opencontainers.image.title="UniFi Announcer" \
+      org.opencontainers.image.source="https://github.com/bdini13/unifi-announcer" \
+      org.opencontainers.image.revision="${GIT_SHA}"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \

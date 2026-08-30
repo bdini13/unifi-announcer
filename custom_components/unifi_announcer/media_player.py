@@ -5,7 +5,7 @@ from homeassistant.components.media_player import MediaPlayerEntity, MediaPlayer
 from homeassistant.const import STATE_IDLE
 from homeassistant.exceptions import HomeAssistantError
 
-from .api import PlaybackFailed
+from .api import UniFiAnnouncerError
 from .entity import UniFiAnnouncerEntity, configured_targets
 
 
@@ -33,15 +33,18 @@ class UniFiAnnouncerMediaPlayer(UniFiAnnouncerEntity, MediaPlayerEntity):
         try:
             if media_type == "text":
                 if not media_id or not media_id.strip():
+                    self.runtime.record_playback_result(self.target, "failed")
                     raise HomeAssistantError("Announcement text cannot be empty")
                 result = await self.runtime.client.async_announce(media_id.strip(), target=self.target)
             elif media_type == "unifi-announcer/preset":
                 result = await self.runtime.client.async_play_preset(media_id, target=self.target)
             else:
+                self.runtime.record_playback_result(self.target, "failed")
                 raise HomeAssistantError(
                     "UniFi Announcer v2.1 supports media_content_type 'text' and "
                     "'unifi-announcer/preset'. Native tts.speak/media-source support is planned for v2.2."
                 )
-        except PlaybackFailed as exc:
+        except UniFiAnnouncerError as exc:
+            self.runtime.record_playback_result(self.target, "failed")
             raise HomeAssistantError(str(exc)) from exc
-        self.runtime.last_disposition[self.target] = result.disposition
+        self.runtime.record_playback_result(self.target, result.disposition)
