@@ -12,7 +12,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady,
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import AuthenticationError, CannotConnect, PlaybackFailed, UniFiAnnouncerClient
+from .api import AuthenticationError, CannotConnect, UniFiAnnouncerClient, UniFiAnnouncerError
 from .const import (
     CONF_API_KEY,
     CONF_DEFAULT_REPEAT,
@@ -36,6 +36,17 @@ class UniFiAnnouncerRuntime:
     version: dict[str, Any]
     preset_selection: dict[str, str] = field(default_factory=dict)
     last_disposition: dict[str, str] = field(default_factory=dict)
+
+    def record_playback_result(self, target: str | None, disposition: str) -> None:
+        """Store a user-facing result and notify coordinator-backed sensors now."""
+        value = {"played": "success", "failed": "failure"}.get(
+            disposition, disposition
+        )
+        self.last_disposition[target or "default"] = value
+        if self.coordinator.data is not None:
+            # No network refresh is needed: this is local action state. Reusing
+            # the current coordinator payload immediately notifies entity listeners.
+            self.coordinator.async_set_updated_data(self.coordinator.data)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
@@ -108,8 +119,9 @@ def _async_register_services(hass: HomeAssistant) -> None:
         }
         try:
             result = await runtime.client.async_announce(call.data["message"], **kwargs)
-        except PlaybackFailed as exc:
+        except UniFiAnnouncerError as exc:
+            runtime.record_playback_result(target, "failed")
             raise HomeAssistantError(str(exc)) from exc
-        runtime.last_disposition[target or "default"] = result.disposition
+        runtime.record_playback_result(target, result.disposition)
 
     hass.services.async_register(DOMAIN, "announce", _announce, schema=schema)
