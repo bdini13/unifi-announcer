@@ -14,6 +14,34 @@ Recommended GitHub repository metadata:
 
 Do not add a homepage or support link that bypasses the security/redaction guidance in `SECURITY.md`.
 
+## Commit identity and attribution
+
+GitHub associates command-line commits with accounts using the email stored in the Git commit. A malformed or copied `noreply` address can therefore make a maintainer-created commit appear to belong to an unrelated GitHub user even though that user never had repository access.
+
+Before a maintainer, local agent, or automation that runs `git commit` is allowed to push, verify the effective identity:
+
+```bash
+git config --show-origin --get user.name
+git config --show-origin --get user.email
+```
+
+Use the maintainer's exact verified email or the exact GitHub-provided `noreply` address from that maintainer's GitHub email settings. Do not construct a `noreply` address by guessing or copying another account's numeric prefix.
+
+For a repository-specific identity, prefer explicit local configuration rather than changing an unrelated global identity:
+
+```bash
+git config user.name "<maintainer name>"
+git config user.email "<exact verified or GitHub-provided noreply address>"
+```
+
+After creating a commit and before pushing it, verify the stored author and committer identities when provenance matters:
+
+```bash
+git show -s --format='author: %an <%ae>%ncommitter: %cn <%ce>' HEAD
+```
+
+If historical commits are attributed to the wrong GitHub account, first confirm the actual push/merge actor in GitHub's repository Activity view. Fix the Git configuration for future commits; do not rewrite published release history or move release tags solely to repair cosmetic attribution.
+
 ## Main branch protection
 
 Prefer a GitHub ruleset targeting `main` with these protections:
