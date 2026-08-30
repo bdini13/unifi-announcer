@@ -10,8 +10,8 @@ class Metrics:
     def __init__(self):
         self.counters = {}
 
-    def inc(self, key):
-        self.counters[key] = self.counters.get(key, 0) + 1
+    def inc(self, key, amount=1):
+        self.counters[key] = self.counters.get(key, 0) + amount
 
 
 def manager(tmp_path, get_chime, metrics=None):
