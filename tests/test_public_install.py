@@ -14,7 +14,7 @@ def test_readme_targets_v2_1_6_and_uses_dynamic_release_badge():
     assert "git checkout v2.1.6" in readme
     assert "img.shields.io/github/v/release/bdini13/unifi-announcer" in readme
     assert "releases/latest" in readme
-    assert "**Stable target:** `v2.1.6`" in readme
+    assert "**Stable:** `v2.1.6`" in readme
     assert 'AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")' in readme
     assert "$UNIFI..." not in readme
     assert "scheduled for `v2.1.1`" not in readme
