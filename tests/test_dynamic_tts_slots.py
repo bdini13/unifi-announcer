@@ -326,6 +326,55 @@ async def test_repeat_content_skips_flash_overwrite(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_prepare_waits_for_overwritten_audio_to_reach_physical_slot(tmp_path):
+    world = FakeProtectWorld()
+    target = make_target(world)
+    manager = make_manager(tmp_path, world)
+    manager.device_sync_timeout_s = 0.1
+    manager.device_settle_delay_s = 0
+    await manager.startup([target], bootstrap_audio_factory=bootstrap)
+    binding = manager.slots[1].bindings["chime-1"]
+    original_get_chime = manager.get_chime
+    polls = 0
+
+    async def delayed_sync(chime_id):
+        nonlocal polls
+        polls += 1
+        chime = await original_get_chime(chime_id)
+        if polls < 3:
+            chime["speakerTrackList"][binding.device_slot - 1]["md5"] = "stale"
+        return chime
+
+    manager.get_chime = delayed_sync
+    prepared = await manager.prepare(b"new-audio", [target])
+
+    assert polls >= 3
+    await prepared.release_now()
+
+
+@pytest.mark.asyncio
+async def test_prepare_fails_when_physical_slot_never_synchronizes(tmp_path):
+    world = FakeProtectWorld()
+    target = make_target(world)
+    manager = make_manager(tmp_path, world)
+    manager.device_sync_timeout_s = 0.1
+    manager.poll_interval_s = 0.005
+    manager.device_settle_delay_s = 0
+    await manager.startup([target], bootstrap_audio_factory=bootstrap)
+    binding = manager.slots[1].bindings["chime-1"]
+    original_get_chime = manager.get_chime
+
+    async def never_synced(chime_id):
+        chime = await original_get_chime(chime_id)
+        chime["speakerTrackList"][binding.device_slot - 1]["md5"] = "stale"
+        return chime
+
+    manager.get_chime = never_synced
+    with pytest.raises(DynamicSlotUnavailable, match="did not synchronize"):
+        await manager.prepare(b"new-audio", [target])
+
+
+@pytest.mark.asyncio
 async def test_slot_drift_fails_closed_before_overwrite(tmp_path):
     world = FakeProtectWorld()
     target = make_target(world)
