@@ -62,6 +62,33 @@ Build/release identity:
 - [x] OCI image label `org.opencontainers.image.revision` matches that same SHA.
 - [x] README Quick Start/upgrade commands pin `v2.1.6` and inject `git rev-parse HEAD` into the build.
 
+## v2.1.7 release gate
+
+v2.1.7 changes documentation, release identity, and packaging only. Runtime playback behavior and the two-slot ownership model remain unchanged from physically validated v2.1.6, so this patch does not require another audible-playback gate before publication.
+
+Credential-onboarding evidence:
+
+- [x] Protect UI path verified as **Devices → Smart WiFi Chime → Settings → Manage → Manual Recovery → Reveal**.
+- [x] The value returned by Reveal exactly matched the already working `CHIME_DIRECT_PASSWORD` without displaying or persisting either value.
+- [x] Username `ubnt` plus that revealed value returned HTTP 200 against the Smart Chime's read-only `/api/info` endpoint.
+- [x] Only `/api/info` was invoked; its response body was not read or displayed.
+- [x] Reveal was confirmed to use a read-only GET operation, while Edit uses a credential-changing PATCH operation.
+- [x] No credential, Protect setting, Smart Chime setting, ringtone slot, or running deployment was changed.
+- [x] Validation scope is disclosed as UniFi OS `5.1.31`, Protect `7.2.105`, Smart WiFi Chime firmware `1.7.20`, and an already adopted device; fresh-adoption behavior was not independently repeated.
+
+Release identity and publication:
+
+- [x] `APP_VERSION`, HA `INTEGRATION_VERSION`, and HA manifest version all equal `2.1.7`.
+- [x] Release script targets `v2.1.7` and `docs/RELEASE_NOTES_v2.1.7.md`.
+- [x] README Quick Start/upgrade commands pin `v2.1.7` and inject `git rev-parse HEAD` into the build.
+- [x] Release publisher is bound to the trusted `main` commit that transitions `APP_VERSION` from `2.1.6` to `2.1.7`, preventing a later unrelated `main` push from becoming the release target.
+- [x] HACS and Hassfest run in a read-only job with checkout credentials disabled; only the publishing job receives `contents: write`.
+- [x] Focused release/documentation tests, full core tests, Ruff, compile, JSON, diff, and privacy scans pass locally.
+- [ ] Exact branch-head and merge-ref GitHub CI pass.
+- [ ] Trusted post-merge `main` CI and the v2.1.7 publisher pass.
+- [ ] Published tag and release both target the exact validated `main` SHA.
+- [ ] Tagged deployment reports matching app/HA versions, `/version.git_sha`, and OCI image revision.
+
 ## Publish/deploy sequence
 
 Do not merge/tag until every required release-specific physical gate is satisfied.

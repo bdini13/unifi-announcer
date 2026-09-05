@@ -1,0 +1,72 @@
+name: release-v2.1.7
+
+on:
+  workflow_run:
+    workflows: ["test"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out validated main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Bind release to the 2.1.6 to 2.1.7 transition
+        env:
+          EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          test "$(python -c 'from app.version import APP_VERSION; print(APP_VERSION)')" = "2.1.7"
+          test "$(git show HEAD^:app/version.py | python -c 'import re, sys; print(re.search(r"APP_VERSION = \"([^\"]+)\"", sys.stdin.read()).group(1))')" = "2.1.6"
+
+      - name: HACS validation
+        uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # main, pinned 2026-08-29
+        with:
+          category: integration
+
+      - name: Hassfest validation
+        uses: home-assistant/actions/hassfest@a7c616ce81ccda50150bf1595786c71b1883fabb # master, pinned 2026-08-29
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out validated main commit without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Publish v2.1.7 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_VERSION: 2.1.7
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          VALIDATED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$VALIDATED_SHA"
+          test "$(python -c 'from app.version import APP_VERSION; print(APP_VERSION)')" = "$EXPECTED_VERSION"
+          test "$(git show HEAD^:app/version.py | python -c 'import re, sys; print(re.search(r"APP_VERSION = \"([^\"]+)\"", sys.stdin.read()).group(1))')" = "2.1.6"
+          test "$(python -c 'import json; print(json.load(open("custom_components/unifi_announcer/manifest.json"))["version"])')" = "$EXPECTED_VERSION"
+          test "$(python -c 'import ast; tree=ast.parse(open("custom_components/unifi_announcer/const.py").read()); print(next(node.value.value for node in tree.body if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "INTEGRATION_VERSION" for target in node.targets)))')" = "$EXPECTED_VERSION"
+          test -s docs/RELEASE_NOTES_v2.1.7.md
+
+          python scripts/release_v2_1.py

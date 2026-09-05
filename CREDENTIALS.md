@@ -8,7 +8,8 @@ The direct-device path uses username `ubnt` plus the Smart Chime's unique device
 
 The current physically validated stack is:
 
-- UniFi Protect `7.2.105`;
+- UniFi OS `5.1.31`;
+- Protect `7.2.105`;
 - Smart WiFi Chime / UP Chime;
 - Smart Chime firmware `1.7.20`.
 

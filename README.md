@@ -13,10 +13,10 @@ UniFi Announcer is a self-hosted announcement service for UniFi Protect Smart Ch
 For arbitrary speech it synthesizes audio with Piper or Edge TTS, stores MP3s in a bounded host cache, overwrites one of exactly two persistent service-owned Smart Chime slots, then asks Protect to play that persistent ringtone ID. New phrases do **not** create a new Protect ringtone each time.
 
 > [!IMPORTANT]
-> UniFi Announcer relies on undocumented UniFi Protect and Smart Chime interfaces that can change between releases. v2.1.6 has been physically validated on Protect 7.2.105 with Smart Chime firmware 1.7.20. Review [Compatibility](docs/COMPATIBILITY.md) before upgrading Protect or chime firmware.
+> UniFi Announcer relies on undocumented UniFi Protect and Smart Chime interfaces that can change between releases. Runtime playback was physically validated for v2.1.6 on Protect 7.2.105 with Smart Chime firmware 1.7.20; v2.1.7 changes documentation and packaging only. Review [Compatibility](docs/COMPATIBILITY.md) before upgrading Protect or chime firmware.
 
 > [!CAUTION]
-> Arbitrary TTS requires the Smart Chime's unique device password through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`. On validated Protect `7.2.105`, obtain the existing value through **Devices → Smart WiFi Chime → Settings → Manage → Manual Recovery → Reveal**. Use **Reveal**, not **Edit**; Edit changes the credential. The revealed value was physically verified with username `ubnt` against `/api/info` and returned HTTP 200. See [Smart Chime credential setup](CREDENTIALS.md). UniFi Announcer does **not** retrieve the credential automatically.
+> Arbitrary TTS requires the Smart Chime's unique device password through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`. On validated UniFi OS `5.1.31` / Protect `7.2.105`, obtain the existing value through **Devices → Smart WiFi Chime → Settings → Manage → Manual Recovery → Reveal**. Use **Reveal**, not **Edit**; Edit changes the credential. The revealed value was physically verified with username `ubnt` against `/api/info` and returned HTTP 200. See [Smart Chime credential setup](CREDENTIALS.md). UniFi Announcer does **not** retrieve the credential automatically.
 
 ## Why this exists
 
@@ -95,7 +95,7 @@ Home Assistant, MQTT, rules, and MCP are optional. The Docker service is the sou
 ```bash
 git clone https://github.com/bdini13/unifi-announcer.git
 cd unifi-announcer
-git checkout v2.1.6
+git checkout v2.1.7
 install -m 600 .env.example .env
 ```
 
@@ -355,7 +355,7 @@ MQTT discovery remains optional; configure `MQTT_URL`, `MQTT_USERNAME`, and `MQT
 
 Local rules can react directly to Protect events without a Home Assistant round trip. See [Rules](docs/RULES.md).
 
-## Upgrade to v2.1.6
+## Upgrade to v2.1.7
 
 Keep the existing `.env` and persistent `/data` state. Older installs that used the former implicit `./data` bind mount may have no `DATA_PATH` line. Preserve that source explicitly before upgrading:
 
@@ -371,7 +371,7 @@ Confirm the rendered `/data` source before starting the new image. **Do not dele
 ```bash
 cd unifi-announcer
 git fetch --tags
-git checkout v2.1.6
+git checkout v2.1.7
 export GIT_SHA="$(git rev-parse HEAD)"
 docker compose up -d --build
 ```
@@ -511,6 +511,7 @@ See the exact pre-release evidence requirements in [Release checklist](docs/RELE
 - [Rules](docs/RULES.md)
 - [Track registry](docs/TRACKS.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
+- [v2.1.7 release notes](docs/RELEASE_NOTES_v2.1.7.md)
 - [v2.1.6 release notes](docs/RELEASE_NOTES_v2.1.6.md)
 
 ## Support and security
@@ -552,7 +553,7 @@ This project was developed with assistance from AI coding and research tools for
 
 ## Release status
 
-- **Stable:** `v2.1.6` — HA playback reliability, immediate playback-result reporting, and build provenance
+- **Stable:** `v2.1.7` — validated Protect UI onboarding for the Smart Chime device password
 - **Planned:** `v2.2.0` — native Home Assistant `tts.speak`, binary media ingestion, and optional SSE integration
 
 See [ROADMAP.md](ROADMAP.md) and the [Releases page](https://github.com/bdini13/unifi-announcer/releases).

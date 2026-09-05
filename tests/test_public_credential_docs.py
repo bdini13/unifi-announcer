@@ -52,7 +52,7 @@ def test_public_credential_guide_does_not_publish_extraction_workarounds():
 def test_bug_report_collects_safe_credential_diagnostics():
     template = Path(".github/ISSUE_TEMPLATE/bug_report.yml").read_text()
 
-    assert "placeholder: v2.1.6" in template
+    assert "placeholder: v2.1.7" in template
     assert "id: tts_mode" in template
     assert "id: credential_check" in template
     assert "Manual Recovery → Reveal" in template
