@@ -6,6 +6,7 @@ def test_public_credential_guide_is_safe_and_discoverable():
     env_example = Path(".env.example").read_text()
     security = Path("SECURITY.md").read_text()
     compatibility = Path("docs/COMPATIBILITY.md").read_text()
+    checklist = Path("docs/RELEASE_CHECKLIST.md").read_text()
 
     assert "Protect `7.2.105`" in guide
     assert "no Device Password or equivalent" in guide
@@ -25,6 +26,8 @@ def test_public_credential_guide_is_safe_and_discoverable():
     assert "Protect `7.2.105` found no Device Password" in security
     assert "CREDENTIALS.md" in compatibility
     assert "no Device Password or equivalent field" in compatibility
+    assert "Live validation on Protect `7.2.105` found no Device Password" in checklist
+    assert "Operators may supply a Protect web-UI **Device Password**" not in checklist
 
 
 def test_public_credential_guide_does_not_publish_extraction_workarounds():
