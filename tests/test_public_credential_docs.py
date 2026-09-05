@@ -1,0 +1,52 @@
+from pathlib import Path
+
+
+def test_public_credential_guide_is_safe_and_discoverable():
+    guide = Path("CREDENTIALS.md").read_text()
+    env_example = Path(".env.example").read_text()
+    security = Path("SECURITY.md").read_text()
+    compatibility = Path("docs/COMPATIBILITY.md").read_text()
+
+    assert "Device Password" in guide
+    assert "/api/info" in guide
+    assert "--data-binary @-" in guide
+    assert "-o /dev/null" in guide
+    assert "unset CHIME_DEVICE_PASSWORD CHIME_IP" in guide
+    assert "Recovery Code" in guide
+    assert "not assumed to be interchangeable" in guide
+    assert "does **not** retrieve the password" in guide
+
+    assert "See CREDENTIALS.md" in env_example
+    assert "does not support SSH/database extraction as onboarding" in env_example
+    assert "CREDENTIALS.md" in security
+    assert "CREDENTIALS.md" in compatibility
+
+
+def test_public_credential_guide_does_not_publish_extraction_workarounds():
+    guide = Path("CREDENTIALS.md").read_text().lower()
+
+    assert "query protect's internal database" in guide
+    assert "scrape backups" in guide
+    assert "not supported by this project" in guide
+    assert "psql -u" not in guide
+    assert "devicepassword\" from" not in guide
+
+
+def test_v2_1_6_release_gate_is_recorded_as_passed():
+    checklist = Path("docs/RELEASE_CHECKLIST.md").read_text()
+    notes = Path("docs/RELEASE_NOTES_v2.1.6.md").read_text()
+
+    assert "## v2.1.6 release gate — PASS" in checklist
+    assert "PR #23" in checklist
+    assert "- [x] The expected announcement is audible on the physical Smart Chime." in checklist
+    assert "- [x] Protect `play-speaker` returns HTTP 200 for the same request." in checklist
+    assert "passed before merge and publication" in notes
+    assert "canonical post-publication verification record" in notes
+    assert "must not be published until" not in notes
+
+
+def test_future_release_process_rejects_stale_gate_language():
+    checklist = Path("docs/RELEASE_CHECKLIST.md").read_text()
+
+    assert "contain no unresolved future-tense blocker" in checklist
+    assert "must not be published until" in checklist
