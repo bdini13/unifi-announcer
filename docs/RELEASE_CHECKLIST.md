@@ -98,6 +98,6 @@ If any candidate gate fails, restore the previous code/HA component first. Do no
 - No synchronized microphone benchmark is available; do not claim measured acoustic latency.
 - Public CI uses sanitized fixtures and cannot prove physical audibility.
 - Generic arbitrary raw upload, unknown-route probing, controller identity reuse, direct slot deletion, and direct UCP4 transport remain unsupported and outside stable v2.1.
-- The project does not retrieve Smart Chime credentials automatically and does not support SSH/database extraction as onboarding. Operators may supply a Protect web-UI **Device Password** only after the non-destructive `/api/info` verification described in [`CREDENTIALS.md`](../CREDENTIALS.md) confirms that the target Smart Chime accepts it.
+- The project does not retrieve Smart Chime credentials automatically and does not support SSH/database extraction as onboarding. Live validation on Protect `7.2.105` found no Device Password or equivalent field in the normal Protect web UI. An operator may configure arbitrary TTS only when they already possess a credential that the non-destructive `/api/info` verification in [`CREDENTIALS.md`](../CREDENTIALS.md) confirms the target Smart Chime accepts.
 
 These limitations do not block the validated single-device fixed-slot implementation, but they must not be rewritten as broader physical validation claims.
