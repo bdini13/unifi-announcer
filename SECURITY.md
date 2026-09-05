@@ -28,28 +28,24 @@ LAN or behind a VPN/authenticated reverse proxy. Never expose REST or MCP direct
 to the public internet. Use a dedicated least-privilege local UniFi account and
 separate REST and MCP keys.
 
-For arbitrary TTS, the operator may supply an **existing** Smart Chime credential
-only after the non-destructive `/api/info` check in [`CREDENTIALS.md`](CREDENTIALS.md)
-confirms that the target Smart Chime accepts username `ubnt` plus that credential.
-Treat it as a high-value secret.
+For arbitrary TTS, use Protect's normal authenticated web UI to reveal the Smart
+Chime's existing unique device password as documented in [`CREDENTIALS.md`](CREDENTIALS.md).
+On the validated Protect `7.2.105` stack the path is **Devices → Smart WiFi Chime
+→ Settings → Manage → Manual Recovery → Reveal**. The value produced by Reveal
+matched the known working direct-device credential and returned HTTP 200 with
+username `ubnt` against `/api/info`.
 
-Live validation on Protect `7.2.105` found no Device Password or equivalent
-direct-device credential field in the normal Protect settings UI. Protect does
-expose a per-device **Recovery Code** under the chime's **Settings → Manage →
-Manual Recovery** page, but that code returned `HTTP 401` from the Smart Chime
-`/api/info` authentication check on firmware `1.7.20`. It is therefore not
-interchangeable with the direct-device credential on the validated stack and
-must not be used as `CHIME_DIRECT_PASSWORD`.
+Use **Reveal**, not **Edit**, for onboarding. Live inspection of the Protect
+frontend showed that Reveal reads the existing per-device password, while Edit
+uses the corresponding credential-changing operation. Do not rotate a device
+credential merely to configure UniFi Announcer.
 
-Historical Device Password locations on other releases are version-dependent and
-are not a supported bootstrap guarantee. If the UI does not expose a credential
-accepted by `/api/info` and the operator does not already possess one, this
-project does not provide a supported credential-retrieval path.
-
-The project does not retrieve Smart Chime credentials automatically and does not
-support enabling SSH, querying internal Protect databases, scraping backups, or
-publishing raw authentication material as onboarding methods.
+Treat the revealed password as a high-value secret. The project does not retrieve
+Smart Chime credentials automatically and does not support enabling SSH, querying
+internal Protect databases, scraping backups, or publishing raw authentication
+material as onboarding methods; those methods are unnecessary for the validated
+UI flow.
 
 Before sharing diagnostics, remove secrets, hostnames, IP addresses, device IDs,
-certificate fingerprints, recovery codes, audio content, and deployment-specific
-paths.
+certificate fingerprints, screenshots containing revealed credentials, audio
+content, and deployment-specific paths.
