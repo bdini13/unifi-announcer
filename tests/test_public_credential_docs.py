@@ -7,19 +7,24 @@ def test_public_credential_guide_is_safe_and_discoverable():
     security = Path("SECURITY.md").read_text()
     compatibility = Path("docs/COMPATIBILITY.md").read_text()
 
-    assert "Device Password" in guide
+    assert "Protect `7.2.105`" in guide
+    assert "no Device Password or equivalent" in guide
+    assert "not validated for Protect 7.2.105" in guide
     assert "/api/info" in guide
-    assert "--data-binary @-" in guide
-    assert "-o /dev/null" in guide
-    assert "unset CHIME_DEVICE_PASSWORD CHIME_IP" in guide
+    assert "getpass.getpass" in guide
+    assert "export CHIME_DEVICE_PASSWORD" not in guide
     assert "Recovery Code" in guide
     assert "not assumed to be interchangeable" in guide
-    assert "does **not** retrieve the password" in guide
+    assert "does **not** retrieve" in guide
+    assert 'AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")' in guide
 
+    assert "Protect 7.2.105 did not expose Device Password" in env_example
     assert "See CREDENTIALS.md" in env_example
     assert "does not support SSH/database extraction as onboarding" in env_example
     assert "CREDENTIALS.md" in security
+    assert "Protect `7.2.105` found no Device Password" in security
     assert "CREDENTIALS.md" in compatibility
+    assert "no Device Password or equivalent field" in compatibility
 
 
 def test_public_credential_guide_does_not_publish_extraction_workarounds():
