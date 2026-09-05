@@ -55,11 +55,11 @@ Prefer a GitHub ruleset targeting `main` with these protections:
 - require conversation resolution if review threads are used;
 - retain administrator bypass only for genuine recovery, not routine releases.
 
-The source release workflow intentionally validates the exact trusted `main` SHA before creating a tag. Branch protection should reinforce that flow, not be bypassed to accelerate a release.
+When a release-specific publishing workflow is present, it must validate the exact trusted `main` SHA before creating a tag. Branch protection should reinforce that flow, not be bypassed to accelerate a release.
 
 ## Tag protection
 
-Prefer a ruleset matching `v*` tags that blocks tag updates and deletion after creation. New tag creation must remain possible for the trusted release workflow.
+Prefer a ruleset matching `v*` tags that blocks tag updates and deletion after creation. New tag creation must remain possible for the trusted release process.
 
 A release tag is a historical identity. Never move an existing `vX.Y.Z` tag to a new commit to repair a release. Publish a new patch version instead.
 
@@ -85,18 +85,21 @@ Physical Smart Chime evidence is not represented by GitHub CI, so release PRs th
 
 ## Release procedure
 
-1. Prepare a focused release PR with version, docs, tests, and release workflow aligned.
+1. Prepare a focused release PR with version, docs, tests, and a release-specific publishing path aligned.
 2. Keep the PR draft while any physical-device release gate is pending.
 3. Freeze an exact candidate branch-head SHA.
 4. Require the exact-head push CI to pass, including the Docker build with that SHA embedded.
 5. Deploy the exact candidate SHA and matching Home Assistant component when hardware validation is required.
 6. Record physical PASS/FAIL evidence on the PR without posting credentials, private addresses, device IDs, or private logs.
-7. Update release notes/checklist to reflect only evidence actually observed.
+7. Update release notes/checklist to reflect only evidence actually observed and remove unresolved future-tense blocker language before publication.
 8. Mark ready and squash-merge only after all required gates pass.
 9. Require trusted `main` CI to pass.
-10. Let the release workflow publish the tag at the exact validated `main` SHA.
+10. Publish the tag/release from the exact validated `main` SHA using the version-specific workflow or explicitly reviewed maintainer release command prepared by the release PR.
 11. Verify tag target, GitHub release target, application version, HA manifest version, `/version.git_sha`, and OCI image revision agree.
 12. Deploy the release tag and repeat the minimal physical smoke test.
+13. After the immutable release and tagged smoke test pass, retire any completed version-specific automatic publishing workflow so ordinary post-release `main` commits cannot keep rerunning a historical publisher.
+
+A completed fixed-version publisher should not remain subscribed to every successful `main` test run. Preserve historical release scripts and evidence when useful, but require a new release PR to introduce or update the publishing path for the next version.
 
 See [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) for the release-specific evidence matrix.
 
@@ -107,7 +110,7 @@ Two different SHAs may appear while a PR is open:
 - **branch-head SHA** — the exact candidate commit suitable for live candidate deployment;
 - **pull-request merge-ref SHA** — GitHub's synthetic merge of the candidate into current `main`, useful for compatibility CI but not the source identity to deploy as the candidate.
 
-Do not substitute the merge-ref SHA for the branch-head SHA in physical validation notes. After merge, the release workflow must use the trusted `main` commit SHA that actually passed the push workflow.
+Do not substitute the merge-ref SHA for the branch-head SHA in physical validation notes. After merge, any release-specific publisher must use the trusted `main` commit SHA that actually passed the push workflow.
 
 ## Public support hygiene
 
