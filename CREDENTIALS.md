@@ -2,9 +2,9 @@
 
 Arbitrary text-to-speech requires UniFi Announcer to make a narrowly scoped direct HTTPS request to the adopted Smart Chime so it can replace the bytes in one of the two proven service-owned TTS slots. Normal playback still goes through UniFi Protect.
 
-The direct-device path uses username `ubnt` plus the Smart Chime credential provisioned during adoption. Treat that credential as a high-value secret. UniFi Announcer accepts an existing credential but does **not** retrieve it from Protect automatically.
+The direct-device path uses username `ubnt` plus the Smart Chime's unique device password. Treat that password as a high-value secret. UniFi Announcer accepts the credential through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`; the service itself does **not** retrieve the password from Protect.
 
-## Important limitation on the validated stack
+## Validated Protect UI onboarding
 
 The current physically validated stack is:
 
@@ -12,41 +12,26 @@ The current physically validated stack is:
 - Smart WiFi Chime / UP Chime;
 - Smart Chime firmware `1.7.20`.
 
-On that Protect version, live validation found **no Device Password or equivalent direct-device authentication field in the normal Protect settings UI**, including **Settings → General → Advanced** and the other visible Protect Settings sections.
+On this stack, the credential can be obtained through Protect's normal authenticated web UI:
 
-Protect `7.2.105` does expose a per-device **Recovery Code** at:
+**Protect → Devices → Smart WiFi Chime → Settings → Manage → Manual Recovery → Reveal**
 
-**Protect → Devices → Smart WiFi Chime → Settings → Manage → Manual Recovery → Recovery Code**
+Use **Reveal** to display the existing value. Do **not** click **Edit** just to configure UniFi Announcer: Edit is a credential-changing operation and is not required for onboarding.
 
-However, a read-only `POST /api/info` test using username `ubnt` plus that Recovery Code returned **HTTP 401** on Smart Chime firmware `1.7.20`. The Recovery Code is therefore **not interchangeable with the Smart Chime direct-device credential on this validated stack** and must not be used as `CHIME_DIRECT_PASSWORD`.
+Live inspection of the Protect frontend confirmed the distinction:
 
-A separately existing configured direct-device credential was accepted by the same `ubnt` + `POST /api/info` path with **HTTP 200**. This proves the direct authentication path works, but it does not provide a supported way to bootstrap the credential for a new installation.
+- **Reveal** calls `GET /devices/password/{deviceType}/{deviceId}`;
+- **Edit** uses `PATCH` on that same resource.
 
-Therefore, a fresh installation on Protect `7.2.105` cannot bootstrap credential-backed arbitrary TTS through this project's supported onboarding procedure unless the operator already possesses and maintains the current Smart Chime direct-device credential through an authorized external process.
+The value returned by **Reveal** exactly matched the already known working `CHIME_DIRECT_PASSWORD` on the validated installation and returned `HTTP 200` with username `ubnt` against the Smart Chime's `/api/info` endpoint.
 
-Credential-free preset, assigned-default, and hardware-buzzer playback remains available with `TTS_ENGINE=none`.
+The Manual Recovery area may present surrounding recovery-oriented UI text. Copy the actual value displayed by **Reveal**, not labels or other text from the page. An earlier `HTTP 401` test was traced to incorrectly captured UI text rather than the revealed credential; it is not evidence that the Reveal value is incompatible.
 
-## Historical / version-dependent Protect UI references
+This onboarding path uses only Protect's normal authenticated UI. It does not require SSH, database access, backup scraping, credential reset, or an exploit.
 
-Older UniFi community guidance has described a **Device Password** setting in Protect. Its location has varied between releases, including historical references to:
+## Verify the revealed credential without changing anything
 
-- **Settings → General → Advanced → Device Password**;
-- **Settings → System → Advanced → Device Password**.
-
-These locations are **not validated for Protect 7.2.105** and should not be read as a promise that a current Protect installation exposes the direct-device credential.
-
-Historical references:
-
-- [Ubiquiti staff/community discussion of Protect Device Password](https://community.ui.com/questions/username-and-password/3b29ebb4-cd18-4cfe-8ed0-7a96f6f96aac?page=1)
-- [Ubiquiti community discussion of newer device-authentication navigation](https://community.ui.com/questions/How-to-find-Unifi-device-username-and-password-in-Unifi-OS-2-5/f2e51ba9-34a3-40ca-bd98-1126373b7715)
-
-If your Protect version exposes an existing Device Password through its normal web UI, you may verify that value with the non-destructive procedure below before configuring it in UniFi Announcer. Do not rotate or reset device credentials solely for this project.
-
-Do **not** substitute the per-device Recovery Code for a Device Password or direct-device credential. On the validated Protect `7.2.105` / Smart Chime `1.7.20` stack, the Recovery Code returned `HTTP 401` from `/api/info`.
-
-## Verify an existing credential without changing anything
-
-If you already possess the current Smart Chime direct-device credential, verify it against the chime's read-only `/api/info` endpoint before saving it in `.env`.
+After revealing the value, you may verify it against the chime's read-only `/api/info` endpoint before saving it in `.env`.
 
 The following probe uses Python `getpass`, so the credential is not placed in shell history or exported into the process environment. It prints only the HTTP status and does not display the response body.
 
@@ -59,7 +44,7 @@ import urllib.error
 import urllib.request
 
 ip = input("Smart Chime IP: ").strip()
-password = getpass.getpass("Existing Smart Chime credential: ")
+password = getpass.getpass("Revealed Smart Chime device password: ")
 body = json.dumps({"username": "ubnt", "password": password}).encode()
 request = urllib.request.Request(
     f"https://{ip}:8080/api/info",
@@ -82,13 +67,10 @@ PY
 Interpret the result:
 
 - `HTTP 200` — the Smart Chime accepted username `ubnt` plus the supplied credential; it is suitable for `CHIME_DIRECT_PASSWORD`.
-- `HTTP 401` — the value is not the current direct-device credential for that chime. Do not keep retrying rapidly and do not rotate device credentials just to make the test pass.
+- `HTTP 401` — the supplied value was not accepted. Re-open Protect and use the exact value produced by **Reveal**; do not retry rapidly and do not click Edit merely to force a new credential.
 - connection/timeout error — verify the Smart Chime IP, LAN reachability, firewall policy, and firmware compatibility before assuming the credential is wrong.
 
-On the validated Protect `7.2.105` / Smart Chime `1.7.20` stack:
-
-- an already configured direct-device credential returned `HTTP 200`;
-- the UI-visible **Manual Recovery → Recovery Code** returned `HTTP 401`.
+On Protect `7.2.105` with Smart Chime firmware `1.7.20`, the exact value produced by **Reveal** returned `HTTP 200` through this `ubnt` + `/api/info` check.
 
 The Smart Chime presents a self-signed certificate, so the verification probe deliberately disables certificate verification for this local check. Run it only from a trusted LAN/VPN.
 
@@ -98,7 +80,7 @@ Once the verification returns `HTTP 200`, place the credential in your private `
 
 ```env
 CHIME_DIRECT_USER=ubnt
-CHIME_DIRECT_PASSWORD=<verified-device-password>
+CHIME_DIRECT_PASSWORD=<revealed-and-verified-device-password>
 TTS_ENGINE=piper
 ```
 
@@ -122,24 +104,15 @@ A healthy arbitrary-TTS setup reports `"mode":"two_slot_overwrite"`, `"slot_coun
 
 ## Credential rotation
 
-If the adopted-device credential rotates, a static `CHIME_DIRECT_PASSWORD` must be updated and the container recreated. UniFi Announcer also supports `CHIME_CREDENTIAL_FILE` for operators who already maintain the credential in a mounted local secret file; that provider rereads the file when it changes and after a direct-device HTTP 401.
+If the device password is intentionally changed in Protect, a static `CHIME_DIRECT_PASSWORD` must be updated and the container recreated. UniFi Announcer also supports `CHIME_CREDENTIAL_FILE` for operators who maintain the credential in a mounted local secret file; that provider rereads the file when it changes and after a direct-device HTTP 401.
 
-UniFi Announcer does **not** retrieve or refresh the password from Protect itself.
+Do not use Protect's **Edit** action merely as an Announcer setup step. If you intentionally rotate the credential for another reason, update every authorized consumer that depends on it.
 
-## If you do not already have the credential
+UniFi Announcer does **not** retrieve or refresh the password from Protect automatically.
 
-If your Protect UI does not expose an existing direct-device credential and you do not already possess the current Smart Chime credential, credential-backed arbitrary TTS cannot be newly configured through this project's supported onboarding path.
+## Security notes
 
-The Protect `7.2.105` Recovery Code is not a fallback for this purpose: on the validated Smart Chime firmware `1.7.20`, it returned `HTTP 401` from `/api/info` with username `ubnt`.
-
-Do not enable SSH on the console, query Protect's internal database, scrape backups, or publish raw authentication/support data as an onboarding workaround. Those methods are version-sensitive, broaden the security boundary, and are not supported by this project.
-
-Use `TTS_ENGINE=none` for credential-free preset/default/buzzer playback and open a GitHub issue with only the following non-sensitive information:
-
-- Protect version;
-- Smart Chime model and firmware;
-- whether **Device Password** is present anywhere in the Protect web settings;
-- whether a **Recovery Code** is visible (never include its value);
-- whether you already possess a direct-device credential and, if tested, whether the `/api/info` verification returned `200`, `401`, timed out, or could not connect.
-
-Never post the password, private IPs/hostnames, device IDs, certificate fingerprints, recovery codes, or raw support logs.
+- Use the normal authenticated Protect UI and **Reveal** the existing value.
+- Do not publish the revealed password, screenshots containing it, recovery UI contents, private IPs/hostnames, device IDs, certificate fingerprints, or raw support logs.
+- Do not enable SSH on the console, query Protect's internal database, or scrape backups for credential onboarding; those methods are unnecessary for the validated flow and are not supported by this project.
+- Keep UniFi Announcer and the verification probe on a trusted LAN/VPN.
