@@ -16,7 +16,7 @@ For arbitrary speech it synthesizes audio with Piper or Edge TTS, stores MP3s in
 > UniFi Announcer relies on undocumented UniFi Protect and Smart Chime interfaces that can change between releases. v2.1.6 has been physically validated on Protect 7.2.105 with Smart Chime firmware 1.7.20. Review [Compatibility](docs/COMPATIBILITY.md) before upgrading Protect or chime firmware.
 
 > [!CAUTION]
-> Arbitrary TTS requires a current per-device Smart Chime adoption credential supplied through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`. UniFi Announcer does **not** retrieve that credential. Without it, use `TTS_ENGINE=none`; preset/default/buzzer playback remains available.
+> Arbitrary TTS requires a current Smart Chime adoption credential supplied through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`. UniFi Announcer does **not** retrieve that credential. On the validated Protect `7.2.105` stack, live testing found no Device Password or equivalent field in the Protect web UI, so a fresh install cannot bootstrap credential-backed arbitrary TTS through the supported public onboarding path unless you already possess the credential. See [Smart Chime credential setup](CREDENTIALS.md). Without it, use `TTS_ENGINE=none`; preset/default/buzzer playback remains available.
 
 ## Why this exists
 
@@ -84,7 +84,7 @@ Direct Smart Chime HTTPS is used only to overwrite an **exact previously proven 
 - a local UniFi OS account with only the Protect permissions the service needs;
 - Docker Engine and Docker Compose;
 - optional Home Assistant 2026.3+ for the HACS client;
-- for arbitrary TTS, Piper or Edge TTS plus the separately maintained Smart Chime device credential described above.
+- for arbitrary TTS, Piper or Edge TTS plus an existing Smart Chime credential that passes the non-destructive verification in [CREDENTIALS.md](CREDENTIALS.md).
 
 Home Assistant, MQTT, rules, and MCP are optional. The Docker service is the source of truth.
 
@@ -127,6 +127,8 @@ unset UNIFI_USERNAME UNIFI_PASSWORD
 
 Alternatively, obtain the chime ID through your normal authorized Protect tooling and skip the temporary login example.
 
+Before enabling arbitrary TTS, read [Smart Chime credential setup](CREDENTIALS.md). On the validated Protect `7.2.105` stack, the existing device credential was **not** exposed in the normal Protect web UI. If you do not already possess the credential, keep `TTS_ENGINE=none`; do not use SSH/database extraction as an onboarding workaround.
+
 Edit `.env`:
 
 ```env
@@ -140,8 +142,8 @@ CHIME_ID=<protect-chime-id>
 # Safe baseline: no arbitrary text TTS.
 TTS_ENGINE=none
 
-# Advanced arbitrary TTS only when you already maintain the device credential:
-# CHIME_DIRECT_PASSWORD=<current-device-adoption-credential>
+# Advanced arbitrary TTS only after an existing credential passes CREDENTIALS.md verification:
+# CHIME_DIRECT_PASSWORD=<verified-current-device-credential>
 # CHIME_CREDENTIAL_FILE=/run/secrets/unifi_chime_password
 # TTS_ENGINE=piper
 PIPER_URL=tcp://<piper-host-or-ip>:10200
@@ -458,7 +460,8 @@ Verify the final `DATA_PATH` before starting the restored container.
 | HA reports invalid API key | `APP_API_KEY` changed or mismatches | Complete the integration reauthentication flow |
 | HA button times out but direct slot test works | Backend older than v2.1.6 or stale Protect inventory behavior | Upgrade backend and HA client together; verify `/version`; inspect logs for slot sync/play-speaker result |
 | Last playback result remains `unknown` after using a control | HA integration older than v2.1.6 or action never reached the integration | Update/restart HA integration, then retry a button/action |
-| Buttons/presets work but arbitrary TTS fails | Fixed TTS slots are not ready | Check `/tts/slots/status` with `X-API-Key`; verify current direct-device credential and chime reachability |
+| Buttons/presets work but arbitrary TTS fails | Fixed TTS slots are not ready | Check `/tts/slots/status`; verify an existing credential with [CREDENTIALS.md](CREDENTIALS.md) and confirm chime reachability |
+| I do not have a Smart Chime credential | Protect may not expose it in the current UI; this is confirmed on 7.2.105 | Use `TTS_ENGINE=none`; do not use SSH/database extraction as onboarding; see [CREDENTIALS.md](CREDENTIALS.md) |
 | Slot status reports ownership drift | Physical slot metadata no longer matches proof | Stop TTS and reconcile; do not force or guess a slot |
 | `/version` shows `git_sha: unknown` | Image was built without `GIT_SHA` | Rebuild with `export GIT_SHA="$(git rev-parse HEAD)"` |
 | Piper synthesis fails | Piper unavailable | Check `PIPER_URL` and Piper service |
@@ -495,6 +498,7 @@ See the exact pre-release evidence requirements in [Release checklist](docs/RELE
 
 ## Documentation
 
+- [Smart Chime credential setup](CREDENTIALS.md)
 - [Home Assistant](docs/HOME_ASSISTANT.md)
 - [MCP](docs/MCP.md)
 - [Architecture](docs/ARCHITECTURE.md)
