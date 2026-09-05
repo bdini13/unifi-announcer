@@ -34,10 +34,17 @@ confirms that the target Smart Chime accepts username `ubnt` plus that credentia
 Treat it as a high-value secret.
 
 Live validation on Protect `7.2.105` found no Device Password or equivalent
-credential field in the Protect web UI. Historical Device Password locations on
-other releases are version-dependent and are not a supported bootstrap guarantee.
-If the UI does not expose the credential and the operator does not already
-possess it, this project does not provide a supported credential-retrieval path.
+direct-device credential field in the normal Protect settings UI. Protect does
+expose a per-device **Recovery Code** under the chime's **Settings → Manage →
+Manual Recovery** page, but that code returned `HTTP 401` from the Smart Chime
+`/api/info` authentication check on firmware `1.7.20`. It is therefore not
+interchangeable with the direct-device credential on the validated stack and
+must not be used as `CHIME_DIRECT_PASSWORD`.
+
+Historical Device Password locations on other releases are version-dependent and
+are not a supported bootstrap guarantee. If the UI does not expose a credential
+accepted by `/api/info` and the operator does not already possess one, this
+project does not provide a supported credential-retrieval path.
 
 The project does not retrieve Smart Chime credentials automatically and does not
 support enabling SSH, querying internal Protect databases, scraping backups, or
