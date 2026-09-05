@@ -32,6 +32,18 @@ def test_public_credential_guide_does_not_publish_extraction_workarounds():
     assert "devicepassword\" from" not in guide
 
 
+def test_bug_report_collects_safe_credential_diagnostics():
+    template = Path(".github/ISSUE_TEMPLATE/bug_report.yml").read_text()
+
+    assert "placeholder: v2.1.6" in template
+    assert "id: tts_mode" in template
+    assert "id: credential_check" in template
+    assert "HTTP 200" in template
+    assert "HTTP 401" in template
+    assert "Never paste the credential" in template
+    assert "CREDENTIALS.md" in template
+
+
 def test_v2_1_6_release_gate_is_recorded_as_passed():
     checklist = Path("docs/RELEASE_CHECKLIST.md").read_text()
     notes = Path("docs/RELEASE_NOTES_v2.1.6.md").read_text()
