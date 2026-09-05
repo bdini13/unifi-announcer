@@ -57,9 +57,12 @@ def test_public_docs_do_not_claim_unsupported_credential_onboarding():
     env_example = Path(".env.example").read_text()
     assert "Arbitrary text announcements | ⚠️ Advanced" in readme
     assert "does **not** retrieve that credential" in readme
+    assert "no Device Password or equivalent field" in readme
+    assert "fresh install cannot bootstrap" in readme
+    assert "[Smart Chime credential setup](CREDENTIALS.md)" in readme
     quick_start = readme.split("### 2. Start the service", 1)[0]
-    assert "\nCHIME_DIRECT_PASSWORD=<current-device-adoption-credential>" not in quick_start
-    assert "# CHIME_DIRECT_PASSWORD=<current-device-adoption-credential>" in quick_start
+    assert "\nCHIME_DIRECT_PASSWORD=<verified-current-device-credential>" not in quick_start
+    assert "# CHIME_DIRECT_PASSWORD=<verified-current-device-credential>" in quick_start
     assert "# CHIME_CREDENTIAL_FILE=/run/secrets/unifi_chime_password" in quick_start
     assert "TTS_ENGINE=none" in readme
     assert "CHIME_DIRECT_PASSWORD=" in env_example
@@ -75,6 +78,8 @@ def test_readme_top_callouts_are_focused_on_runtime_risks():
     assert "undocumented UniFi Protect and Smart Chime interfaces" in intro
     assert "CHIME_DIRECT_PASSWORD" in intro
     assert "CHIME_CREDENTIAL_FILE" in intro
+    assert "Protect `7.2.105`" in intro
+    assert "CREDENTIALS.md" in intro
 
 
 def test_hacs_docs_make_backend_requirement_explicit():
