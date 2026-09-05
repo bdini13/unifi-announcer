@@ -7,12 +7,12 @@ body:
   - type: markdown
     attributes:
       value: |
-        Do not post secrets, console addresses, device IDs, certificate details, raw support logs, or private audio. Report security issues through SECURITY.md.
+        Do not post secrets, console addresses, device IDs, certificate details, raw support logs, recovery codes, or private audio. Report security issues through SECURITY.md.
   - type: input
     id: version
     attributes:
       label: UniFi Announcer version
-      placeholder: v2.1.2
+      placeholder: v2.1.6
     validations:
       required: true
   - type: input
@@ -20,6 +20,31 @@ body:
     attributes:
       label: Environment
       description: Docker/Compose, Protect version, Smart Chime model and firmware; redact private details.
+    validations:
+      required: true
+  - type: dropdown
+    id: tts_mode
+    attributes:
+      label: TTS mode
+      options:
+        - TTS_ENGINE=none (preset/default/buzzer only)
+        - Piper arbitrary TTS
+        - Edge arbitrary TTS
+        - Other / unsure
+    validations:
+      required: true
+  - type: dropdown
+    id: credential_check
+    attributes:
+      label: Existing Smart Chime credential verification
+      description: If you already possess a credential and safely ran the read-only check in CREDENTIALS.md, report only the result. Never paste the credential. Protect 7.2.105 may not expose a Device Password in the web UI, so a fresh install may legitimately have no credential to test.
+      options:
+        - Not applicable (TTS_ENGINE=none)
+        - I do not already possess a credential / Protect UI does not expose one
+        - HTTP 200
+        - HTTP 401
+        - Timeout / connection failure
+        - Not tested
     validations:
       required: true
   - type: dropdown
@@ -55,7 +80,7 @@ body:
     attributes:
       label: Safety checks
       options:
-        - label: I removed credentials, private network details, device IDs, certificate data, support logs, and private audio.
+        - label: I removed credentials, recovery codes, private network details, device IDs, certificate data, support logs, and private audio.
           required: true
         - label: This is not a security vulnerability.
           required: true
