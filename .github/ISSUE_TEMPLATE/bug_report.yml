@@ -7,12 +7,12 @@ body:
   - type: markdown
     attributes:
       value: |
-        Do not post secrets, console addresses, device IDs, certificate details, raw support logs, or private audio. Report security issues through SECURITY.md.
+        Do not post secrets, console addresses, device IDs, certificate details, raw support logs, or private audio. Report security issues through SECURITY.md. For arbitrary-TTS credential setup, follow CREDENTIALS.md and report only the sanitized verification result.
   - type: input
     id: version
     attributes:
       label: UniFi Announcer version
-      placeholder: v2.1.2
+      placeholder: v2.1.6
     validations:
       required: true
   - type: input
@@ -20,6 +20,31 @@ body:
     attributes:
       label: Environment
       description: Docker/Compose, Protect version, Smart Chime model and firmware; redact private details.
+    validations:
+      required: true
+  - type: dropdown
+    id: tts_mode
+    attributes:
+      label: TTS mode
+      options:
+        - TTS_ENGINE=none / presets-default-buzzer only
+        - Piper
+        - Edge TTS
+        - Other / unsure
+    validations:
+      required: true
+  - type: dropdown
+    id: credential_check
+    attributes:
+      label: Direct-device credential verification
+      description: If arbitrary TTS is involved, report only the sanitized /api/info result from CREDENTIALS.md. Never paste the credential.
+      options:
+        - Not applicable / TTS_ENGINE=none
+        - HTTP 200
+        - HTTP 401
+        - Timeout / connection failure
+        - Not tested
+        - Other sanitized result
     validations:
       required: true
   - type: dropdown
