@@ -21,7 +21,7 @@
 Dynamic TTS in stable `v2.1` releases requires all of the following:
 
 - a compatible Smart Chime firmware whose direct info capability permits custom ringtone storage;
-- a current per-device adoption credential supplied locally to the Announcer host;
+- a current adopted-device credential supplied locally to the Announcer host and accepted by the target Smart Chime;
 - exactly two persistent service-owned Protect ringtone identities;
 - an exact, persisted physical slot binding for each configured target;
 - ownership evidence that still matches immediately before each overwrite.
@@ -55,9 +55,11 @@ After a Smart Chime firmware update, treat fixed-slot writes as unverified until
 
 ## Credential handling
 
-The public repository does not document credential-extraction procedures or raw authentication research. The current device credential may be supplied as `CHIME_DIRECT_PASSWORD` or via `CHIME_CREDENTIAL_FILE`; the latter supports an external local refresher without requiring container restarts.
+The direct Smart Chime client uses username `ubnt` plus the password provisioned for the adopted device. UniFi Announcer accepts that secret through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`; the latter supports an external local refresher without requiring container restarts.
 
-MCP and Home Assistant receive only the Announcer application/API surfaces and never receive the physical device credential.
+For public onboarding, first use the Protect web interface's existing **Device Password** value when that setting is available, then verify it non-destructively against the target Smart Chime's `/api/info` endpoint before configuring arbitrary TTS. See [`CREDENTIALS.md`](../CREDENTIALS.md) for the exact procedure and version-dependent UI locations.
+
+The project does not retrieve the password automatically and does not support enabling SSH, querying Protect's internal database, scraping backups, or publishing raw authentication material as onboarding methods. MCP and Home Assistant receive only the Announcer application/API surfaces and never receive the physical device credential.
 
 ## Protect WebSocket framing
 
