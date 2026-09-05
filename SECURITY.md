@@ -26,9 +26,17 @@ guarantee.
 UniFi Announcer uses undocumented local UniFi interfaces. Keep it on a trusted
 LAN or behind a VPN/authenticated reverse proxy. Never expose REST or MCP directly
 to the public internet. Use a dedicated least-privilege local UniFi account and
-separate REST and MCP keys. The project does not retrieve Smart Chime device
-credentials from Protect and does not support enabling SSH or querying internal
-console databases as an onboarding method.
+separate REST and MCP keys.
+
+For arbitrary TTS, the operator may supply an existing Protect web-UI **Device
+Password** only after the non-destructive `/api/info` check in
+[`CREDENTIALS.md`](CREDENTIALS.md) confirms that the target Smart Chime accepts
+it. Treat this adopted-device password as a high-value secret; depending on the
+Protect release it may be shared by multiple managed devices.
+
+The project does not retrieve Smart Chime credentials automatically and does not
+support enabling SSH, querying internal Protect databases, scraping backups, or
+publishing raw authentication material as onboarding methods.
 
 Before sharing diagnostics, remove secrets, hostnames, IP addresses, device IDs,
 certificate fingerprints, audio content, and deployment-specific paths.
