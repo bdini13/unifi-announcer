@@ -1,5 +1,7 @@
 # v2.1.6 — Home Assistant playback reliability
 
+> **Release verification note:** the immutable GitHub release body preserves an earlier future-tense sentence saying publication must wait for the live gate. The live physical gate had already **passed before merge and publication** on the exact release candidate. [PR #23](https://github.com/bdini13/unifi-announcer/pull/23) records the candidate SHA, automated gate, physical audible-playback gate, HA success/failure result transitions, and two-slot preservation. This file is the canonical post-publication verification record.
+
 v2.1.6 is a focused reliability patch for the normal Home Assistant playback path. It does not add a second playback implementation or change the two-slot ownership model introduced in stable v2.1.
 
 ## Fixed
