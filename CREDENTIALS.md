@@ -12,9 +12,17 @@ The current physically validated stack is:
 - Smart WiFi Chime / UP Chime;
 - Smart Chime firmware `1.7.20`.
 
-On that Protect version, live validation found **no Device Password or equivalent device-authentication field in the Protect web UI**, including **Settings → General → Advanced** and the other visible Protect Settings sections.
+On that Protect version, live validation found **no Device Password or equivalent direct-device authentication field in the normal Protect settings UI**, including **Settings → General → Advanced** and the other visible Protect Settings sections.
 
-Therefore, a fresh installation on Protect `7.2.105` cannot bootstrap credential-backed arbitrary TTS through this project's supported onboarding procedure unless the operator already possesses and maintains the current Smart Chime credential through an authorized external process.
+Protect `7.2.105` does expose a per-device **Recovery Code** at:
+
+**Protect → Devices → Smart WiFi Chime → Settings → Manage → Manual Recovery → Recovery Code**
+
+However, a read-only `POST /api/info` test using username `ubnt` plus that Recovery Code returned **HTTP 401** on Smart Chime firmware `1.7.20`. The Recovery Code is therefore **not interchangeable with the Smart Chime direct-device credential on this validated stack** and must not be used as `CHIME_DIRECT_PASSWORD`.
+
+A separately existing configured direct-device credential was accepted by the same `ubnt` + `POST /api/info` path with **HTTP 200**. This proves the direct authentication path works, but it does not provide a supported way to bootstrap the credential for a new installation.
+
+Therefore, a fresh installation on Protect `7.2.105` cannot bootstrap credential-backed arbitrary TTS through this project's supported onboarding procedure unless the operator already possesses and maintains the current Smart Chime direct-device credential through an authorized external process.
 
 Credential-free preset, assigned-default, and hardware-buzzer playback remains available with `TTS_ENGINE=none`.
 
@@ -25,7 +33,7 @@ Older UniFi community guidance has described a **Device Password** setting in Pr
 - **Settings → General → Advanced → Device Password**;
 - **Settings → System → Advanced → Device Password**.
 
-These locations are **not validated for Protect 7.2.105** and should not be read as a promise that a current Protect installation exposes the credential.
+These locations are **not validated for Protect 7.2.105** and should not be read as a promise that a current Protect installation exposes the direct-device credential.
 
 Historical references:
 
@@ -34,11 +42,11 @@ Historical references:
 
 If your Protect version exposes an existing Device Password through its normal web UI, you may verify that value with the non-destructive procedure below before configuring it in UniFi Announcer. Do not rotate or reset device credentials solely for this project.
 
-A **Recovery Code** is not assumed to be interchangeable with the direct-device credential. Do not put a recovery code into `CHIME_DIRECT_PASSWORD` unless a non-destructive verification proves that the target Smart Chime accepts it.
+Do **not** substitute the per-device Recovery Code for a Device Password or direct-device credential. On the validated Protect `7.2.105` / Smart Chime `1.7.20` stack, the Recovery Code returned `HTTP 401` from `/api/info`.
 
 ## Verify an existing credential without changing anything
 
-If you already possess the current Smart Chime credential, verify it against the chime's read-only `/api/info` endpoint before saving it in `.env`.
+If you already possess the current Smart Chime direct-device credential, verify it against the chime's read-only `/api/info` endpoint before saving it in `.env`.
 
 The following probe uses Python `getpass`, so the credential is not placed in shell history or exported into the process environment. It prints only the HTTP status and does not display the response body.
 
@@ -77,7 +85,10 @@ Interpret the result:
 - `HTTP 401` — the value is not the current direct-device credential for that chime. Do not keep retrying rapidly and do not rotate device credentials just to make the test pass.
 - connection/timeout error — verify the Smart Chime IP, LAN reachability, firewall policy, and firmware compatibility before assuming the credential is wrong.
 
-This exact `ubnt` + `/api/info` verification path returned `HTTP 200` during live validation on Protect `7.2.105` with Smart Chime firmware `1.7.20` using an already configured credential.
+On the validated Protect `7.2.105` / Smart Chime `1.7.20` stack:
+
+- an already configured direct-device credential returned `HTTP 200`;
+- the UI-visible **Manual Recovery → Recovery Code** returned `HTTP 401`.
 
 The Smart Chime presents a self-signed certificate, so the verification probe deliberately disables certificate verification for this local check. Run it only from a trusted LAN/VPN.
 
@@ -117,7 +128,9 @@ UniFi Announcer does **not** retrieve or refresh the password from Protect itsel
 
 ## If you do not already have the credential
 
-If your Protect UI does not expose an existing Device Password and you do not already possess the current Smart Chime credential, credential-backed arbitrary TTS cannot be newly configured through this project's supported onboarding path.
+If your Protect UI does not expose an existing direct-device credential and you do not already possess the current Smart Chime credential, credential-backed arbitrary TTS cannot be newly configured through this project's supported onboarding path.
+
+The Protect `7.2.105` Recovery Code is not a fallback for this purpose: on the validated Smart Chime firmware `1.7.20`, it returned `HTTP 401` from `/api/info` with username `ubnt`.
 
 Do not enable SSH on the console, query Protect's internal database, scrape backups, or publish raw authentication/support data as an onboarding workaround. Those methods are version-sensitive, broaden the security boundary, and are not supported by this project.
 
@@ -126,6 +139,7 @@ Use `TTS_ENGINE=none` for credential-free preset/default/buzzer playback and ope
 - Protect version;
 - Smart Chime model and firmware;
 - whether **Device Password** is present anywhere in the Protect web settings;
-- whether you already possess a credential and, if tested, whether the `/api/info` verification returned `200`, `401`, timed out, or could not connect.
+- whether a **Recovery Code** is visible (never include its value);
+- whether you already possess a direct-device credential and, if tested, whether the `/api/info` verification returned `200`, `401`, timed out, or could not connect.
 
 Never post the password, private IPs/hostnames, device IDs, certificate fingerprints, recovery codes, or raw support logs.
