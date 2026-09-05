@@ -45,6 +45,8 @@ def test_bug_report_collects_safe_credential_diagnostics():
     assert "id: credential_check" in template
     assert "HTTP 200" in template
     assert "HTTP 401" in template
+    assert "I do not already possess a credential" in template
+    assert "Protect 7.2.105 may not expose a Device Password" in template
     assert "Never paste the credential" in template
     assert "CREDENTIALS.md" in template
 
