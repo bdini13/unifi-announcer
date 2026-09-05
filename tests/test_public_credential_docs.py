@@ -9,13 +9,17 @@ def test_public_credential_guide_is_safe_and_discoverable():
     checklist = Path("docs/RELEASE_CHECKLIST.md").read_text()
 
     assert "Protect `7.2.105`" in guide
-    assert "no Device Password or equivalent" in guide
+    assert "no Device Password or equivalent direct-device authentication field" in guide
     assert "not validated for Protect 7.2.105" in guide
     assert "/api/info" in guide
     assert "getpass.getpass" in guide
     assert "export CHIME_DEVICE_PASSWORD" not in guide
     assert "Recovery Code" in guide
-    assert "not assumed to be interchangeable" in guide
+    assert "Manual Recovery → Recovery Code" in guide
+    assert "returned **HTTP 401**" in guide
+    assert "not interchangeable with the Smart Chime direct-device credential" in guide
+    assert "must not be used as `CHIME_DIRECT_PASSWORD`" in guide
+    assert "configured direct-device credential returned `HTTP 200`" in guide
     assert "does **not** retrieve" in guide
     assert 'AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")' in guide
 
@@ -23,9 +27,11 @@ def test_public_credential_guide_is_safe_and_discoverable():
     assert "See CREDENTIALS.md" in env_example
     assert "support SSH/database extraction as onboarding." in env_example
     assert "CREDENTIALS.md" in security
-    assert "Protect `7.2.105` found no Device Password" in security
+    assert "Manual Recovery" in security
+    assert "returned `HTTP 401`" in security
     assert "CREDENTIALS.md" in compatibility
-    assert "no Device Password or equivalent field" in compatibility
+    assert "Manual Recovery → Recovery Code" in compatibility
+    assert "returned **HTTP 401**" in compatibility
     assert "Live validation on Protect `7.2.105` found no Device Password" in checklist
     assert "Operators may supply a Protect web-UI **Device Password**" not in checklist
 
@@ -46,10 +52,11 @@ def test_bug_report_collects_safe_credential_diagnostics():
     assert "placeholder: v2.1.6" in template
     assert "id: tts_mode" in template
     assert "id: credential_check" in template
-    assert "HTTP 200" in template
-    assert "HTTP 401" in template
-    assert "I do not already possess a credential" in template
-    assert "Protect 7.2.105 may not expose a Device Password" in template
+    assert "HTTP 200 with an existing direct-device credential" in template
+    assert "HTTP 401 with an existing direct-device credential" in template
+    assert "I do not already possess a direct-device credential" in template
+    assert "Manual Recovery Recovery Code returned HTTP 401" in template
+    assert "not a supported CHIME_DIRECT_PASSWORD value" in template
     assert "Never paste the credential" in template
     assert "CREDENTIALS.md" in template
 
