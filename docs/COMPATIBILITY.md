@@ -55,13 +55,19 @@ After a Smart Chime firmware update, treat fixed-slot writes as unverified until
 
 ## Credential handling
 
-The direct Smart Chime client uses username `ubnt` plus the credential provisioned for the adopted device. UniFi Announcer accepts that secret through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`; the latter supports an external local refresher without requiring container restarts.
+The direct Smart Chime client uses username `ubnt` plus the unique device password provisioned for the adopted device. UniFi Announcer accepts that secret through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`; the latter supports an external local refresher without requiring container restarts.
 
-Live validation on Protect `7.2.105` with Smart Chime firmware `1.7.20` confirmed that an already configured credential is accepted by `POST /api/info` with username `ubnt` and returns HTTP 200. That same validation found **no Device Password or equivalent field in the Protect web UI**, including Settings → General → Advanced.
+Live validation on Protect `7.2.105` with Smart Chime firmware `1.7.20` confirmed the normal authenticated UI onboarding path:
 
-Historical UniFi community guidance describes Device Password locations on other releases, but those paths are version-dependent and are not validated for Protect `7.2.105`. If a current installation does not expose the credential and the operator does not already possess it, arbitrary TTS cannot be newly bootstrapped through the project's supported public onboarding path. See [`CREDENTIALS.md`](../CREDENTIALS.md).
+**Protect → Devices → Smart WiFi Chime → Settings → Manage → Manual Recovery → Reveal**
 
-The project does not retrieve the credential automatically and does not support enabling SSH, querying Protect's internal database, scraping backups, or publishing raw authentication material as onboarding methods. MCP and Home Assistant receive only the Announcer application/API surfaces and never receive the physical device credential.
+Live inspection of the Protect frontend showed that **Reveal** performs `GET /devices/password/{deviceType}/{deviceId}`, while **Edit** uses `PATCH` on the same resource. The value returned by Reveal exactly matched the known working `CHIME_DIRECT_PASSWORD` and returned **HTTP 200** with username `ubnt` against the Smart Chime's read-only `/api/info` check.
+
+The earlier `HTTP 401` result attributed to a UI recovery value was traced to incorrectly captured UI text rather than the value returned by Reveal. It is superseded by the verified Reveal result and must not be used to characterize the credential flow.
+
+For onboarding, use **Reveal**, not **Edit**. Edit is a credential-changing operation and is not required to configure UniFi Announcer. The validated flow requires no SSH, Protect database access, backup scraping, credential reset, or exploit. See [`CREDENTIALS.md`](../CREDENTIALS.md).
+
+The project does not retrieve the credential automatically. MCP and Home Assistant receive only the Announcer application/API surfaces and never receive the physical device credential.
 
 ## Protect WebSocket framing
 

@@ -7,7 +7,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Do not post secrets, console addresses, device IDs, certificate details, raw support logs, recovery codes, or private audio. Report security issues through SECURITY.md.
+        Do not post secrets, console addresses, device IDs, certificate details, screenshots containing revealed credentials, raw support logs, or private audio. Report security issues through SECURITY.md.
   - type: input
     id: version
     attributes:
@@ -36,15 +36,15 @@ body:
   - type: dropdown
     id: credential_check
     attributes:
-      label: Existing Smart Chime credential verification
-      description: If you already possess a credential and safely ran the read-only check in CREDENTIALS.md, report only the result. Never paste the credential. Protect 7.2.105 may not expose a Device Password in the web UI, so a fresh install may legitimately have no credential to test.
+      label: Smart Chime credential verification
+      description: On validated Protect 7.2.105, use Devices → Smart WiFi Chime → Settings → Manage → Manual Recovery → Reveal, then optionally run the read-only /api/info check in CREDENTIALS.md. Use Reveal, not Edit. Never paste the revealed credential.
       options:
         - Not applicable (TTS_ENGINE=none)
-        - I do not already possess a credential / Protect UI does not expose one
-        - HTTP 200
-        - HTTP 401
+        - Reveal available; /api/info returned HTTP 200
+        - Reveal available; /api/info returned HTTP 401
+        - Reveal available; verification not tested
+        - Reveal control unavailable / different UI
         - Timeout / connection failure
-        - Not tested
     validations:
       required: true
   - type: dropdown
@@ -80,7 +80,7 @@ body:
     attributes:
       label: Safety checks
       options:
-        - label: I removed credentials, recovery codes, private network details, device IDs, certificate data, support logs, and private audio.
+        - label: I removed credentials, private network details, device IDs, certificate data, screenshots containing revealed secrets, support logs, and private audio.
           required: true
         - label: This is not a security vulnerability.
           required: true
