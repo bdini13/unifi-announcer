@@ -37,12 +37,12 @@ body:
     id: credential_check
     attributes:
       label: Existing Smart Chime credential verification
-      description: If you already possess a credential and safely ran the read-only check in CREDENTIALS.md, report only the result. Never paste the credential. Protect 7.2.105 may not expose a Device Password in the web UI, so a fresh install may legitimately have no credential to test.
+      description: If you already possess a direct-device credential and safely ran the read-only check in CREDENTIALS.md, report only the result. Never paste the credential. On Protect 7.2.105 / chime firmware 1.7.20, the UI-visible Manual Recovery Recovery Code returned HTTP 401 and is not a supported CHIME_DIRECT_PASSWORD value.
       options:
         - Not applicable (TTS_ENGINE=none)
-        - I do not already possess a credential / Protect UI does not expose one
-        - HTTP 200
-        - HTTP 401
+        - I do not already possess a direct-device credential
+        - HTTP 200 with an existing direct-device credential
+        - HTTP 401 with an existing direct-device credential
         - Timeout / connection failure
         - Not tested
     validations:
