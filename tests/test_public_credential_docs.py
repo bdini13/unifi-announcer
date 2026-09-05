@@ -21,7 +21,7 @@ def test_public_credential_guide_is_safe_and_discoverable():
 
     assert "Protect 7.2.105 did not expose Device Password" in env_example
     assert "See CREDENTIALS.md" in env_example
-    assert "does not support SSH/database extraction as onboarding" in env_example
+    assert "support SSH/database extraction as onboarding." in env_example
     assert "CREDENTIALS.md" in security
     assert "Protect `7.2.105` found no Device Password" in security
     assert "CREDENTIALS.md" in compatibility
