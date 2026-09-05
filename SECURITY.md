@@ -30,8 +30,8 @@ separate REST and MCP keys.
 
 For arbitrary TTS, use Protect's normal authenticated web UI to reveal the Smart
 Chime's existing unique device password as documented in [`CREDENTIALS.md`](CREDENTIALS.md).
-On the validated Protect `7.2.105` stack the path is **Devices → Smart WiFi Chime
-→ Settings → Manage → Manual Recovery → Reveal**. The value produced by Reveal
+On the validated UniFi OS `5.1.31` / Protect `7.2.105` stack the path is
+**Devices → Smart WiFi Chime → Settings → Manage → Manual Recovery → Reveal**. The value produced by Reveal
 matched the known working direct-device credential and returned HTTP 200 with
 username `ubnt` against `/api/info`.
 

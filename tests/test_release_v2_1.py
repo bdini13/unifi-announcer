@@ -7,10 +7,10 @@ from scripts.release_v2_1 import NOTES_FILE, TAG, TITLE, ReleaseError, publish_r
 REPOSITORY = "owner/repository"
 
 
-def test_release_identity_targets_v2_1_6():
-    assert TAG == "v2.1.6"
-    assert TITLE.startswith("v2.1.6 ")
-    assert NOTES_FILE == "docs/RELEASE_NOTES_v2.1.6.md"
+def test_release_identity_targets_v2_1_7():
+    assert TAG == "v2.1.7"
+    assert TITLE.startswith("v2.1.7 ")
+    assert NOTES_FILE == "docs/RELEASE_NOTES_v2.1.7.md"
 
 
 class FakeRunner:

@@ -1,4 +1,4 @@
-"""Idempotently publish the fixed v2.1.6 GitHub release.
+"""Idempotently publish the fixed v2.1.7 GitHub release.
 
 The release workflow calls this only after the exact main commit has passed the
 core test lane plus HACS and Hassfest validation. Existing tags/releases are
@@ -13,9 +13,9 @@ import subprocess
 from collections.abc import Callable, Sequence
 from typing import Protocol
 
-TAG = "v2.1.6"
-TITLE = "v2.1.6 — Home Assistant playback reliability"
-NOTES_FILE = "docs/RELEASE_NOTES_v2.1.6.md"
+TAG = "v2.1.7"
+TITLE = "v2.1.7 — Smart Chime credential onboarding"
+NOTES_FILE = "docs/RELEASE_NOTES_v2.1.7.md"
 
 
 class Result(Protocol):

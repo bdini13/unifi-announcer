@@ -57,7 +57,7 @@ After a Smart Chime firmware update, treat fixed-slot writes as unverified until
 
 The direct Smart Chime client uses username `ubnt` plus the unique device password provisioned for the adopted device. UniFi Announcer accepts that secret through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`; the latter supports an external local refresher without requiring container restarts.
 
-Live validation on Protect `7.2.105` with Smart Chime firmware `1.7.20` confirmed the normal authenticated UI onboarding path:
+Live validation on UniFi OS `5.1.31`, Protect `7.2.105`, and Smart Chime firmware `1.7.20` confirmed the normal authenticated UI onboarding path:
 
 **Protect → Devices → Smart WiFi Chime → Settings → Manage → Manual Recovery → Reveal**
 

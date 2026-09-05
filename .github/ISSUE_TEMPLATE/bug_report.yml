@@ -12,7 +12,7 @@ body:
     id: version
     attributes:
       label: UniFi Announcer version
-      placeholder: v2.1.6
+      placeholder: v2.1.7
     validations:
       required: true
   - type: input
