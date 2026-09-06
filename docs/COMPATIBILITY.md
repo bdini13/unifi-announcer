@@ -5,9 +5,11 @@
 | Component / capability | Evidence level | Status |
 |---|---|---|
 | UniFi Protect 7.2.105 private session API | Existing implementation + live use + mocked tests | Protect auth, persistent ringtone identity and playback backend |
-| Smart Chime firmware 1.7.20 `/api/info` | Existing recorded/live evidence | Used to capability-gate fixed-slot TTS writes |
+| Smart Chime firmware 1.7.20 `/api/info` | Existing recorded/live evidence | Capability gate, device identity, uptime/boot-epoch evidence |
 | Smart Chime firmware 1.7.20 `/api/support` | Existing recorded evidence | Sensitive diagnostic read; not part of normal playback |
 | Exact owned ringtone-slot overwrite | Controlled local research on fw 1.7.20 + v2.1 ownership gates | Used only for two proven service-owned dynamic TTS slots |
+| Same-boot resident content reuse | Physical single-Chime v2.1.8 validation + automated tests | Supported when content, ownership, device identity, and boot continuity all match |
+| Reboot/reconnect resident invalidation | Physical single-Chime reboot validation + automated lifecycle/concurrency tests | Supported; next request safely rewrites when continuity is broken |
 | Generic arbitrary direct staging | Insufficient safe ownership model | Disabled |
 | Direct HTTP playback | No verified route | Unsupported; playback remains Protect `play-speaker` |
 | Direct slot deletion | Semantics not proven | Unsupported; v2.1 migration overwrites proven legacy bytes with silence rather than guessing deletion |
@@ -16,7 +18,7 @@
 | aiomqtt | 2.3.0 | Optional MQTT path |
 | MCP Python SDK | 2.0.0 | Optional Streamable HTTP MCP path |
 
-## v2.1 fixed-slot compatibility boundary
+## Stable v2.1 fixed-slot compatibility boundary
 
 Dynamic TTS in stable `v2.1` releases requires all of the following:
 
@@ -26,9 +28,26 @@ Dynamic TTS in stable `v2.1` releases requires all of the following:
 - an exact, persisted physical slot binding for each configured target;
 - ownership evidence that still matches immediately before each overwrite.
 
-If any write precondition fails, arbitrary TTS fails closed. The service never falls back to the beta.2 per-phrase ringtone allocation because that can accumulate device-side artifacts under high-cardinality workloads.
+If any write precondition fails, arbitrary TTS fails closed. The service never falls back to the beta.2 per-phrase ringtone allocation model because that can accumulate device-side artifacts under high-cardinality workloads.
 
 Buzzer/default/persistent preset operations can remain available independently when their existing Protect paths are healthy.
+
+## v2.1.8 resident-content boundary
+
+v2.1.8 may skip a physical Smart Chime write when requested content is already resident, but application cache state alone is not sufficient. A resident hit requires:
+
+- source MP3 identity to match;
+- the exact persisted physical slot and owned filename to match;
+- the same configured physical device identity;
+- a persisted write generation that has not been invalidated by a later write/lifecycle event;
+- an uptime-derived boot epoch that still matches the currently observed Smart Chime boot;
+- all requested targets to satisfy the same trust requirements.
+
+Direct-device uptime is deliberately part of the trust model because physical validation showed that static MAC/serial/firmware and slot metadata can remain unchanged across a Smart Chime reboot even when the playable slot bytes do not survive correctly.
+
+The first v2.1.8 candidate failed this gate and produced wrong audio after a physical Smart Chime reboot. It was not released. The corrected implementation invalidates resident proof on boot discontinuity, observed reconnect, and guarded lifecycle operations. The fixed candidate was physically retested: the first post-reboot request performed one safe rewrite and the next same-boot request reused resident content correctly.
+
+If boot continuity is missing, malformed, or outside the configured tolerance, resident reuse is rejected and the phrase is rewritten.
 
 ## Protect + direct responsibilities
 
@@ -36,11 +55,13 @@ The v2.1 path intentionally uses both sides:
 
 ```text
 Direct Smart Chime HTTPS
-  -> replace bytes only in a proven UA-TTS slot
+  -> read device info/uptime for capability + boot evidence
+  -> replace bytes only in a proven UA-TTS slot when needed
 
 Protect/NVR
   -> retain the persistent ringtone identity
   -> issue play-speaker
+  -> provide event/reconnect observations used for lifecycle invalidation
 ```
 
 A successful direct save is not itself enough to claim an arbitrary physical slot. Generic staging remains disabled.
@@ -48,10 +69,10 @@ A successful direct save is not itself enough to claim an arbitrary physical slo
 ## Firmware evidence levels
 
 - **Level 1 — strings signature:** `scripts/fw_signature.py` extracts printable clues, exact/normalized full-phrase matches, offsets, and bounded contexts. String presence does not prove a route is registered or safe.
-- **Level 2 — controlled device evidence:** sanitized tests can prove exact slot/hash/size behavior without publishing deployment credentials.
-- **Level 3 — production enablement:** requires explicit ownership evidence, capability gating, and fail-closed behavior in code.
+- **Level 2 — controlled device evidence:** sanitized tests can prove exact slot/hash/size/lifecycle behavior without publishing deployment credentials.
+- **Level 3 — production enablement:** requires explicit ownership evidence, capability gating, lifecycle/boot safety where relevant, and fail-closed behavior in code.
 
-After a Smart Chime firmware update, treat fixed-slot writes as unverified until compatibility is retested. Signature changes alone must never enable direct writes.
+After a Smart Chime firmware update, treat fixed-slot writes and resident reuse as unverified until compatibility is retested. Signature changes alone must never enable direct writes.
 
 ## Credential handling
 
@@ -63,7 +84,7 @@ Live validation on UniFi OS `5.1.31`, Protect `7.2.105`, and Smart Chime firmwar
 
 Live inspection of the Protect frontend showed that **Reveal** performs `GET /devices/password/{deviceType}/{deviceId}`, while **Edit** uses `PATCH` on the same resource. The value returned by Reveal exactly matched the known working `CHIME_DIRECT_PASSWORD` and returned **HTTP 200** with username `ubnt` against the Smart Chime's read-only `/api/info` check.
 
-The earlier `HTTP 401` result attributed to a UI recovery value was traced to incorrectly captured UI text rather than the value returned by Reveal. It is superseded by the verified Reveal result and must not be used to characterize the credential flow.
+The earlier `HTTP 401` result attributed to a recovery value was traced to incorrectly captured UI text rather than the actual value returned by Reveal. That result is superseded by the verified Reveal flow.
 
 For onboarding, use **Reveal**, not **Edit**. Edit is a credential-changing operation and is not required to configure UniFi Announcer. The validated flow requires no SSH, Protect database access, backup scraping, credential reset, or exploit. See [`CREDENTIALS.md`](../CREDENTIALS.md).
 
@@ -71,4 +92,8 @@ The project does not retrieve the credential automatically. MCP and Home Assista
 
 ## Protect WebSocket framing
 
-The existing sanitized fixture covers one/two linked frames with an 8-byte header and JSON or zlib payload. It contains no live IDs, addresses, or auth.
+The existing sanitized fixture covers one/two linked frames with an 8-byte header and JSON or zlib payload. It contains no live IDs, addresses, or auth. In v2.1.8, observed Smart Chime reconnect state is also used to revoke resident content proof before later playback trusts it.
+
+## Physical validation boundary
+
+Stable v2.1.8 physical validation covers one Smart Chime on Protect `7.2.105` / firmware `1.7.20`. Multiple Chimes/groups are covered by automated fixtures and concurrency tests but have not been physically validated on multiple devices. Request-path timing was measured, but no synchronized microphone benchmark was used; do not generalize the single-device timing numbers into a universal acoustic-latency claim.

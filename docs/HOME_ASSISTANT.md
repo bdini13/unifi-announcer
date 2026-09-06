@@ -6,7 +6,7 @@ UniFi Announcer includes a HACS-compatible custom integration under `custom_comp
 > The HACS integration is a **client for the UniFi Announcer Docker service**. Run and configure the Docker backend first; installing HACS alone does not provide Smart Chime playback or TTS.
 
 > [!WARNING]
-> Use the latest stable v2.1 release for new installations. `v2.1.0-beta.2` and earlier can leave device-side ringtone artifacts when many unique phrases are spoken. Stable v2.1 uses exactly two fixed service-owned TTS slots instead.
+> Use the latest stable v2.1 release for new installations. `v2.1.0-beta.2` and earlier can leave device-side ringtone artifacts when many unique phrases are spoken. Stable v2.1 uses exactly two fixed service-owned dynamic TTS slots instead.
 
 ## Install
 
@@ -25,13 +25,13 @@ UniFi Announcer includes a HACS-compatible custom integration under `custom_comp
 
 Copy `custom_components/unifi_announcer` into Home Assistant's `/config/custom_components/` directory and restart Home Assistant. The Docker backend is still required.
 
-For release-candidate testing, copy the component from the exact candidate commit rather than mixing a candidate backend with an older HACS component.
+Backend and Home Assistant integration versions should be upgraded together. For candidate testing, copy the component from the exact candidate commit rather than mixing a candidate backend with an older HACS component.
 
 ## Announcer-side requirement for arbitrary TTS
 
 Stable v2.1 uses exactly two persistent service-owned Smart Chime slots for dynamic speech. The Announcer container must be able to prove and overwrite those exact slots, which requires a current per-device Smart Chime credential supplied on the Announcer host through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`.
 
-Home Assistant never receives that credential. Credential-retrieval procedures and raw authentication research are intentionally not part of the public repository.
+Home Assistant never receives that credential. On the validated Protect stack, obtain it through Protect's authenticated **Manual Recovery → Reveal** flow documented in [`CREDENTIALS.md`](../CREDENTIALS.md).
 
 Verify the Announcer host before troubleshooting Home Assistant:
 
@@ -44,7 +44,7 @@ curl -fsS "${AUTH[@]}" http://<announcer-host>:8095/tts/slots/status
 
 Arbitrary TTS requires `"ready": true` and `"slot_count": 2`. Buzzer/default/preset behavior can remain available when fixed-slot dynamic TTS is not ready.
 
-If `/version` reports `git_sha: unknown`, rebuild the backend with the exact checkout SHA:
+If `/version` reports `git_sha: unknown`, rebuild the backend with exact checkout provenance:
 
 ```bash
 export GIT_SHA="$(git rev-parse HEAD)"
@@ -78,9 +78,9 @@ Changing options reloads the integration. Volume `0` is valid and remains `0` ra
 
 ## Devices and entities
 
-Physical Smart Chimes are represented as physical Ubiquiti devices using stable Protect chime IDs. Logical groups attach to the UniFi Announcer service device rather than pretending to be physical hardware.
+Physical Smart Chimes are represented as physical Ubiquiti devices using stable Protect Chime IDs. Logical groups attach to the UniFi Announcer service device rather than pretending to be physical hardware.
 
-For each configured physical chime the integration creates:
+For each configured physical Chime the integration creates:
 
 - `notify` entity for standard text announcements;
 - `media_player` for text and preset `play_media`;
@@ -91,7 +91,7 @@ For each configured physical chime the integration creates:
 - queue-depth sensor;
 - **Last playback result** sensor.
 
-Logical groups get the same playback controls and Last playback result sensor, but no queue-depth sensor. Queue depth belongs to physical chimes; v2.1 intentionally avoids a fake aggregate group value.
+Logical groups get the same playback controls and Last playback result sensor, but no queue-depth sensor. Queue depth belongs to physical Chimes; v2.1 intentionally avoids a fake aggregate group value.
 
 If `CHIMES_CONFIG` or `GROUPS_CONFIG` changes after Home Assistant has loaded the integration, reload/restart the integration so entity topology is rebuilt.
 
@@ -174,19 +174,21 @@ Values are intentionally simple at the success/failure boundary while preserving
 
 A successful HTTP request alone does not make HA invent acoustic confirmation. Physical audibility is part of release/device validation, while the sensor reports the dispatcher/client result visible to Home Assistant.
 
-## v2.1.6 stale Protect inventory behavior
+## v2.1.8 resident reuse and stale Protect inventory
 
-A Smart Chime slot overwrite can succeed while Protect's `speakerTrackList` continues to report the previous content fingerprint for a short period. Older behavior could make the HA request wait until the synchronization timeout even when the device had already accepted the new bytes.
+A Smart Chime slot overwrite can succeed while Protect's `speakerTrackList` continues to report the previous content fingerprint. v2.1.6 introduced a narrow stale Protect inventory fallback; v2.1.8 keeps that safety boundary and adds application-authoritative resident-content reuse.
 
-v2.1.6 keeps the ownership boundary but treats one narrow state as stale Protect control-plane metadata:
+For **new content**:
 
-1. the direct overwrite must already have succeeded;
-2. Protect must still identify the same proven physical slot;
-3. the exact persisted UniFi Announcer-owned filename must still match;
-4. only the content fingerprint may be stale;
-5. the service still waits for a bounded synchronization interval before using this fallback.
+1. exact slot ownership is preflighted;
+2. the direct overwrite must succeed;
+3. Protect is briefly polled for fresh content evidence;
+4. if the fingerprint remains stale, playback may continue only when Protect still identifies the same proven physical slot and exact UniFi Announcer-owned filename;
+5. ambiguity, filename drift, missing ownership evidence, or other positive mismatches fail closed.
 
-A different filename, ambiguous slot, missing ownership evidence, or other positive drift still fails closed. The fallback does not authorize a new or guessed slot.
+For **resident repeated content**, v2.1.8 may skip the write/sync/settle path entirely, but only while all requested targets have matching trusted content and the current Smart Chime boot remains proven. Trusted state is tied to direct-device uptime/boot epoch. A reboot, reconnect, device change, lifecycle invalidation, failed write, or unprovable boot continuity forces a safe rewrite rather than trusting stale bytes.
+
+This distinction matters for latency: in live single-Chime validation, 10 same-boot resident HA requests measured roughly 0.54–0.66 seconds request round-trip with zero slot writes. These were request-path measurements, not synchronized acoustic benchmarks.
 
 ## Availability
 
@@ -196,24 +198,26 @@ Fixed-slot readiness is an Announcer runtime concern. If `/tts/slots/status` is 
 
 ## Diagnostics
 
-Home Assistant diagnostics include safe service version, health, chime/group names, preset names, queue depths, and configuration metadata. API keys and credentials are redacted; raw Protect responses, physical-slot credentials, and private support logs are not included.
+Home Assistant diagnostics include safe service version, health, Chime/group names, preset names, queue depths, and configuration metadata. API keys and credentials are redacted; raw Protect responses, physical-slot credentials, and private support logs are not included.
 
 The Version sensor reports the semantic UniFi Announcer version. Its attributes include the container `git_sha`, allowing a deployed image to be compared with the expected release commit when the image was built with `GIT_SHA`.
 
-## Release verification from Home Assistant
+For backend detail, authenticated `/tts/slots/status` exposes sanitized v2.1.8 resident-content/last-prepare state and `/metrics/json` exposes process-local counters/histograms.
 
-For v2.1.6 the physical single-device release gate requires all of the following from the exact release candidate:
+## Stable v2.1.8 verification
 
-1. `/version` identifies the expected candidate SHA rather than `unknown`;
-2. `/tts/slots/status` reports two ready slots for arbitrary TTS;
-3. pressing the normal selected-preset or announcement control completes successfully;
-4. the Announcer API endpoint returns HTTP 200;
-5. the Protect `play-speaker` request returns HTTP 200;
-6. the physical Smart Chime produces the expected audible announcement;
-7. Last playback result becomes `success` immediately;
-8. a deliberate failed playback path makes Last playback result become `failure`.
+For a v2.1.8 deployment, verify the backend and matching HA component together:
 
-Do not publish a release solely because automated CI passed if a release-specific physical gate is still marked pending in [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
+1. `/version` reports semantic version `2.1.8` and the expected build SHA rather than `unknown`;
+2. `/tts/slots/status` reports exactly two ready slots when arbitrary TTS is configured;
+3. a normal HA text announcement completes without timeout;
+4. Protect playback succeeds and the expected phrase is audibly heard;
+5. Last playback result becomes `success` immediately;
+6. repeat the same phrase on the same Chime boot and confirm it remains correct;
+7. the repeated request should normally show a resident content hit with zero direct upload when boot continuity is still trusted;
+8. if the Chime has rebooted/reconnected, the first safe request may rewrite once before later same-boot reuse.
+
+The release-specific physical evidence, including discovery and remediation of an earlier reboot-safety defect, is retained in [`validation/v2.1.8-live-latency-validation.md`](validation/v2.1.8-live-latency-validation.md).
 
 ## Troubleshooting
 
@@ -223,14 +227,16 @@ Do not publish a release solely because automated CI passed if a release-specifi
 | Invalid API key / reauthentication requested | `APP_API_KEY` changed or mismatches | Enter the current application key in the reauth flow |
 | Cannot connect | HA cannot reach Docker host/port | Verify Announcer URL, port, and LAN routing |
 | No preset options | `/presets` failed or state is stale | Verify `/presets`, then reload the integration |
-| HA playback times out while direct slot tests work | Backend older than v2.1.6 or slot sync is failing for a reason other than stale fingerprint | Verify `/version`, update backend/client together, then inspect slot-sync/backend logs |
-| Last playback result stays `unknown` after an action | HA integration older than v2.1.6 or action never reached the integration | Update/restart the custom integration and retry |
+| HA playback times out while direct slot tests work | Backend/client mismatch or non-stale slot-sync failure | Verify `/version`, update backend/client together, inspect slot timing/status and backend logs |
+| Last playback result stays `unknown` after an action | Action never reached the integration or old component is loaded | Update/restart the custom integration and retry |
 | Last playback result is `failure` | Backend/client action failed | Inspect the HA error plus Announcer logs; verify Protect and slot status |
 | Text TTS fails but preset/buzzer works | Fixed slots not ready or direct credential stale | Check `/tts/slots/status` with `X-API-Key` |
+| Repeated text performs a write | Resident proof was missing/invalidated by lifecycle or boot change | Usually safe/expected; inspect `content_reuse` state and lifecycle counters |
+| First text after Chime reboot rewrites once | v2.1.8 correctly invalidated old resident bytes | Expected; the next same-boot replay can become a zero-write hit |
 | Slot status reports ownership drift | Binding no longer matches persisted proof | Stop dynamic TTS and reconcile; never force an unknown slot |
 | `/version` shows `git_sha: unknown` | Container built without `GIT_SHA` | Rebuild with `export GIT_SHA="$(git rev-parse HEAD)"` |
 | TTS synthesis fails | Piper/Edge TTS unavailable | Check the configured TTS service separately |
-| Group has no queue sensor | Intentional in v2.1 | Inspect member-chime queue sensors |
-| Newly configured chime/group is absent | Entity topology predates config change | Reload/restart the integration |
+| Group has no queue sensor | Intentional in v2.1 | Inspect member-Chime queue sensors |
+| Newly configured Chime/group is absent | Entity topology predates config change | Reload/restart the integration |
 
 Keep UniFi Announcer on a trusted LAN/VPN or behind a deliberately configured authenticated reverse proxy. Do not expose it directly to the public internet.

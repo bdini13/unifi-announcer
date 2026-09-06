@@ -62,9 +62,9 @@ Build/release identity:
 - [x] OCI image label `org.opencontainers.image.revision` matches that same SHA.
 - [x] README Quick Start/upgrade commands pin `v2.1.6` and inject `git rev-parse HEAD` into the build.
 
-## v2.1.7 release gate
+## v2.1.7 release gate — PASS
 
-v2.1.7 changes documentation, release identity, and packaging only. Runtime playback behavior and the two-slot ownership model remain unchanged from physically validated v2.1.6, so this patch does not require another audible-playback gate before publication.
+v2.1.7 changed documentation, release identity, packaging, and credential-onboarding guidance only. Runtime playback behavior and the two-slot ownership model remained unchanged from physically validated v2.1.6, so this patch did not require another audible-playback gate before publication.
 
 Credential-onboarding evidence:
 
@@ -80,24 +80,27 @@ Release identity and publication:
 
 - [x] `APP_VERSION`, HA `INTEGRATION_VERSION`, and HA manifest version all equal `2.1.7`.
 - [x] Release script targets `v2.1.7` and `docs/RELEASE_NOTES_v2.1.7.md`.
-- [x] README Quick Start/upgrade commands pin `v2.1.7` and inject `git rev-parse HEAD` into the build.
-- [x] Release publisher is bound to the trusted `main` commit that transitions `APP_VERSION` from `2.1.6` to `2.1.7`, preventing a later unrelated `main` push from becoming the release target.
-- [x] HACS and Hassfest run in a read-only job with checkout credentials disabled; only the publishing job receives `contents: write`.
-- [x] Focused release/documentation tests, full core tests, Ruff, compile, JSON, diff, and privacy scans pass locally.
-- [ ] Exact branch-head and merge-ref GitHub CI pass.
-- [ ] Trusted post-merge `main` CI and the v2.1.7 publisher pass.
-- [ ] Published tag and release both target the exact validated `main` SHA.
-- [ ] Tagged deployment reports matching app/HA versions, `/version.git_sha`, and OCI image revision.
+- [x] README Quick Start/upgrade commands pinned `v2.1.7` at publication and injected `git rev-parse HEAD` into the build.
+- [x] Release publisher was bound to the trusted `main` commit that transitions `APP_VERSION` from `2.1.6` to `2.1.7`.
+- [x] HACS and Hassfest ran in a read-only job with checkout credentials disabled; only the publishing job received `contents: write`.
+- [x] Focused release/documentation tests, full core tests, Ruff, compile, JSON, diff, and privacy scans passed.
+- [x] Exact branch-head and merge-ref GitHub CI passed.
+- [x] Trusted post-merge `main` CI and the v2.1.7 publisher passed.
+- [x] Published tag and immutable release both target `6384ae4132ef677303b07232ce443cf66029efbf`.
+- [x] The completed version-specific publisher was retired after publication.
 
-## v2.1.8 release gate — candidate PASS
+## v2.1.8 release gate — PASS
 
-v2.1.8 adds content-aware resident-slot reuse and therefore requires fresh physical playback, restart, and Smart Chime reboot validation. The detailed evidence is retained in [the v2.1.8 live validation report](validation/v2.1.8-live-latency-validation.md).
+v2.1.8 adds content-aware resident-slot reuse and therefore required fresh physical playback, restart, and Smart Chime reboot validation. The detailed record intentionally retains both the first candidate's blocking reboot failure and the corrected implementation's passing remediation evidence: [v2.1.8 live validation report](validation/v2.1.8-live-latency-validation.md).
 
 Safety and latency evidence:
 
 - [x] Normal repeated speech uses a zero-write resident path and plays the requested phrase correctly.
+- [x] Ten resident HA request-path samples measured p95 approximately 663 ms with zero direct upload/sync/settle work; this is not an acoustic microphone benchmark.
 - [x] A/B/A content reuse and two-slot eviction retain exactly two service-owned dynamic identities.
 - [x] Announcer-process restart preserves correct same-boot resident reuse.
+- [x] The initial static-identity-only candidate failed physical Smart Chime reboot safety and was not released.
+- [x] The remediation ties resident proof to direct-device uptime/boot epoch and invalidates proof across lifecycle breaks.
 - [x] Smart Chime reboot invalidates all resident content proof before post-reboot playback.
 - [x] Direct-device uptime/boot epoch resets are detected even when static identity and slot metadata remain unchanged.
 - [x] First post-reboot request performs exactly one safe rewrite and plays the correct phrase.
@@ -109,13 +112,17 @@ Release identity and publication:
 
 - [x] `APP_VERSION`, HA `INTEGRATION_VERSION`, and HA manifest version all equal `2.1.8`.
 - [x] Release script targets `v2.1.8` and `docs/RELEASE_NOTES_v2.1.8.md`.
-- [x] Release workflow is bound to trusted post-merge `main` CI and the `2.1.7` to `2.1.8` version transition.
-- [x] Existing `v2.1.7` release artifacts remain immutable historical records.
+- [x] Release workflow was bound to trusted post-merge `main` CI and the `2.1.7` → `2.1.8` version transition.
+- [x] Existing v2.1.7 release artifacts remain immutable historical records.
 - [x] The candidate was built with exact Git SHA provenance while preserving `.env` and persistent `/data`.
-- [x] Exact final branch-head and merge-ref GitHub CI pass after release-preparation changes.
-- [ ] Trusted post-merge `main` CI and the v2.1.8 publisher pass.
-- [ ] Published tag and release both target the exact validated `main` SHA.
-- [ ] Immutable release deployment reports matching app/HA versions, `/version.git_sha`, and OCI image revision.
+- [x] Exact final branch-head and merge-ref GitHub CI passed after release-preparation changes.
+- [x] Trusted post-merge `main` pytest, Home Assistant, HACS/Hassfest release validation, and publisher checks passed.
+- [x] Published `v2.1.8` tag and immutable release both target `a7873e8a38e7f8c319680073a47d5d4856466560`.
+- [x] `main` and the `v2.1.8` tag resolved to the same release commit at publication.
+- [x] The completed version-specific v2.1.8 publisher is retired by the post-release cleanup PR.
+- [ ] Final local deployment of the immutable `v2.1.8` tag reports matching app/HA versions, `/version.git_sha`, OCI image revision, and passes one audible new/repeated-text smoke test.
+
+The unchecked final tagged deployment is an operational post-publication smoke check. It does not change the immutable GitHub release contents or the fact that the shipped runtime blobs match the physically validated remediation code, but it should be completed before broad public promotion.
 
 ## Publish/deploy sequence
 
@@ -125,14 +132,15 @@ Do not merge/tag until every required release-specific physical gate is satisfie
 2. Back up `.env` and persistent `/data` state on the live host.
 3. Deploy that exact candidate SHA with `GIT_SHA` embedded.
 4. Install/reload the matching HA candidate component.
-5. Complete the live HA success/failure gate and record evidence on the release PR.
+5. Complete the release-specific physical gate and record evidence on the release PR.
 6. Update release notes/checklist so they explicitly record the live gate result before merge.
 7. Before publication, verify the release notes contain no unresolved future-tense blocker such as `must not be published until` and no unchecked release-specific gate that has actually passed.
 8. Merge only the validated candidate code/docs into `main`.
 9. Let trusted `main` CI complete successfully.
-10. Release workflow reruns HACS/Hassfest against `workflow_run.head_sha` and publishes the release at that exact SHA.
-11. Deploy the immutable release tag/source using `GIT_SHA="$(git rev-parse HEAD)"` and repeat the HA audible playback smoke test.
+10. Release workflow reruns required release validation against `workflow_run.head_sha` and publishes the release at that exact SHA.
+11. Deploy the immutable release tag/source using `GIT_SHA="$(git rev-parse HEAD)"` and repeat the minimal audible smoke test.
 12. Verify GitHub tag/release, app version, HA manifest version, `/version`, and deployed image revision all agree.
+13. Retire any completed fixed-version publisher so ordinary post-release `main` commits do not rerun historical publishing jobs.
 
 ## Rollback gate
 
@@ -142,14 +150,14 @@ Before live candidate or release deployment:
 - [ ] Actual `/data` mount source is discovered from the running container and backed up.
 - [ ] Backup archive lists successfully with `tar -tzf`.
 - [ ] Backup checksum is recorded.
-- [ ] `track_registry.json` is preserved as ownership evidence.
+- [ ] `track_registry.json`, `dynamic_tts_slots.json`, `dynamic_tts_content_state.json` when present, and `installation.json` are preserved.
 - [ ] Previous known-good release tag is known and available.
 
 If any candidate gate fails, restore the previous code/HA component first. Do not delete or hand-edit slot ownership registries to make a failing candidate appear healthy.
 
 ## Validation limitations that must remain public
 
-- Multi-chime behavior is covered by automated tests but has not been physically validated on multiple Smart Chimes.
+- Multi-Chime behavior is covered by automated tests but has not been physically validated on multiple Smart Chimes.
 - No synchronized microphone benchmark is available; do not claim measured acoustic latency.
 - Public CI uses sanitized fixtures and cannot prove physical audibility.
 - Generic arbitrary raw upload, unknown-route probing, controller identity reuse, direct slot deletion, and direct UCP4 transport remain unsupported and outside stable v2.1.

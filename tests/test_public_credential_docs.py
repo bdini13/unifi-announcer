@@ -49,10 +49,10 @@ def test_public_credential_guide_does_not_publish_extraction_workarounds():
     assert "devicepassword\" from" not in guide
 
 
-def test_bug_report_collects_safe_credential_diagnostics():
+def test_bug_report_collects_safe_credential_and_lifecycle_diagnostics():
     template = Path(".github/ISSUE_TEMPLATE/bug_report.yml").read_text()
 
-    assert "placeholder: v2.1.7" in template
+    assert "placeholder: v2.1.8" in template
     assert "id: tts_mode" in template
     assert "id: credential_check" in template
     assert "Manual Recovery → Reveal" in template
@@ -61,6 +61,11 @@ def test_bug_report_collects_safe_credential_diagnostics():
     assert "Reveal available; /api/info returned HTTP 401" in template
     assert "Never paste the revealed credential" in template
     assert "CREDENTIALS.md" in template
+    assert "id: lifecycle_context" in template
+    assert "Smart Chime rebooted or lost power" in template
+    assert "Protect reported a Chime disconnect/reconnect" in template
+    assert "id: slot_status" in template
+    assert "content hit/miss" in template
 
 
 def test_v2_1_6_release_gate_is_recorded_as_passed():
