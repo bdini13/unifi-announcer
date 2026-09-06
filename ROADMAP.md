@@ -14,7 +14,13 @@ The v2.1 line establishes the production foundation:
 - REST, MQTT, queueing, quiet-hours policy, dedupe, and named targets/groups;
 - build/version diagnostics and release validation gates.
 
-v2.1.6 focuses on Home Assistant playback reliability when Protect's ringtone inventory lags a successful owned-slot overwrite, plus immediate HA playback-result reporting.
+Key stable milestones:
+
+- **v2.1.6** — Home Assistant playback reliability when Protect's ringtone inventory lags a successful owned-slot overwrite, plus immediate HA playback-result reporting.
+- **v2.1.7** — validated Protect UI onboarding for the Smart Chime's unique device password through Manual Recovery → Reveal.
+- **v2.1.8** — content-aware same-boot resident TTS reuse, boot-epoch validation, durable write-ahead content invalidation, and Smart Chime reboot/reconnect safety.
+
+v2.1.8 substantially reduces repeated-announcement request-path latency by avoiding redundant physical slot writes when content is already resident and the current Smart Chime boot remains proven. New-content latency is still dominated by the device's physical ringtone write.
 
 ## Planned v2.2
 
@@ -35,15 +41,16 @@ v2.1.6 focuses on Home Assistant playback reliability when Protect's ringtone in
 ### Integration quality
 
 - consider optional server-sent events for faster HA state updates while retaining polling fallback;
-- improve diagnostics for queue state, slot synchronization, and release/build identity;
+- improve diagnostics for queue state, slot synchronization, resident-content lifecycle state, and release/build identity;
 - collect independent compatibility reports across additional Protect and Smart Chime firmware versions.
 
 ## Validation backlog
 
 These are evidence gaps, not promises of unsupported behavior:
 
-- physical multi-chime/group validation with more than one Smart Chime;
-- independent compatibility reports from other UniFi console models;
-- synchronized acoustic latency measurement if a reproducible test setup becomes available.
+- physical multi-Chime/group validation with more than one Smart Chime;
+- independent compatibility reports from other UniFi console models and Protect/Chime versions;
+- synchronized acoustic latency measurement with a reproducible trigger/microphone setup;
+- longer-term compatibility evidence across firmware upgrades and real-world reboot/power-loss events.
 
 The project will not claim these as validated until there is direct evidence.
