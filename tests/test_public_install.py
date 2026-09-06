@@ -9,20 +9,21 @@ def test_compose_uses_named_volume_for_writable_default_data():
     assert "watchtower.enable" not in compose.lower()
 
 
-def test_readme_targets_v2_1_7_and_uses_dynamic_release_badge():
+def test_readme_targets_v2_1_8_and_uses_dynamic_release_badge():
     readme = Path("README.md").read_text()
-    assert "git checkout v2.1.7" in readme
+    assert "git checkout v2.1.8" in readme
     assert "img.shields.io/github/v/release/bdini13/unifi-announcer" in readme
     assert "releases/latest" in readme
-    assert "**Stable:** `v2.1.7`" in readme
+    assert "**Stable:** `v2.1.8`" in readme
+    assert "**Release candidate:** `v2.1.8`" not in readme
     assert 'AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")' in readme
     assert "$UNIFI..." not in readme
     assert "scheduled for `v2.1.1`" not in readme
     assert "**Next release:** `v2.1.1`" not in readme
-    assert Path("docs/RELEASE_NOTES_v2.1.7.md").exists()
+    assert Path("docs/RELEASE_NOTES_v2.1.8.md").exists()
+    assert Path("docs/validation/v2.1.8-live-latency-validation.md").exists()
     checklist = Path("docs/RELEASE_CHECKLIST.md").read_text()
-    assert "## v2.1.7 release gate" in checklist
-    assert "fresh-adoption behavior was not independently repeated" in checklist
+    assert "## v2.1.8 release gate" in checklist
 
 
 def test_quick_start_handles_secrets_and_temporary_login_safely():
@@ -86,8 +87,31 @@ def test_readme_top_callouts_are_focused_on_runtime_risks():
     assert "CHIME_DIRECT_PASSWORD" in intro
     assert "CHIME_CREDENTIAL_FILE" in intro
     assert "Protect `7.2.105`" in intro
+    assert "firmware `1.7.20`" in intro
     assert "Manual Recovery → Reveal" in intro
     assert "CREDENTIALS.md" in intro
+
+
+def test_readme_documents_v2_1_8_resident_reuse_and_boot_safety():
+    readme = Path("README.md").read_text()
+    env_example = Path(".env.example").read_text()
+    assert "Content-aware resident TTS reuse | ✅ v2.1.8" in readme
+    assert "Smart Chime reboot/reconnect invalidation | ✅ v2.1.8" in readme
+    assert "boot epoch" in readme
+    assert "direct-device uptime" in readme
+    assert "write-ahead invalidation" in readme
+    assert "TTS_SLOT_BOOT_EPOCH_TOLERANCE" in readme
+    assert "TTS_SLOT_BOOT_EPOCH_TOLERANCE=5.0" in env_example
+    assert "v2.1.8 candidate" not in env_example
+
+
+def test_readme_latency_claims_remain_bounded_to_request_path():
+    readme = Path("README.md").read_text()
+    assert "## Observed v2.1.8 latency" in readme
+    assert "p95:     663 ms" in readme
+    assert "request round-trip measurements" in readme
+    assert "not synchronized microphone/acoustic-onset measurements" in readme
+    assert "does not claim measured acoustic latency" in readme
 
 
 def test_hacs_docs_make_backend_requirement_explicit():
@@ -127,7 +151,6 @@ def test_readme_documents_backup_and_rollback_for_named_volume():
     assert "sha256sum" in rollback
     assert "restore-test" in rollback
     assert "git checkout <previous-tag>" in rollback
-    assert "track_registry.json" in rollback
 
 
 def test_public_configuration_fails_closed_without_api_key():
@@ -141,12 +164,17 @@ def test_public_configuration_fails_closed_without_api_key():
     assert "chmod 600" in readme
 
 
-def test_upgrade_docs_preserve_legacy_default_bind_data():
+def test_upgrade_docs_preserve_legacy_default_bind_data_and_v218_state():
     readme = Path("README.md").read_text()
+    assert "## Upgrade to v2.1.8" in readme
     assert "./data" in readme
     assert "DATA_PATH=./data" in readme
     assert "docker compose config" in readme
     assert "track_registry.json" in readme
+    assert "dynamic_tts_slots.json" in readme
+    assert "dynamic_tts_content_state.json" in readme
+    assert "installation.json" in readme
+    assert "No manual data migration is required from v2.1.7" in readme
 
 
 def test_release_identity_is_v2_1_8():
@@ -167,13 +195,12 @@ def test_fastapi_metadata_uses_release_identity(main_module):
 
 def test_stable_claims_disclose_physical_validation_boundary():
     readme = Path("README.md").read_text()
-    notes = Path("docs/RELEASE_NOTES_v2.1.0.md").read_text()
-    release_notes = Path("docs/RELEASE_NOTES_v2.1.6.md").read_text()
+    release_notes = Path("docs/RELEASE_NOTES_v2.1.8.md").read_text()
     assert "Multiple chimes and named groups | 🧪" in readme
-    assert "physically exercised on one Smart Chime" in readme
+    assert "physically exercised on **one** Smart Chime" in readme
     assert "100-unique-message **automated** regression" in readme
-    assert "Multi-chime behavior is covered by automated tests" in notes
-    assert "has not yet been physically validated on multiple Smart Chimes" in release_notes
+    assert "Multi-Chime/group playback has **not** been physically validated" in readme
+    assert "Physical validation covered one Smart Chime" in release_notes
     assert "No synchronized microphone benchmark" in release_notes
 
 
