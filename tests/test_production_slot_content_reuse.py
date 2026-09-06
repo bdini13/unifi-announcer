@@ -160,6 +160,16 @@ async def bootstrap(number):
     return (b"bootstrap-slot-" + str(number).encode()) * (10 + number)
 
 
+@pytest.mark.parametrize("value", ["-1", "inf", "nan"])
+def test_boot_epoch_tolerance_must_be_finite_and_nonnegative(
+    tmp_path, monkeypatch, value
+):
+    world = FakeProtectWorld()
+    monkeypatch.setenv("TTS_SLOT_BOOT_EPOCH_TOLERANCE", value)
+    with pytest.raises(ValueError, match="finite and nonnegative"):
+        make_manager(tmp_path, world)
+
+
 @pytest.mark.asyncio
 async def test_repeated_identical_phrase_reuses_resident_slot_with_stale_protect_metadata(
     tmp_path,
@@ -307,6 +317,57 @@ async def test_uptime_reset_invalidates_content_even_when_device_identity_is_unc
 
     assert len(world.overwrite_calls) == before + 1
     assert manager.status()["content_reuse"]["last_prepare"]["content_hit"] is False
+
+
+@pytest.mark.asyncio
+async def test_cancelled_prepare_releases_acquired_slot(tmp_path, monkeypatch):
+    world = FakeProtectWorld(stale_control_plane=True)
+    target = make_target(world)
+    manager = make_manager(tmp_path, world)
+    assert (await manager.startup([target], bootstrap_audio_factory=bootstrap))["ready"]
+
+    entered_preflight = asyncio.Event()
+    never_finishes = asyncio.Event()
+
+    async def blocked_preflight(*_args, **_kwargs):
+        entered_preflight.set()
+        await never_finishes.wait()
+
+    monkeypatch.setattr(manager, "_preflight_binding", blocked_preflight)
+    preparation = asyncio.create_task(manager.prepare(b"cancel-me", [target]))
+    await entered_preflight.wait()
+    assert manager._busy
+
+    preparation.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await preparation
+
+    assert manager._busy == set()
+    assert manager._busy_targets == {}
+
+
+@pytest.mark.asyncio
+async def test_unrelated_target_lease_does_not_block_lifecycle_invalidation(tmp_path):
+    world = FakeProtectWorld(chime_ids=("chime-a", "chime-b"))
+    targets = [
+        make_target(world, "chime-a", "A"),
+        make_target(world, "chime-b", "B"),
+    ]
+    manager = make_manager(tmp_path, world)
+    assert (await manager.startup(targets, bootstrap_audio_factory=bootstrap))["ready"]
+
+    number, _ = await manager._acquire_slot_number_for_content(
+        md5="busy-b", size=6, target_ids=["chime-b"]
+    )
+    invalidation = asyncio.create_task(
+        manager.invalidate_target_content(["chime-a"], reason="device_reconnect")
+    )
+    await asyncio.sleep(0)
+    completed_while_b_busy = invalidation.done()
+
+    await manager.release_now(number)
+    await invalidation
+    assert completed_while_b_busy
 
 
 @pytest.mark.asyncio

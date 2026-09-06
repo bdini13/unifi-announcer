@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import math
 import os
 import time
 from contextlib import asynccontextmanager
@@ -60,9 +61,17 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
         self._device_identities: dict[str, str] = {}
         self._device_boot_epochs: dict[str, float] = {}
         self._invalidating_targets: dict[str, int] = {}
+        self._busy_targets: dict[int, frozenset[str]] = {}
         self.boot_epoch_tolerance_s = float(
             os.getenv("TTS_SLOT_BOOT_EPOCH_TOLERANCE", "5.0")
         )
+        if (
+            not math.isfinite(self.boot_epoch_tolerance_s)
+            or self.boot_epoch_tolerance_s < 0
+        ):
+            raise ValueError(
+                "TTS_SLOT_BOOT_EPOCH_TOLERANCE must be finite and nonnegative"
+            )
         self.last_prepare: dict[str, Any] | None = None
 
     def _observe(self, name: str, value_ms: float) -> None:
@@ -195,7 +204,14 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
             try:
                 while any(
                     number in self._busy
-                    and any(chime_id in targets for chime_id in slot.bindings)
+                    and bool(
+                        targets
+                        & set(
+                            self._busy_targets.get(
+                                number, frozenset(slot.bindings)
+                            )
+                        )
+                    )
                     for number, slot in self.slots.items()
                 ):
                     await self._condition.wait()
@@ -449,6 +465,7 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
                         )
                         content_match = False
                     self._busy.add(number)
+                    self._busy_targets[number] = frozenset(target_ids)
                     self._next_slot = 1 if number == 2 else 2
                     return number, content_match
                 await self._condition.wait()
@@ -606,9 +623,22 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
                 duration_ms=estimate_mp3_duration_ms(mp3),
                 content_md5=md5,
             )
+        except asyncio.CancelledError:
+            await self.release_now(number)
+            raise
         except Exception:
             await self.release_now(number)
             raise
+
+    async def shutdown(self) -> None:
+        await super().shutdown()
+        self._busy_targets.clear()
+
+    async def release_now(self, number: int) -> None:
+        async with self._condition:
+            self._busy.discard(number)
+            self._busy_targets.pop(number, None)
+            self._condition.notify_all()
 
     @staticmethod
     def _reported_binding_track(
