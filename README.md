@@ -8,12 +8,12 @@
 
 **Turn a UniFi Protect Smart Chime into a local, programmable announcement speaker.**
 
-UniFi Announcer is a self-hosted announcement service for UniFi Protect Smart Chimes. It adds text-to-speech, reusable spoken presets, buzzer/default playback, queues, quiet-hours policy, Home Assistant controls, REST/MQTT, and an optional MCP interface while keeping UniFi Protect in the actual playback path.
+UniFi Announcer is a self-hosted service for UniFi Protect Smart Chimes. It adds arbitrary text-to-speech, reusable spoken presets, buzzer/default playback, queues, quiet-hours policy, Home Assistant controls, REST/MQTT, local rules, and an optional MCP interface while keeping UniFi Protect in the actual playback path.
 
-For arbitrary speech it synthesizes audio with Piper or Edge TTS, stores MP3s in a bounded host cache, overwrites one of exactly two persistent service-owned Smart Chime slots, then asks Protect to play that persistent ringtone ID. New phrases do **not** create a new Protect ringtone each time.
+For dynamic speech, UniFi Announcer synthesizes audio with Piper or Edge TTS, stores MP3s in a bounded host cache, and uses exactly **two persistent service-owned Smart Chime slots**. Starting with v2.1.8, recently used content can be replayed directly from a proven resident slot without another flash write. New phrases overwrite one of the two owned slots; arbitrary speech does **not** create a new Protect ringtone identity for every phrase.
 
 > [!IMPORTANT]
-> UniFi Announcer relies on undocumented UniFi Protect and Smart Chime interfaces that can change between releases. Runtime playback was physically validated for v2.1.6 on Protect 7.2.105 with Smart Chime firmware 1.7.20; v2.1.7 changes documentation and packaging only. Review [Compatibility](docs/COMPATIBILITY.md) before upgrading Protect or chime firmware.
+> UniFi Announcer relies on undocumented UniFi Protect and Smart Chime interfaces that may change between releases. Stable v2.1.8 was physically validated on one Smart Chime with Protect `7.2.105` and Smart Chime firmware `1.7.20`, including same-boot resident reuse, Announcer restart, and physical Smart Chime reboot/recovery behavior. Multi-Chime behavior is covered by automated tests but has not been physically validated on multiple devices. Review [Compatibility](docs/COMPATIBILITY.md) before upgrading Protect or Chime firmware.
 
 > [!CAUTION]
 > Arbitrary TTS requires the Smart Chime's unique device password through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`. On validated UniFi OS `5.1.31` / Protect `7.2.105`, obtain the existing value through **Devices → Smart WiFi Chime → Settings → Manage → Manual Recovery → Reveal**. Use **Reveal**, not **Edit**; Edit changes the credential. The revealed value was physically verified with username `ubnt` against `/api/info` and returned HTTP 200. See [Smart Chime credential setup](CREDENTIALS.md). UniFi Announcer does **not** retrieve the credential automatically.
@@ -29,7 +29,7 @@ Typical uses include:
 - AI-generated spoken notifications;
 - reusable presets and hardware buzzer actions;
 - targeted chimes or named groups;
-- Home Assistant, REST, MQTT, rules, or MCP clients sharing one dispatcher.
+- Home Assistant, REST, MQTT, local rules, or MCP clients sharing one dispatcher.
 
 ## What works today
 
@@ -38,44 +38,76 @@ Typical uses include:
 | Arbitrary text announcements | ✅ Supported; requires Smart Chime device password revealed in Protect UI |
 | Piper local TTS | ✅ Stable |
 | Edge TTS | ✅ Supported |
-| Reusable preset tones | ✅ Stable |
+| Content-aware resident TTS reuse | ✅ v2.1.8; zero-write replay while same-boot proof remains valid |
+| Smart Chime reboot/reconnect invalidation | ✅ v2.1.8; resident proof is revoked before unsafe reuse |
+| Reusable spoken presets | ✅ Stable |
 | Buzzer and assigned-default playback | ✅ Stable |
-| Two fixed service-owned dynamic TTS slots | ✅ Stable |
+| Exactly two service-owned dynamic TTS slots | ✅ Stable |
 | Bounded host-side TTS cache | ✅ Stable |
 | Quiet hours, priority, dedupe, bounded queues | ✅ Stable |
 | Home Assistant HACS integration | ✅ Stable |
 | HA `notify.send_message` | ✅ Stable |
 | HA text/preset `media_player.play_media` | ✅ Stable |
-| HA immediate playback-result sensor | ✅ v2.1.6 |
+| HA immediate playback-result sensor | ✅ Stable |
 | REST API | ✅ Stable |
 | MCP server and playback tools | ✅ Stable |
 | MQTT discovery | ✅ Supported |
 | Multiple chimes and named groups | 🧪 Automated coverage; multi-device physical validation pending |
 | Protect event rules | 🧪 Experimental |
-| Native HA `tts.speak` media ingestion | ⏭️ v2.2 |
+| Native HA `tts.speak` media ingestion | ⏭️ Planned for v2.2 |
 
-## Architecture
+## How v2.1.8 playback works
 
 ```text
 Home Assistant ─┐
-REST            ├──► AnnouncementDispatcher ─► Protect play-speaker ─► Smart Chime
-MQTT            │            ▲                         ▲
-MCP ────────────┤            │                         │
-Protect rules ──┘       queue / policy           fixed TTS slot ID
+REST            ├──► AnnouncementDispatcher ─► per-chime queue ─► Protect play-speaker ─► Smart Chime
+MQTT            │            ▲                                        ▲
+MCP ────────────┤            │                                        │
+Protect rules ──┘       policy / dedupe                         persistent TTS slot ID
 ```
 
-Arbitrary TTS follows this path:
+Dynamic text follows this path:
 
 ```text
 text
   -> Piper or Edge TTS
-  -> bounded MP3 cache on Announcer host
-  -> overwrite UA-TTS-1 or UA-TTS-2 on the target chime
+  -> bounded content-addressed MP3 cache on the Announcer host
+  -> validate Smart Chime identity + current boot epoch
+  -> select an already-resident matching UA-TTS slot when safe
+       OR overwrite UA-TTS-1 / UA-TTS-2 when content is not resident
   -> Protect play-speaker using the persistent ringtone ID
   -> Smart Chime
 ```
 
-Direct Smart Chime HTTPS is used only to overwrite an **exact previously proven UniFi-Announcer-owned slot**. The service never guesses a physical slot and never treats built-in, user-created, preset, ambiguous, or unknown tracks as overwrite candidates.
+Direct Smart Chime HTTPS is used only to overwrite an **exact previously proven UniFi-Announcer-owned slot**. Playback itself remains Protect-mediated. The service never guesses a physical slot and never treats built-in, user-created, preset, ambiguous, or unknown tracks as overwrite candidates.
+
+Resident content trust is intentionally stronger than a simple filename/hash cache. v2.1.8 ties reusable content to the current physical Chime boot using direct-device uptime, persists write-ahead invalidation before physical writes, and revokes content proof on observed reconnect/lifecycle changes. If boot continuity cannot be proven, the fast path is rejected and the phrase is safely rewritten.
+
+## Observed v2.1.8 latency
+
+The public live validation used one physical Smart Chime and the normal Home Assistant → Announcer → Protect path. These are **request round-trip measurements**, not synchronized microphone/acoustic-onset measurements.
+
+For 10 repeated resident announcements on the same Chime boot:
+
+```text
+min:     540 ms
+average: 591 ms
+p50:     586 ms
+p95:     663 ms
+max:     663 ms
+```
+
+All 10 resident samples performed:
+
+```text
+0 direct slot writes
+0 synchronization wait
+0 settle delay
+```
+
+and the requested phrase was physically confirmed correct.
+
+Three new-content samples measured roughly **4.6–6.4 seconds end-to-end**, dominated by the Smart Chime's physical slot write. The project does not claim these numbers as universal performance across firmware, networks, controllers, or Chimes. See [Latency and metrics](docs/LATENCY.md) and the [v2.1.8 live validation report](docs/validation/v2.1.8-live-latency-validation.md).
 
 ## Requirements
 
@@ -86,22 +118,22 @@ Direct Smart Chime HTTPS is used only to overwrite an **exact previously proven 
 - optional Home Assistant 2026.3+ for the HACS client;
 - for arbitrary TTS, Piper or Edge TTS plus the Smart Chime device password revealed and verified as described in [CREDENTIALS.md](CREDENTIALS.md).
 
-Home Assistant, MQTT, rules, and MCP are optional. The Docker service is the source of truth.
+Home Assistant, MQTT, local rules, and MCP are optional. The Docker service is the source of truth.
 
 ## Quick start
 
-### 1. Clone a pinned release and create private configuration
+### 1. Clone the stable release and create private configuration
 
 ```bash
 git clone https://github.com/bdini13/unifi-announcer.git
 cd unifi-announcer
-git checkout v2.1.7
+git checkout v2.1.8
 install -m 600 .env.example .env
 ```
 
-Create a **local** UniFi console account in **Admins & Users** and grant only the Protect access required to view chimes and manage ringtones.
+Create a **local** UniFi console account in **Admins & Users** and grant only the Protect access required to view Chimes and manage ringtones.
 
-If you do not already know the Protect chime ID, this temporary shell session lists chimes without placing the UniFi password in shell history:
+If you do not already know the Protect Chime ID, this temporary shell session lists Chimes without placing the UniFi password in shell history:
 
 ```bash
 read -r -p "UniFi console URL (for example https://192.0.2.1): " UNIFI_HOST
@@ -125,7 +157,7 @@ trap - EXIT
 unset UNIFI_USERNAME UNIFI_PASSWORD
 ```
 
-Alternatively, obtain the chime ID through your normal authorized Protect tooling and skip the temporary login example.
+Alternatively, obtain the Chime ID through your normal authorized Protect tooling and skip the temporary login example.
 
 Before enabling arbitrary TTS, open Protect and navigate to **Devices → Smart WiFi Chime → Settings → Manage → Manual Recovery → Reveal**. Copy the actual value displayed by **Reveal** and keep it private. Do **not** click **Edit** merely for Announcer setup; Edit changes the credential. Follow [Smart Chime credential setup](CREDENTIALS.md) for the optional read-only `/api/info` verification.
 
@@ -167,6 +199,8 @@ chmod 600 .env
 ls -l .env
 ```
 
+The v2.1.8 slot timing/lifecycle controls have conservative defaults in `.env.example`. Normally leave `TTS_SLOT_SYNC_TIMEOUT`, `TTS_SLOT_POLL_INTERVAL`, `TTS_SLOT_SETTLE_DELAY`, and `TTS_SLOT_BOOT_EPOCH_TOLERANCE` unchanged unless you are doing controlled hardware validation.
+
 ### 2. Start the service with exact build provenance
 
 Pass the checked-out commit into the Docker build so `/version` and the image metadata identify the code that produced the container:
@@ -198,9 +232,9 @@ curl -fsS "${AUTH[@]}" http://<announcer-host-or-ip>:8095/tts/slots/status
 curl -fsS "${AUTH[@]}" http://<announcer-host-or-ip>:8095/tts/cache/status
 ```
 
-With arbitrary TTS configured, healthy slot status reports `"mode":"two_slot_overwrite"`, `"slot_count":2`, and `"ready":true`. A credential-free `TTS_ENGINE=none` deployment should not expect dynamic-slot readiness.
+With arbitrary TTS configured, healthy slot status reports `"mode":"two_slot_overwrite"`, `"slot_count":2`, and `"ready":true`. v2.1.8 also exposes sanitized `content_reuse` state and the most recent slot-preparation timing breakdown. A credential-free `TTS_ENGINE=none` deployment should not expect dynamic-slot readiness.
 
-You can also confirm the embedded image revision:
+Confirm the embedded image revision:
 
 ```bash
 docker image inspect unifi-announcer:local \
@@ -221,7 +255,7 @@ It should match `git rev-parse HEAD`.
 5. Open **Settings → Devices & services → Add integration → UniFi Announcer**.
 6. Enter the Announcer URL, such as `http://announcer.local:8095`, and `APP_API_KEY`.
 
-The setup flow checks `/health`, `/version`, and `/auth/check`; it never plays audio during setup.
+The setup flow checks `/health`, `/version`, and `/auth/check`; it never plays audio during setup. Upgrade the Docker backend and Home Assistant custom integration together when changing release versions.
 
 ### Standard announcement
 
@@ -246,6 +280,8 @@ data:
   dedupe_key: garage-open
 ```
 
+Supported action fields are `message`, `target`, `volume`, `repeat_times`, `profile`, `priority`, and `dedupe_key`.
+
 ### Media player
 
 ```yaml
@@ -261,38 +297,15 @@ For a preset use `media_content_type: unifi-announcer/preset` and the preset nam
 
 ### Playback result
 
-Each target has a **Last playback result** sensor. In v2.1.6 it updates immediately after HA actions:
+Each physical Chime or logical group has a **Last playback result** sensor. It updates immediately after HA playback actions:
 
-- `success` — the Announcer action completed with canonical dispatcher disposition `played`;
-- `failure` — the request failed through the Announcer client/transport path;
-- `suppressed`, `deduped`, `dropped`, or `partial` — intentional canonical dispatcher outcomes that are preserved rather than misreported as success.
+- `success` — canonical dispatcher disposition `played`;
+- `failure` — Announcer request/client/transport failure;
+- `suppressed`, `deduped`, `dropped`, or `partial` — intentional dispatcher outcomes preserved rather than flattened to success.
+
+Physical Chimes also expose queue-depth state. Logical groups intentionally do not invent an aggregate queue depth.
 
 See [Home Assistant documentation](docs/HOME_ASSISTANT.md) for the complete entity/action model and troubleshooting.
-
-## MCP — optional AI-agent interface
-
-Enable the Streamable HTTP MCP endpoint in `.env`:
-
-```env
-MCP_ENABLED=true
-MCP_API_KEY=<generate-a-dedicated-secret>
-MCP_ALLOWED_HOSTS=announcer.local,<announcer-lan-ip>
-```
-
-Recreate the service with provenance preserved:
-
-```bash
-export GIT_SHA="$(git rev-parse HEAD)"
-docker compose up -d --build
-```
-
-Endpoint: `http://<announcer-host>:8095/mcp`
-
-Authentication uses `Authorization: Bearer <MCP_API_KEY>`. Keep `MCP_API_KEY` separate from `APP_API_KEY`.
-
-Read tools include `get_status`, `list_chimes`, `list_presets`, `get_recent_events`, and `get_queue_status`. Playback tools include `announce`, `play_preset`, `play_default`, and `buzzer`.
-
-The MCP surface deliberately excludes credential retrieval, raw Protect administration, reboot/reset/adoption, arbitrary direct staging, firmware research, and arbitrary URL/file playback. See [MCP documentation](docs/MCP.md).
 
 ## REST examples
 
@@ -323,7 +336,7 @@ Assigned default:
 curl -fsS -X POST "${AUTH[@]}" "$ANNOUNCER_URL/play-default"
 ```
 
-Create and play a preset:
+Create and play a persistent preset:
 
 ```bash
 curl -fsS -X PUT "${AUTH[@]}" \
@@ -337,7 +350,32 @@ curl -fsS -X POST "${AUTH[@]}" \
 
 FastAPI's interactive REST schema is available at `http://<announcer-host-or-ip>:8095/docs` on your trusted network.
 
-## Multiple chimes and groups
+## MCP — optional AI-agent interface
+
+Enable the Streamable HTTP MCP endpoint in `.env`:
+
+```env
+MCP_ENABLED=true
+MCP_API_KEY=<generate-a-dedicated-secret>
+MCP_ALLOWED_HOSTS=announcer.local,<announcer-lan-ip>
+```
+
+Recreate the service with provenance preserved:
+
+```bash
+export GIT_SHA="$(git rev-parse HEAD)"
+docker compose up -d --build
+```
+
+Endpoint: `http://<announcer-host>:8095/mcp`
+
+Authentication uses `Authorization: Bearer <MCP_API_KEY>`. Keep `MCP_API_KEY` separate from `APP_API_KEY`.
+
+Read tools include `get_status`, `list_chimes`, `list_presets`, `get_recent_events`, and `get_queue_status`. Playback tools include `announce`, `play_preset`, `play_default`, and `buzzer`.
+
+The MCP surface deliberately excludes credential retrieval, raw Protect administration, reboot/reset/adoption, arbitrary direct staging, firmware research, and arbitrary URL/file playback. See [MCP documentation](docs/MCP.md).
+
+## Multiple Chimes and groups
 
 ```env
 CHIMES_CONFIG='[
@@ -347,17 +385,19 @@ CHIMES_CONFIG='[
 GROUPS_CONFIG='{"downstairs":["kitchen"],"whole_house":["kitchen","upstairs"]}'
 ```
 
-Then target `whole_house` from REST/HA/MCP. Each physical chime has its own bounded queue and group members execute concurrently. Multi-chime behavior has automated coverage but still requires independent physical multi-device validation.
+Then target `whole_house` from REST/HA/MCP. Each physical Chime has its own bounded queue and group members execute concurrently. Content reuse is accepted only when every requested target has matching trusted content; otherwise the required targets are safely rewritten. Multi-Chime behavior has automated coverage but still requires independent physical multi-device validation.
 
 ## MQTT and local rules
 
 MQTT discovery remains optional; configure `MQTT_URL`, `MQTT_USERNAME`, and `MQTT_PASSWORD`. See [MQTT](docs/MQTT.md).
 
-Local rules can react directly to Protect events without a Home Assistant round trip. See [Rules](docs/RULES.md).
+Local rules can react directly to Protect events without a Home Assistant round trip. The Protect event stream also participates in v2.1.8 lifecycle safety by invalidating resident content when a Chime reconnect is observed. See [Rules](docs/RULES.md).
 
-## Upgrade to v2.1.7
+## Upgrade to v2.1.8
 
-Keep the existing `.env` and persistent `/data` state. Older installs that used the former implicit `./data` bind mount may have no `DATA_PATH` line. Preserve that source explicitly before upgrading:
+Upgrade the Docker backend and Home Assistant custom integration together. Preserve the existing `.env` and actual `/data` state.
+
+Older installs that used the former implicit `./data` bind mount may have no `DATA_PATH` line. Preserve that source explicitly before upgrading:
 
 ```bash
 if test -d ./data && ! grep -q '^DATA_PATH=' .env; then
@@ -366,12 +406,12 @@ fi
 docker compose config | grep -A4 '/data'
 ```
 
-Confirm the rendered `/data` source before starting the new image. **Do not delete `track_registry.json`**; it is ownership evidence used by conservative slot migration/reconciliation.
+Confirm the rendered `/data` source before starting the new image. Preserve ownership evidence including `track_registry.json`, `dynamic_tts_slots.json`, `dynamic_tts_content_state.json` when present, and `installation.json`. Do not delete or hand-edit registry files as an upgrade shortcut.
 
 ```bash
 cd unifi-announcer
 git fetch --tags
-git checkout v2.1.7
+git checkout v2.1.8
 export GIT_SHA="$(git rev-parse HEAD)"
 docker compose up -d --build
 ```
@@ -387,7 +427,9 @@ curl -fsS "${AUTH[@]}" http://<announcer-host-or-ip>:8095/tts/slots/status
 curl -fsS "${AUTH[@]}" http://<announcer-host-or-ip>:8095/tts/cache/status
 ```
 
-For HA users, reload/restart Home Assistant after updating the custom integration, select a preset or send text, and verify **Last playback result** changes to `success` after audible playback.
+No manual data migration is required from v2.1.7. Old content assignments that do not contain v2.1.8 boot-epoch evidence are intentionally treated as untrusted and rewritten once before becoming eligible for same-boot reuse.
+
+For HA users, update/reload the matching custom integration and verify **Last playback result** changes to `success` after audible playback. For an operational smoke test, play one text phrase twice: the first request may safely write a slot; the second should normally report a resident content hit with zero direct upload when the same Chime boot remains proven.
 
 ## Roll back
 
@@ -415,7 +457,7 @@ sha256sum "backups/data-$STAMP.tgz" >"backups/data-$STAMP.tgz.sha256"
 chmod 600 "backups/data-$STAMP.tgz.sha256"
 ```
 
-Retain `track_registry.json` in the backup. Do not delete or hand-edit it.
+Retain all ownership/content-state files in the backup.
 
 To roll code back while preserving compatible current data:
 
@@ -441,7 +483,6 @@ docker run --rm \
   -v "$PWD/backups:/backup:ro" \
   alpine:3.22 sh -c \
   'set -eu; tar -C /restore -xzf /backup/data-<timestamp>.tgz; chown -R 1000:1000 /restore'
-test -r "$RESTORE_DIR/track_registry.json" || test ! -e "$RESTORE_DIR/track_registry.json"
 cp backups/<saved-env-file> .env
 chmod 600 .env
 printf '\nDATA_PATH=%s\n' "$RESTORE_DIR" >>.env
@@ -458,16 +499,18 @@ Verify the final `DATA_PATH` before starting the restored container.
 |---|---|---|
 | UniFi Announcer does not appear in HA | Backend not running or old HACS version installed | Start Docker backend; select latest stable integration; reinstall/restart HA |
 | HA reports invalid API key | `APP_API_KEY` changed or mismatches | Complete the integration reauthentication flow |
-| HA button times out but direct slot test works | Backend older than v2.1.6 or stale Protect inventory behavior | Upgrade backend and HA client together; verify `/version`; inspect logs for slot sync/play-speaker result |
-| Last playback result remains `unknown` after using a control | HA integration older than v2.1.6 or action never reached the integration | Update/restart HA integration, then retry a button/action |
-| Buttons/presets work but arbitrary TTS fails | Fixed TTS slots are not ready | Check `/tts/slots/status`; verify the revealed credential with [CREDENTIALS.md](CREDENTIALS.md) and confirm chime reachability |
-| Smart Chime credential is not configured | Protect credential has not been revealed yet | Open **Devices → Smart WiFi Chime → Settings → Manage → Manual Recovery → Reveal**; use Reveal, not Edit; then follow [CREDENTIALS.md](CREDENTIALS.md) |
+| HA button times out but direct slot test works | Backend/client mismatch or slot synchronization failure | Upgrade backend and HA client together; verify `/version`; inspect slot timing/status and Protect playback logs |
+| Last playback result remains `unknown` after using a control | Action never reached the integration or old HA component is loaded | Update/restart HA integration, then retry |
+| Buttons/presets work but arbitrary TTS fails | Fixed TTS slots are not ready | Check `/tts/slots/status`; verify the revealed credential with [CREDENTIALS.md](CREDENTIALS.md) and confirm Chime reachability |
+| Smart Chime credential is not configured | Protect credential has not been revealed yet | Open **Devices → Smart WiFi Chime → Settings → Manage → Manual Recovery → Reveal**; use Reveal, not Edit |
+| Repeated phrase unexpectedly performs a write | Resident proof was absent or invalidated by restart/reconnect/boot change | This can be safe/expected; inspect `content_reuse` state and boot/lifecycle counters before tuning anything |
+| First phrase after Chime reboot rewrites once | v2.1.8 boot continuity correctly invalidated resident content | Expected safety behavior; the next same-boot replay can become a zero-write hit |
 | Slot status reports ownership drift | Physical slot metadata no longer matches proof | Stop TTS and reconcile; do not force or guess a slot |
 | `/version` shows `git_sha: unknown` | Image was built without `GIT_SHA` | Rebuild with `export GIT_SHA="$(git rev-parse HEAD)"` |
 | Piper synthesis fails | Piper unavailable | Check `PIPER_URL` and Piper service |
 | MCP returns HTTP 401 | Bearer key mismatch | Check `MCP_API_KEY` and Authorization header |
 | MCP returns HTTP 421 | Host not allowlisted | Add the client hostname/IP to `MCP_ALLOWED_HOSTS` and recreate the container |
-| New chime/group is absent in HA | Entity topology predates config change | Reload/restart the integration |
+| New Chime/group is absent in HA | Entity topology predates config change | Reload/restart the integration |
 
 ## Playback and safety model
 
@@ -478,23 +521,40 @@ Dynamic TTS safety properties:
 - repeated text uses a content-addressed bounded MP3 cache on the Announcer host;
 - dynamic TTS consumes exactly two persistent service-owned slots per Announcer installation;
 - new phrases overwrite those slots instead of creating new Protect ringtone identities;
+- content-aware selection prefers a free resident match before evicting another slot;
+- multi-target reuse requires trusted matching content for every requested target;
 - slot reuse is lease/guard based so a slot is not overwritten while prior playback may still depend on it;
-- before every direct overwrite, the service rechecks the exact physical slot against persisted ownership evidence;
-- v2.1.6 can tolerate a stale Protect fingerprint only when the exact proven physical slot and owned filename still match after a bounded synchronization wait;
-- filename/slot drift, ambiguity, or missing ownership evidence continues to fail closed;
-- destructive direct chime endpoints are blocked before network I/O.
+- before every physical overwrite, old content proof is durably invalidated and exact physical ownership is rechecked;
+- trusted resident content stores source identity, physical slot/filename, device identity, write generation, and current-device boot evidence;
+- direct-device uptime is used to detect boot discontinuity; missing/malformed/unprovable boot continuity rejects resident reuse;
+- Announcer-initiated lifecycle actions and observed Chime reconnects invalidate resident proof before later playback can trust it;
+- after a successful direct write, stale Protect fingerprint metadata is tolerated only when the exact proven physical slot and owned filename still match after a bounded synchronization wait;
+- filename/slot drift, ambiguity, device replacement, failed/partial writes, or missing ownership evidence fail closed;
+- destructive direct Chime endpoints are blocked before network I/O.
 
-See [Track registry](docs/TRACKS.md), [Playback policy](docs/POLICY.md), and [Architecture](docs/ARCHITECTURE.md).
+See [Track registry](docs/TRACKS.md), [Playback policy](docs/POLICY.md), [Architecture](docs/ARCHITECTURE.md), and [v2.1.8 validation](docs/validation/v2.1.8-live-latency-validation.md).
 
 ## Validation boundary
 
-The stable v2.1 architecture has been physically exercised on one Smart Chime for alternating fixed TTS slots, preset/default/buzzer playback, restart persistence, and service status. A 100-unique-message **automated** regression keeps dynamic identities fixed at two. Automated coverage also includes concurrency, dedupe, stale-inventory handling, HA result-state behavior, and multi-target fixtures.
+Stable v2.1.8 has been physically exercised on **one** Smart Chime for:
 
-Multi-chime/group playback has **not** been physically validated with multiple Smart Chimes. No synchronized microphone benchmark was available, so the project does not claim measured acoustic latency.
+- alternating fixed TTS slots and unique speech;
+- resident repeated speech with zero writes;
+- A/B/A content-aware reuse;
+- third-content eviction while retaining exactly two dynamic identities;
+- Announcer-process restart with same-boot reuse;
+- physical Smart Chime reboot with resident-proof invalidation, one safe first rewrite, then zero-write same-boot reuse;
+- preset/default/buzzer playback and service status inherited from earlier v2.1 physical gates.
 
-Public CI uses sanitized fixtures and does not contact live UniFi equipment or play audio. It runs the core suite, Home Assistant tests, Ruff, compile checks, metadata/Compose validation, Docker build, HACS validation, and Hassfest.
+A 100-unique-message **automated** regression keeps dynamic identities fixed at two. Automated coverage also includes concurrency, cancellation cleanup, dedupe, stale Protect metadata, write-ahead failure safety, reboot/reconnect invalidation, HA result-state behavior, and multi-target fixtures.
 
-See the exact pre-release evidence requirements in [Release checklist](docs/RELEASE_CHECKLIST.md).
+The live v2.1.8 validation intentionally retains the history of an earlier candidate that failed the physical reboot test and played incorrect audio. That candidate was not released. The lifecycle defect was remediated and the corrected code passed the physical reboot gate before v2.1.8 was merged and published.
+
+Multi-Chime/group playback has **not** been physically validated with multiple Smart Chimes. No synchronized microphone benchmark was used, so the project does not claim measured acoustic latency. The ~0.54–0.66 second resident figures above are application/request-path measurements from the single-Chime validation.
+
+Public CI uses sanitized fixtures and does not contact live UniFi equipment or play audio. It runs the backend suite, Home Assistant tests, Ruff, compile checks, metadata/Compose validation, Docker build, HACS validation, and Hassfest.
+
+See the evidence requirements in [Release checklist](docs/RELEASE_CHECKLIST.md).
 
 ## Documentation
 
@@ -511,7 +571,8 @@ See the exact pre-release evidence requirements in [Release checklist](docs/RELE
 - [Rules](docs/RULES.md)
 - [Track registry](docs/TRACKS.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
-- [v2.1.8 release notes (candidate)](docs/RELEASE_NOTES_v2.1.8.md)
+- [v2.1.8 release notes](docs/RELEASE_NOTES_v2.1.8.md)
+- [v2.1.8 live validation](docs/validation/v2.1.8-live-latency-validation.md)
 - [v2.1.7 release notes](docs/RELEASE_NOTES_v2.1.7.md)
 - [v2.1.6 release notes](docs/RELEASE_NOTES_v2.1.6.md)
 
@@ -527,7 +588,7 @@ Contributions are covered by [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CON
 
 ## Development
 
-Core/runtime validation:
+Backend/runtime validation:
 
 ```bash
 python3 -m venv .venv
@@ -554,8 +615,8 @@ This project was developed with assistance from AI coding and research tools for
 
 ## Release status
 
-- **Stable:** `v2.1.7` — validated Protect UI onboarding for the Smart Chime device password
-- **Release candidate:** `v2.1.8` — safe same-boot resident TTS reuse with reboot/reconnect invalidation
+- **Stable:** `v2.1.8` — safe same-boot resident TTS reuse with Smart Chime reboot/reconnect invalidation
+- **Previous stable:** `v2.1.7` — validated Protect UI onboarding for the Smart Chime device password
 - **Planned:** `v2.2.0` — native Home Assistant `tts.speak`, binary media ingestion, and optional SSE integration
 
 See [ROADMAP.md](ROADMAP.md) and the [Releases page](https://github.com/bdini13/unifi-announcer/releases).
