@@ -19,8 +19,8 @@ import asyncio
 import hashlib
 import json
 import os
-from time import perf_counter
 import time
+from time import perf_counter
 from typing import Any, Iterable
 
 from app.playback.dynamic_slots import (
@@ -114,6 +114,31 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
         bindings = self._content_state.setdefault("bindings", {})
         slot = bindings.setdefault(str(number), {})
         slot[chime_id] = entry
+
+    def _invalidate_content_proof(
+        self,
+        number: int,
+        chime_id: str,
+        binding: DeviceSlotBinding,
+    ) -> None:
+        """Persistently revoke old content identity before a physical write.
+
+        This is deliberately write-ahead. If the process crashes, or a later
+        target in a group fails, restart cannot trust the bytes that existed
+        before this overwrite attempt. The next request safely rewrites them.
+        """
+        self._trusted_content.discard((number, chime_id))
+        bindings = self._content_state.setdefault("bindings", {})
+        slot = bindings.get(str(number))
+        if isinstance(slot, dict):
+            slot.pop(chime_id, None)
+            if not slot:
+                bindings.pop(str(number), None)
+        binding.current_md5 = None
+        binding.current_size = None
+        binding.verified_at = time.time()
+        self._persist_registry()
+        self._persist_content_state()
 
     @staticmethod
     def _content_key(md5: str, size: int) -> str:
@@ -359,6 +384,9 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
                     self._metric("tts_slot_overwrite_skips")
                     continue
 
+                previous_generation = int((entry or {}).get("write_generation") or 0)
+                self._invalidate_content_proof(number, chime_id, binding)
+
                 upload_started = perf_counter()
                 await target.direct_client.overwrite_owned_slot(
                     slot=binding.device_slot,
@@ -378,7 +406,6 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
                 timings["slot_sync_ms"] += sync_ms
                 timings["slot_settle_ms"] += settle_ms
 
-                previous_generation = int((entry or {}).get("write_generation") or 0)
                 pending_generations[chime_id] = previous_generation + 1
                 overwrites += 1
                 self._metric("tts_slot_overwrites")
