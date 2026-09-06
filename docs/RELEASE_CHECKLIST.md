@@ -89,6 +89,34 @@ Release identity and publication:
 - [ ] Published tag and release both target the exact validated `main` SHA.
 - [ ] Tagged deployment reports matching app/HA versions, `/version.git_sha`, and OCI image revision.
 
+## v2.1.8 release gate — candidate PASS
+
+v2.1.8 adds content-aware resident-slot reuse and therefore requires fresh physical playback, restart, and Smart Chime reboot validation. The detailed evidence is retained in [the v2.1.8 live validation report](validation/v2.1.8-live-latency-validation.md).
+
+Safety and latency evidence:
+
+- [x] Normal repeated speech uses a zero-write resident path and plays the requested phrase correctly.
+- [x] A/B/A content reuse and two-slot eviction retain exactly two service-owned dynamic identities.
+- [x] Announcer-process restart preserves correct same-boot resident reuse.
+- [x] Smart Chime reboot invalidates all resident content proof before post-reboot playback.
+- [x] Direct-device uptime/boot epoch resets are detected even when static identity and slot metadata remain unchanged.
+- [x] First post-reboot request performs exactly one safe rewrite and plays the correct phrase.
+- [x] Second request during the same new boot performs zero writes and plays the correct phrase.
+- [x] Reconnect invalidation, controlled reboot ordering, cancellation cleanup, multi-target isolation, write-ahead failure safety, and concurrent leases have automated regression coverage.
+- [x] Independent focused review reports no blocking correctness or security findings.
+
+Release identity and publication:
+
+- [x] `APP_VERSION`, HA `INTEGRATION_VERSION`, and HA manifest version all equal `2.1.8`.
+- [x] Release script targets `v2.1.8` and `docs/RELEASE_NOTES_v2.1.8.md`.
+- [x] Release workflow is bound to trusted post-merge `main` CI and the `2.1.7` to `2.1.8` version transition.
+- [x] Existing `v2.1.7` release artifacts remain immutable historical records.
+- [x] The candidate was built with exact Git SHA provenance while preserving `.env` and persistent `/data`.
+- [ ] Exact final branch-head and merge-ref GitHub CI pass after release-preparation changes.
+- [ ] Trusted post-merge `main` CI and the v2.1.8 publisher pass.
+- [ ] Published tag and release both target the exact validated `main` SHA.
+- [ ] Immutable release deployment reports matching app/HA versions, `/version.git_sha`, and OCI image revision.
+
 ## Publish/deploy sequence
 
 Do not merge/tag until every required release-specific physical gate is satisfied.

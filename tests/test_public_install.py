@@ -149,12 +149,12 @@ def test_upgrade_docs_preserve_legacy_default_bind_data():
     assert "track_registry.json" in readme
 
 
-def test_release_identity_is_v2_1_7():
-    assert 'APP_VERSION = "2.1.7"' in Path("app/version.py").read_text()
-    assert 'INTEGRATION_VERSION = "2.1.7"' in Path(
+def test_release_identity_is_v2_1_8():
+    assert 'APP_VERSION = "2.1.8"' in Path("app/version.py").read_text()
+    assert 'INTEGRATION_VERSION = "2.1.8"' in Path(
         "custom_components/unifi_announcer/const.py"
     ).read_text()
-    assert '"version": "2.1.7"' in Path(
+    assert '"version": "2.1.8"' in Path(
         "custom_components/unifi_announcer/manifest.json"
     ).read_text()
 
