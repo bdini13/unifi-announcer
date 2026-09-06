@@ -31,6 +31,7 @@ class FakeProtectWorld:
             chime_id: f"aa:bb:cc:dd:ee:{index:02x}"
             for index, chime_id in enumerate(chime_ids, 1)
         }
+        self.device_uptimes = {chime_id: 1_000 for chime_id in chime_ids}
         self.stale_control_plane = stale_control_plane
         self.upload_calls = 0
         self.overwrite_calls = []
@@ -97,6 +98,7 @@ class FakeDirect:
         return {
             "version": "v1.7.20",
             "mac": self.world.device_macs[self.chime_id],
+            "uptime": self.world.device_uptimes[self.chime_id],
             "featureFlags": {"supportCustomRingtone": True},
         }
 
@@ -283,6 +285,28 @@ async def test_replacement_device_identity_invalidates_restart_fast_path(tmp_pat
     await replay.release_now()
 
     assert len(world.overwrite_calls) == before + 1
+
+
+@pytest.mark.asyncio
+async def test_uptime_reset_invalidates_content_even_when_device_identity_is_unchanged(
+    tmp_path,
+):
+    world = FakeProtectWorld(stale_control_plane=True)
+    target = make_target(world)
+    manager = make_manager(tmp_path, world)
+    assert (await manager.startup([target], bootstrap_audio_factory=bootstrap))["ready"]
+
+    first = await manager.prepare(b"survives-only-this-boot", [target])
+    await first.release_now()
+    before = len(world.overwrite_calls)
+
+    # Same device identity and owned slot metadata, but a fresh hardware boot.
+    world.device_uptimes["chime-1"] = 1
+    replay = await manager.prepare(b"survives-only-this-boot", [target])
+    await replay.release_now()
+
+    assert len(world.overwrite_calls) == before + 1
+    assert manager.status()["content_reuse"]["last_prepare"]["content_hit"] is False
 
 
 @pytest.mark.asyncio

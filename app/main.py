@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable, Coroutine
 import hashlib
 
 from app.audio.cache import RingtoneIndex as ModularRingtoneIndex
@@ -1107,10 +1107,9 @@ import websockets
 class ProtectEventStream:
     """Maintains a resilient websocket connection to the NVR event feed."""
 
-    # modelKey values we surface to consumers. Everything else is dropped
-    # early to keep memory/CPU flat. Device-state updates are ignored by
-    # default but easy to add here if needed.
-    INTERESTING_MODELS = ("event", "camera")
+    # modelKey values we surface to consumers. Chime state transitions are
+    # retained only to revoke unsafe content proof after a device reconnect.
+    INTERESTING_MODELS = ("event", "camera", "chime")
 
     def __init__(self) -> None:
         self.recent: deque = deque(maxlen=EVENTS_BUFFER_MAX)
@@ -1118,6 +1117,10 @@ class ProtectEventStream:
         self.connected = False
         self.last_event_at: float = 0.0
         self._last_ring_by_camera: dict[str, int] = {}
+        self._chime_states: dict[str, str] = {}
+        self.on_chime_reconnect: Callable[
+            [str], Coroutine[Any, Any, None]
+        ] | None = None
         self._task = None
         self._stop = False
         self._rule_tasks: set[asyncio.Task] = set()
@@ -1235,6 +1238,21 @@ class ProtectEventStream:
         merged = dict(data) if isinstance(data, dict) else {}
         merged.update({k: v for k, v in action.items()
                        if k not in merged} if isinstance(action, dict) else {})
+        if model == "chime":
+            chime_id = merged.get("id")
+            state = str(merged.get("state") or "").upper()
+            if chime_id and state:
+                previous_state = self._chime_states.get(chime_id)
+                self._chime_states[chime_id] = state
+                if (
+                    previous_state
+                    and previous_state != "CONNECTED"
+                    and state == "CONNECTED"
+                    and self.on_chime_reconnect is not None
+                ):
+                    task = asyncio.create_task(self.on_chime_reconnect(chime_id))
+                    self._rule_tasks.add(task)
+                    task.add_done_callback(self._rule_task_done)
         camera_id = merged.get("id") or (action or {}).get("id")
         last_ring = merged.get("lastRing")
         event_name = None
@@ -1697,8 +1715,11 @@ async def events_stream():
 
 
 @app.post("/reboot")
-async def reboot(confirm: bool = Query(False,
-                 description="Must be true to actually fire the reboot")) -> dict:
+async def reboot(
+    request: Request,
+    confirm: bool = Query(False,
+                 description="Must be true to actually fire the reboot"),
+) -> dict:
     """Reboot the chime remotely (~30-60s offline). Guarded by ?confirm=true.
 
     The device-side endpoint accepts any body and reboots unconditionally, so
@@ -1709,6 +1730,12 @@ async def reboot(confirm: bool = Query(False,
         raise HTTPException(status_code=428,
             detail="Refusing to reboot without ?confirm=true (chime goes offline ~60s)")
     try:
+        dynamic_slots = getattr(request_services(request), "dynamic_slots", None)
+        if dynamic_slots is not None:
+            async with dynamic_slots.target_lifecycle_guard(
+                [CHIME_ID], reason="device_reboot"
+            ):
+                return await protect.reboot()
         return await protect.reboot()
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))

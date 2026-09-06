@@ -20,6 +20,7 @@ import hashlib
 import json
 import os
 import time
+from contextlib import asynccontextmanager
 from time import perf_counter
 from typing import Any, Iterable
 
@@ -57,6 +58,11 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
         self._content_state: dict[str, Any] = {"bindings": {}}
         self._trusted_content: set[tuple[int, str]] = set()
         self._device_identities: dict[str, str] = {}
+        self._device_boot_epochs: dict[str, float] = {}
+        self._invalidating_targets: dict[str, int] = {}
+        self.boot_epoch_tolerance_s = float(
+            os.getenv("TTS_SLOT_BOOT_EPOCH_TOLERANCE", "5.0")
+        )
         self.last_prepare: dict[str, Any] | None = None
 
     def _observe(self, name: str, value_ms: float) -> None:
@@ -140,6 +146,76 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
         self._persist_registry()
         self._persist_content_state()
 
+    def _clear_target_content_locked(self, targets: set[str]) -> int:
+        """Clear target content proof while the slot condition is held."""
+        invalidated = 0
+        for number, slot in self.slots.items():
+            for chime_id, binding in slot.bindings.items():
+                if chime_id not in targets:
+                    continue
+                if (
+                    (number, chime_id) in self._trusted_content
+                    or self._state_entry(number, chime_id) is not None
+                    or binding.current_md5 is not None
+                    or binding.current_size is not None
+                ):
+                    invalidated += 1
+                self._trusted_content.discard((number, chime_id))
+                bindings = self._content_state.setdefault("bindings", {})
+                persisted_slot = bindings.get(str(number))
+                if isinstance(persisted_slot, dict):
+                    persisted_slot.pop(chime_id, None)
+                    if not persisted_slot:
+                        bindings.pop(str(number), None)
+                binding.current_md5 = None
+                binding.current_size = None
+                binding.verified_at = time.time()
+
+        self._persist_registry()
+        self._persist_content_state()
+        if invalidated:
+            self._metric("tts_slot_content_lifecycle_invalidations", invalidated)
+        return invalidated
+
+    @asynccontextmanager
+    async def target_lifecycle_guard(
+        self, target_ids: Iterable[str], *, reason: str
+    ):
+        """Invalidate content and block new target leases through an action."""
+        targets = {str(target_id) for target_id in target_ids if target_id}
+        if not targets:
+            yield 0
+            return
+
+        async with self._condition:
+            for chime_id in targets:
+                self._invalidating_targets[chime_id] = (
+                    self._invalidating_targets.get(chime_id, 0) + 1
+                )
+            try:
+                while any(
+                    number in self._busy
+                    and any(chime_id in targets for chime_id in slot.bindings)
+                    for number, slot in self.slots.items()
+                ):
+                    await self._condition.wait()
+                yield self._clear_target_content_locked(targets)
+            finally:
+                for chime_id in targets:
+                    remaining = self._invalidating_targets.get(chime_id, 1) - 1
+                    if remaining > 0:
+                        self._invalidating_targets[chime_id] = remaining
+                    else:
+                        self._invalidating_targets.pop(chime_id, None)
+                self._condition.notify_all()
+
+    async def invalidate_target_content(
+        self, target_ids: Iterable[str], *, reason: str
+    ) -> int:
+        """Durably revoke reusable content after a target lifecycle break."""
+        async with self.target_lifecycle_guard(target_ids, reason=reason) as count:
+            return count
+
     @staticmethod
     def _content_key(md5: str, size: int) -> str:
         return f"{md5}:{size}"
@@ -172,6 +248,51 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
             return None
         encoded = json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
         return hashlib.sha256(encoded).hexdigest()
+
+    @staticmethod
+    def _boot_epoch(info: dict[str, Any], *, observed_at: float | None = None) -> float | None:
+        """Estimate the current hardware boot epoch from device uptime."""
+        raw_uptime = info.get("uptime")
+        if raw_uptime is None:
+            return None
+        try:
+            uptime = float(raw_uptime)
+        except (TypeError, ValueError):
+            return None
+        if uptime < 0:
+            return None
+        return (time.time() if observed_at is None else observed_at) - uptime
+
+    def _same_boot(self, expected: Any, observed: float | None) -> bool:
+        try:
+            persisted = float(expected)
+        except (TypeError, ValueError):
+            return False
+        return observed is not None and abs(persisted - observed) <= self.boot_epoch_tolerance_s
+
+    async def _refresh_target_boot_epochs(self, targets: list[Any]) -> None:
+        """Invalidate reusable bytes when a target's hardware boot changes."""
+        invalid = set()
+        observed: dict[str, float] = {}
+        for target in targets:
+            chime_id = target.desc.chime_id
+            try:
+                info = await target.direct_client.info()
+            except Exception:
+                invalid.add(chime_id)
+                continue
+            epoch = self._boot_epoch(info)
+            previous = self._device_boot_epochs.get(chime_id)
+            if epoch is None or (
+                previous is not None and not self._same_boot(previous, epoch)
+            ):
+                invalid.add(chime_id)
+            if epoch is not None:
+                observed[chime_id] = epoch
+
+        if invalid:
+            await self.invalidate_target_content(invalid, reason="boot_epoch_changed")
+        self._device_boot_epochs.update(observed)
 
     def _entry_matches(
         self,
@@ -229,6 +350,7 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
         )
         self._trusted_content.clear()
         self._device_identities.clear()
+        self._device_boot_epochs.clear()
         self._load_content_state()
         if not status.get("ready"):
             return self.status()
@@ -245,10 +367,12 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
                 self._metric("tts_slot_content_restart_invalidations")
                 continue
             identity = self._device_identity(chime_id, info)
-            if identity is None:
+            boot_epoch = self._boot_epoch(info)
+            if identity is None or boot_epoch is None:
                 self._metric("tts_slot_content_restart_invalidations")
                 continue
             self._device_identities[chime_id] = identity
+            self._device_boot_epochs[chime_id] = boot_epoch
             for number, slot in self.slots.items():
                 binding = slot.bindings.get(chime_id)
                 entry = self._state_entry(number, chime_id)
@@ -262,6 +386,7 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
                 if (
                     binding is not None
                     and entry.get("device_identity") == identity
+                    and self._same_boot(entry.get("device_boot_epoch"), boot_epoch)
                     and self._entry_matches(
                         entry,
                         md5=str(entry.get("source_md5") or ""),
@@ -284,6 +409,12 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
     ) -> tuple[int, bool]:
         async with self._condition:
             while True:
+                if any(
+                    self._invalidating_targets.get(chime_id, 0) > 0
+                    for chime_id in target_ids
+                ):
+                    await self._condition.wait()
+                    continue
                 free = [
                     number
                     for number in sorted(self.slots)
@@ -332,6 +463,8 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
         target_list = [target for target in targets if target is not None]
         if not target_list:
             raise DynamicSlotUnavailable("no dynamic TTS targets")
+
+        await self._refresh_target_boot_epochs(target_list)
 
         prepare_started = perf_counter()
         md5 = hashlib.md5(mp3).hexdigest()
@@ -428,6 +561,7 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
                     "device_slot": binding.device_slot,
                     "filename": binding.filename,
                     "device_identity": self._device_identities.get(chime_id),
+                    "device_boot_epoch": self._device_boot_epochs.get(chime_id),
                     "write_generation": pending_generations.get(
                         chime_id, int(old.get("write_generation") or 0)
                     ),

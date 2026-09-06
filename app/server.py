@@ -118,6 +118,21 @@ dynamic_slots = DynamicTtsSlotManager(
     provisioning_timeout_s=float(os.getenv("TTS_SLOT_PROVISION_TIMEOUT", "15")),
 )
 
+
+async def _invalidate_reconnected_chime(chime_id: str) -> None:
+    """Revoke resident content after Protect observes a Chime reconnect."""
+    invalidated = await dynamic_slots.invalidate_target_content(
+        [chime_id], reason="device_reconnect"
+    )
+    if invalidated:
+        core.log.warning(
+            "invalidated %d dynamic TTS content bindings after chime reconnect",
+            invalidated,
+        )
+
+
+core.events.on_chime_reconnect = _invalidate_reconnected_chime
+
 # Production uses the bounded host cache and the fixed-slot device path. Keep
 # the original synthesizer only inside tts_cache.delegate; every runtime caller,
 # including persistent preset creation, now goes through the bounded wrapper.

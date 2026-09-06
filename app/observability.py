@@ -84,6 +84,7 @@ class MetricsRegistry:
         "tts_slot_sync_ownership_drift",
         "tts_slot_content_restart_validations",
         "tts_slot_content_restart_invalidations",
+        "tts_slot_content_lifecycle_invalidations",
         "tts_slot_content_state_resets",
     )
 
