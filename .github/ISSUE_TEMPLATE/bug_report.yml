@@ -12,7 +12,7 @@ body:
     id: version
     attributes:
       label: UniFi Announcer version
-      placeholder: v2.1.7
+      placeholder: v2.1.8
     validations:
       required: true
   - type: input
@@ -57,6 +57,25 @@ body:
         - None / automated test only
     validations:
       required: true
+  - type: dropdown
+    id: lifecycle_context
+    attributes:
+      label: Smart Chime lifecycle context
+      description: v2.1.8 invalidates resident TTS content after reboot/reconnect. Select the closest state before the problem occurred.
+      options:
+        - No known reboot/reconnect; same Chime boot
+        - Smart Chime rebooted or lost power
+        - Protect reported a Chime disconnect/reconnect
+        - UniFi Announcer container restarted only
+        - Protect/console restarted
+        - Unknown / unsure
+    validations:
+      required: true
+  - type: textarea
+    id: slot_status
+    attributes:
+      label: Sanitized TTS slot status / metrics
+      description: If relevant, summarize /tts/slots/status or /metrics/json without private IDs, addresses, credentials, or raw support logs. Include whether the request was a content hit/miss and whether an overwrite occurred.
   - type: textarea
     id: reproduce
     attributes:
