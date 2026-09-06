@@ -29,9 +29,21 @@ class BoundedTtsSynthesizer:
         self._prune_lock = asyncio.Lock()
         self._last_stats = {"files": 0, "bytes": 0, "evicted": 0}
 
+    def _metric(self, name: str, amount: int = 1) -> None:
+        if self.metrics is not None and hasattr(self.metrics, "inc"):
+            self.metrics.inc(name, amount)
+
     async def __call__(self, text: str) -> bytes:
-        data = await self.delegate(text)
         path = self.cache_dir / f"{self.key_factory(text)}.mp3"
+        try:
+            cache_hit = path.exists() and path.stat().st_size > 0
+        except OSError:
+            cache_hit = False
+        self._metric(
+            "tts_host_cache_hits" if cache_hit else "tts_host_cache_misses"
+        )
+
+        data = await self.delegate(text)
         try:
             if path.exists():
                 os.utime(path, None)
@@ -47,8 +59,8 @@ class BoundedTtsSynthesizer:
         async with self._prune_lock:
             stats = await asyncio.to_thread(self._prune_sync)
             self._last_stats = stats
-            if self.metrics is not None and hasattr(self.metrics, "inc") and stats["evicted"]:
-                self.metrics.inc("tts_cache_evictions", stats["evicted"])
+            if stats["evicted"]:
+                self._metric("tts_cache_evictions", stats["evicted"])
             return stats
 
     def _prune_sync(self) -> dict:
@@ -78,8 +90,13 @@ class BoundedTtsSynthesizer:
                 # Keep failed entries in accounting while trying other candidates.
                 undeletable.append(entry)
         remaining = undeletable + entries
-        return {"files": len(remaining), "bytes": max(0, total), "evicted": evicted,
-                "max_files": self.max_files, "max_bytes": self.max_bytes}
+        return {
+            "files": len(remaining),
+            "bytes": max(0, total),
+            "evicted": evicted,
+            "max_files": self.max_files,
+            "max_bytes": self.max_bytes,
+        }
 
     def stats(self) -> dict:
         return dict(self._last_stats)
