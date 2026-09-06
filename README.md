@@ -556,6 +556,18 @@ Public CI uses sanitized fixtures and does not contact live UniFi equipment or p
 
 See the evidence requirements in [Release checklist](docs/RELEASE_CHECKLIST.md).
 
+## Public roadmap
+
+Development priorities after stable v2.1.8 are:
+
+1. **Camera-speaker TTS** through capability-gated Protect talkback sessions, with physical validation required per camera model.
+2. **Native Home Assistant media ingestion**, including `tts.speak`, `media-source://`, and bounded binary media through the existing dispatcher.
+3. **Diagnostics and compatibility**, including redacted support bundles, stage-level latency reporting, and firmware capability warnings.
+
+**Protect AI Horn and AI Speaker support is hardware-gated.** It remains a future candidate until representative hardware is acquired and playback, grouping, volume, interruption, and recovery behavior are physically validated. Official UniFi APIs will be preferred wherever they expose the required capability.
+
+See the detailed [project roadmap](ROADMAP.md).
+
 ## Documentation
 
 - [Smart Chime credential setup](CREDENTIALS.md)
@@ -617,7 +629,7 @@ This project was developed with assistance from AI coding and research tools for
 
 - **Stable:** `v2.1.8` — safe same-boot resident TTS reuse with Smart Chime reboot/reconnect invalidation
 - **Previous stable:** `v2.1.7` — validated Protect UI onboarding for the Smart Chime device password
-- **Planned:** `v2.2.0` — native Home Assistant `tts.speak`, binary media ingestion, and optional SSE integration
+- **Planned:** camera-speaker TTS, followed by native Home Assistant media ingestion and expanded diagnostics
 
 See [ROADMAP.md](ROADMAP.md) and the [Releases page](https://github.com/bdini13/unifi-announcer/releases).
 
