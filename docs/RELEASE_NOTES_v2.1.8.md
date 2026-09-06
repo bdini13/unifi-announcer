@@ -44,7 +44,7 @@ Physical single-Chime validation confirmed:
 - the first post-reboot request performed exactly one safe overwrite and played the correct phrase;
 - the second request during the new boot performed zero writes and played the correct phrase.
 
-The complete historical failure and remediation evidence is retained in [`validation/v2.1.8-live-latency-validation.md`](validation/v2.1.8-live-latency-validation.md).
+The validation intentionally retains the earlier candidate's reboot failure and the subsequent remediation evidence. See the [complete v2.1.8 live validation record](https://github.com/bdini13/unifi-announcer/blob/v2.1.8/docs/validation/v2.1.8-live-latency-validation.md).
 
 ## Upgrade
 
