@@ -112,7 +112,7 @@ Release identity and publication:
 - [x] Release workflow is bound to trusted post-merge `main` CI and the `2.1.7` to `2.1.8` version transition.
 - [x] Existing `v2.1.7` release artifacts remain immutable historical records.
 - [x] The candidate was built with exact Git SHA provenance while preserving `.env` and persistent `/data`.
-- [ ] Exact final branch-head and merge-ref GitHub CI pass after release-preparation changes.
+- [x] Exact final branch-head and merge-ref GitHub CI pass after release-preparation changes.
 - [ ] Trusted post-merge `main` CI and the v2.1.8 publisher pass.
 - [ ] Published tag and release both target the exact validated `main` SHA.
 - [ ] Immutable release deployment reports matching app/HA versions, `/version.git_sha`, and OCI image revision.
