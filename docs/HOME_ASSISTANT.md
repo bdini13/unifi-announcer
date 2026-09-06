@@ -78,7 +78,7 @@ Changing options reloads the integration. Volume `0` is valid and remains `0` ra
 
 ## Devices and entities
 
-Physical Smart Chimes are represented as physical Ubiquiti devices using stable Protect Chime IDs. Logical groups attach to the UniFi Announcer service device rather than pretending to be physical hardware.
+Physical Smart Chimes and explicitly configured compatible camera speakers are represented as Ubiquiti devices using stable Protect IDs. Logical groups attach to the UniFi Announcer service device rather than pretending to be physical hardware.
 
 For each configured physical Chime the integration creates:
 
@@ -93,7 +93,16 @@ For each configured physical Chime the integration creates:
 
 Logical groups get the same playback controls and Last playback result sensor, but no queue-depth sensor. Queue depth belongs to physical Chimes; v2.1 intentionally avoids a fake aggregate group value.
 
-If `CHIMES_CONFIG` or `GROUPS_CONFIG` changes after Home Assistant has loaded the integration, reload/restart the integration so entity topology is rebuilt.
+Experimental camera targets get only capability-safe entities:
+
+- `notify` for text announcements;
+- text-only `media_player` playback;
+- queue-depth sensor;
+- **Last playback result** sensor.
+
+They do not get buzzer/default/preset buttons or a preset selector. Camera volume is device-managed, and Home Assistant does not send its configured default volume to a camera target. The backend still rejects any explicit camera volume/profile override before playback.
+
+If `CHIMES_CONFIG`, `CAMERAS_CONFIG`, or `GROUPS_CONFIG` changes after Home Assistant has loaded the integration, reload/restart the integration so entity topology is rebuilt.
 
 ## Standard announcements
 
@@ -124,11 +133,11 @@ data:
   dedupe_key: dinner-ready
 ```
 
-Supported fields are `message`, `target`, `volume`, `repeat_times`, `profile`, `priority`, and `dedupe_key`.
+Supported fields are `message`, `target`, `volume`, `repeat_times`, `profile`, `priority`, and `dedupe_key`. Camera targets support `message`, `target`, `repeat_times`, `priority`, and `dedupe_key`; explicit `volume` and `profile` are intentionally rejected.
 
 ## Media player
 
-The media player intentionally advertises only `PLAY_MEDIA`. Smart Chimes are not normal streaming speakers: there is no honest pause, seek, playback position, or persistent transport state.
+The media player intentionally advertises only `PLAY_MEDIA`. Smart Chimes and camera talkback sessions are not normal streaming speakers: there is no honest pause, seek, playback position, or persistent transport state.
 
 ### Text
 
@@ -153,6 +162,8 @@ data:
 ```
 
 Internal `UA-TTS-*` slot identities are filtered from the user-facing preset list.
+
+Camera media players accept `media_content_type: text` only. Preset playback remains a Chime capability and fails clearly on camera or mixed targets.
 
 Native `tts.speak` / `media-source://` binary ingestion is intentionally deferred to v2.2 so v2.1 remains a thin client over the existing dispatcher.
 
@@ -198,7 +209,7 @@ Fixed-slot readiness is an Announcer runtime concern. If `/tts/slots/status` is 
 
 ## Diagnostics
 
-Home Assistant diagnostics include safe service version, health, Chime/group names, preset names, queue depths, and configuration metadata. API keys and credentials are redacted; raw Protect responses, physical-slot credentials, and private support logs are not included.
+Home Assistant diagnostics include safe service version, health, target/group names and capabilities, preset names, queue depths, and configuration metadata. API keys and credentials are redacted; raw Protect responses, signed talkback URLs, session cookies, physical-slot credentials, and private support logs are not included.
 
 The Version sensor reports the semantic UniFi Announcer version. Its attributes include the container `git_sha`, allowing a deployed image to be compared with the expected release commit when the image was built with `GIT_SHA`.
 

@@ -5,14 +5,21 @@ from homeassistant.components.notify import NotifyEntity
 from homeassistant.exceptions import HomeAssistantError
 
 from .api import UniFiAnnouncerError
-from .entity import UniFiAnnouncerEntity, configured_targets
+from .entity import (
+    UniFiAnnouncerEntity,
+    configured_announcement_targets,
+    target_supports,
+)
 
 
 async def async_setup_entry(hass, entry, async_add_entities) -> None:
     coordinator = entry.runtime_data.coordinator
     entities = [
-        UniFiAnnouncerNotify(entry, coordinator, target, chime_id, is_group)
-        for target, chime_id, is_group in configured_targets(coordinator)
+        UniFiAnnouncerNotify(
+            entry, coordinator, target, target_id, is_group, target_type
+        )
+        for target, target_id, is_group, target_type
+        in configured_announcement_targets(coordinator)
     ]
     async_add_entities(entities)
 
@@ -23,8 +30,12 @@ class UniFiAnnouncerNotify(UniFiAnnouncerEntity, NotifyEntity):
     _attr_translation_key = "announce"
     _attr_name = "Announcements"
 
-    def __init__(self, entry, coordinator, target, chime_id, is_group) -> None:
-        super().__init__(entry, coordinator, target, chime_id, is_group)
+    def __init__(
+        self, entry, coordinator, target, target_id, is_group, target_type="chime"
+    ) -> None:
+        super().__init__(
+            entry, coordinator, target, target_id, is_group, target_type
+        )
         self._attr_unique_id = f"{entry.entry_id}_{self.entity_key}_notify"
 
     async def async_send_message(self, message: str, title: str | None = None) -> None:
@@ -36,7 +47,10 @@ class UniFiAnnouncerNotify(UniFiAnnouncerEntity, NotifyEntity):
             result = await self.runtime.client.async_announce(
                 message.strip(),
                 target=self.target,
-                volume=options.get("default_volume"),
+                volume=(options.get("default_volume")
+                        if target_supports(
+                            self.coordinator, self.target, "volume"
+                        ) else None),
                 repeat_times=options.get("default_repeat"),
             )
         except UniFiAnnouncerError as exc:

@@ -25,6 +25,7 @@ from .const import (
     DOMAIN,
 )
 from .coordinator import UniFiAnnouncerCoordinator
+from .entity import target_supports
 
 PLATFORMS = [Platform.NOTIFY, Platform.BUTTON, Platform.SELECT, Platform.SENSOR, Platform.MEDIA_PLAYER]
 
@@ -109,9 +110,14 @@ def _async_register_services(hass: HomeAssistant) -> None:
         entry = entries[0]
         runtime: UniFiAnnouncerRuntime = entry.runtime_data
         target = call.data.get("target") or entry.options.get(CONF_DEFAULT_TARGET) or None
+        default_volume = (
+            entry.options.get(CONF_DEFAULT_VOLUME)
+            if target is None or target_supports(runtime.coordinator, target, "volume")
+            else None
+        )
         kwargs = {
             "target": target,
-            "volume": call.data.get("volume", entry.options.get(CONF_DEFAULT_VOLUME)),
+            "volume": call.data.get("volume", default_volume),
             "repeat_times": call.data.get("repeat_times", entry.options.get(CONF_DEFAULT_REPEAT)),
             "profile": call.data.get("profile"),
             "priority": call.data.get("priority", 50),

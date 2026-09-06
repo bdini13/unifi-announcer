@@ -121,11 +121,98 @@ class UniFiAnnouncerClient:
             raise InvalidResponse("Invalid version response")
         return data
 
-    async def async_get_chimes(self) -> dict[str, Any]:
+    async def _async_get_legacy_chimes(self) -> dict[str, Any]:
         status, data = await self._request("GET", "/chimes")
         if status != 200 or not isinstance(data, dict):
             raise InvalidResponse("Invalid chimes response")
         return data
+
+    @staticmethod
+    def _legacy_target_catalog(data: dict[str, Any]) -> dict[str, Any]:
+        chime_capabilities = {
+            "announce": True,
+            "play_preset": True,
+            "play_default": True,
+            "buzzer": True,
+            "volume": True,
+            "repeat": True,
+        }
+        targets = [
+            {
+                "name": str(item.get("name") or item.get("id") or "chime"),
+                "id": item.get("id"),
+                "type": "chime",
+                "queue_depth": item.get("queue_depth", 0),
+                "capabilities": dict(chime_capabilities),
+            }
+            for item in data.get("chimes", [])
+            if isinstance(item, dict)
+        ]
+        groups = [
+            {
+                "name": str(name),
+                "type": "group",
+                "members": list(members) if isinstance(members, list) else [],
+                "capabilities": dict(chime_capabilities),
+            }
+            for name, members in (data.get("groups") or {}).items()
+        ]
+        return {"schema_version": 1, "targets": targets, "groups": groups}
+
+    async def async_get_targets(self) -> dict[str, Any]:
+        """Read the v1 target catalog, falling back to legacy Chimes on 404."""
+        status, data = await self._request("GET", "/targets")
+        if status == 404:
+            return self._legacy_target_catalog(await self._async_get_legacy_chimes())
+        if (
+            status != 200
+            or not isinstance(data, dict)
+            or data.get("schema_version") != 1
+            or not isinstance(data.get("targets"), list)
+            or not isinstance(data.get("groups"), list)
+        ):
+            raise InvalidResponse("Invalid targets response")
+        return data
+
+    async def async_get_chimes(self) -> dict[str, Any]:
+        """Translate the capability catalog for existing HA entity consumers."""
+        catalog = await self.async_get_targets()
+        chimes = []
+        cameras = []
+        for item in catalog["targets"]:
+            if not isinstance(item, dict):
+                continue
+            target_type = item.get("type")
+            translated = {
+                "name": item.get("name"),
+                "id": item.get("id"),
+                "queue_depth": item.get("queue_depth", 0),
+                "capability_state": {
+                    "status": item.get("status", "available"),
+                    **({"model": item["model"]} if item.get("model") else {}),
+                },
+                "capabilities": item.get("capabilities") or {},
+            }
+            if target_type == "camera":
+                cameras.append(translated)
+            elif target_type == "chime":
+                chimes.append(translated)
+        groups = {
+            str(item.get("name")): list(item.get("members") or [])
+            for item in catalog["groups"]
+            if isinstance(item, dict) and item.get("name")
+        }
+        group_capabilities = {
+            str(item.get("name")): item.get("capabilities") or {}
+            for item in catalog["groups"]
+            if isinstance(item, dict) and item.get("name")
+        }
+        return {
+            "chimes": chimes,
+            "cameras": cameras,
+            "groups": groups,
+            "group_capabilities": group_capabilities,
+        }
 
     async def async_get_presets(self) -> list[dict[str, Any]]:
         status, data = await self._request("GET", "/presets")

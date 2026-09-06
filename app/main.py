@@ -32,6 +32,7 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlsplit
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -124,11 +125,34 @@ async def _lifespan(app):
             await services.ringtone_index.force_refresh()
     except Exception as e:
         log.warning("Ringtone index/reconciliation failed (%s) - lazy fallback", e)
+    camera_services = getattr(services, "camera_runtimes", {})
+    target_services = getattr(services, "target_runtimes", services.chime_runtimes)
+    camera_talkback_service = getattr(services, "camera_talkback", None)
+    for name, runtime in camera_services.items():
+        try:
+            if camera_talkback_service is None:
+                raise RuntimeError("camera talkback service is unavailable")
+            runtime.capability_state = await camera_talkback_service.inspect(
+                runtime.desc.camera_id
+            )
+        except Exception as exc:
+            runtime.capability_state = {
+                "status": "unavailable",
+                "error_type": type(exc).__name__,
+            }
+            log.warning("camera target %s capability probe failed: %s", name, type(exc).__name__)
+    available_rule_targets = set(services.chime_runtimes)
+    available_rule_targets.update(
+        name
+        for name, runtime in camera_services.items()
+        if isinstance(runtime.capability_state, dict)
+        and runtime.capability_state.get("status") == "available"
+    )
     services.rules.load(
         presets=set(services.ringtone_index._by_name),
-        targets=set(services.chime_runtimes) | set(GROUPS) | {"default"},
+        targets=available_rule_targets | set(GROUPS) | {"default"},
     )
-    for rt in services.chime_runtimes.values():
+    for rt in target_services.values():
         rt.start()
     await services.mqtt.start()
     services.health.start()
@@ -146,7 +170,7 @@ async def _lifespan(app):
             log.warning("Piper warmup skipped: %s", e)
     yield
     await services.health.stop()
-    for rt in services.chime_runtimes.values():
+    for rt in target_services.values():
         await rt.stop()
     await services.mqtt.stop()
     await piper_tts.stop()
@@ -172,6 +196,9 @@ class AppServices:
     direct_http: Any
     events: Any
     chime_runtimes: Any
+    camera_runtimes: Any
+    target_runtimes: Any
+    camera_talkback: Any
     track_registry: Any
     track_reconciler: Any
     ringtone_index: Any
@@ -238,6 +265,47 @@ class ProtectClient:
                 continue
             return r
         return r
+
+    async def session_cookie_header(self) -> str:
+        """Return one jar-policy-approved console auth cookie for talkback."""
+        await self._ensure_login()
+        controller = urlsplit(UNIFI_HOST)
+        host = controller.hostname
+        if not host or controller.username is not None or controller.password is not None:
+            raise RuntimeError("Protect controller URL is invalid for talkback authentication")
+        if any(
+            cookie.name == "TOKEN" and not str(cookie.domain or "").strip()
+            for cookie in self._client.cookies.jar
+        ):
+            raise RuntimeError("Protect talkback authentication cookie is unavailable")
+        request_host = f"[{host}]" if ":" in host else host
+        request = httpx.Request(
+            "GET", f"https://{request_host}:7443/ws/talkback"
+        )
+        self._client.cookies.set_cookie_header(request)
+        cookie_header = request.headers.get("cookie", "")
+        token_values = []
+        for field in cookie_header.split(";"):
+            name, separator, value = field.strip().partition("=")
+            if separator and name == "TOKEN":
+                token_values.append(value)
+        if (
+            len(token_values) != 1
+            or not token_values[0]
+            or any(char in token_values[0] for char in ";\r\n")
+        ):
+            raise RuntimeError("Protect talkback authentication cookie is unavailable")
+        return f"TOKEN={token_values[0]}"
+
+    async def bootstrap(self) -> dict:
+        """Read the current Protect bootstrap through the authenticated session."""
+        response = await self._do("GET", "/proxy/protect/api/bootstrap")
+        if response.status_code != 200:
+            raise RuntimeError(f"Protect bootstrap failed: HTTP {response.status_code}")
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise RuntimeError("Protect bootstrap returned an invalid payload")
+        return payload
 
     # -- Ringtone operations -------------------------------------------------
 
@@ -869,6 +937,46 @@ def _load_chime_runtimes() -> dict:
 
 
 chime_runtimes = _load_chime_runtimes()
+
+
+def _load_camera_runtimes() -> dict:
+    """Build explicitly configured camera targets without network discovery."""
+    raw = os.getenv("CAMERAS_CONFIG", "[]")
+    try:
+        entries = json.loads(raw)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise RuntimeError("CAMERAS_CONFIG must be a JSON list") from exc
+    if not isinstance(entries, list):
+        raise RuntimeError("CAMERAS_CONFIG must be a JSON list")
+    runtimes = {}
+    camera_ids = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise RuntimeError("CAMERAS_CONFIG entries must be objects")
+        name = str(entry.get("name") or "").strip()
+        camera_id = str(entry.get("id") or "").strip()
+        if not name or not camera_id:
+            raise RuntimeError("CAMERAS_CONFIG entries require nonempty name and id")
+        if name == "default" or name in runtimes or name in chime_runtimes:
+            raise RuntimeError(f"duplicate or reserved camera target name: {name}")
+        if camera_id in camera_ids:
+            raise RuntimeError(f"duplicate camera target id: {camera_id}")
+        camera_ids.add(camera_id)
+        runtimes[name] = ChimeRuntime(
+            ChimeDescriptor(
+                name=name,
+                kind="camera",
+                camera_id=camera_id,
+            ),
+            metrics=metrics,
+            max_depth=QUEUE_MAX_DEPTH,
+            capability_state={"status": "configured", "transport": "private_websocket"},
+        )
+    return runtimes
+
+
+camera_runtimes = _load_camera_runtimes()
+target_runtimes = {**chime_runtimes, **camera_runtimes}
 GROUPS = {}
 try:
     GROUPS = json.loads(os.getenv("GROUPS_CONFIG", "{}"))
@@ -877,14 +985,28 @@ except (json.JSONDecodeError, TypeError):
 
 
 def resolve_targets(target: Optional[str]) -> list:
-    """target=name|group|None -> list of ChimeRuntime to play on."""
+    """Resolve a named chime/camera/group; implicit default remains chime-only."""
     if not target or target == "default":
-        return [chime_runtimes.get("default")] if "default" in chime_runtimes             else list(chime_runtimes.values())
+        return ([chime_runtimes["default"]] if "default" in chime_runtimes
+                else list(chime_runtimes.values()))
     if target in GROUPS:
-        return [chime_runtimes[n] for n in GROUPS[target] if n in chime_runtimes]
-    rt = chime_runtimes.get(target)
-    return [rt] if rt else []
+        return [target_runtimes[name] for name in GROUPS[target]
+                if name in target_runtimes]
+    runtime = target_runtimes.get(target)
+    return [runtime] if runtime else []
 
+
+
+def _available_rule_targets() -> set[str]:
+    """Only advertise camera targets whose startup capability probe passed."""
+    available = set(chime_runtimes)
+    available.update(
+        name
+        for name, runtime in camera_runtimes.items()
+        if isinstance(runtime.capability_state, dict)
+        and runtime.capability_state.get("status") == "available"
+    )
+    return available | set(GROUPS) | {"default"}
 
 
 protect = ProtectClient()
@@ -893,6 +1015,12 @@ protect_backends = select_protect_backends(
     private=protect,
     official_api_key=os.getenv("PROTECT_API_KEY", ""),
     official_base_url=os.getenv("PROTECT_API_BASE_URL", ""),
+)
+from app.playback.camera_talkback import ProtectCameraTalkback
+camera_talkback = ProtectCameraTalkback(
+    protect=protect,
+    controller_url=UNIFI_HOST,
+    verify_ssl=VERIFY_SSL,
 )
 track_reconciler.delete_nvr = protect_backends.ringtone.delete_ringtone
 ringtone_index.bind(protect_backends.ringtone.list_ringtones)
@@ -1382,6 +1510,7 @@ SENSITIVE_GET_PATHS = {
     "/chime", "/chime/settings", "/chime/direct-info", "/chime/direct-log",
     "/chimes", "/chime/capabilities", "/events/recent", "/events/stream",
     "/metrics/json", "/cache/ringtones/status", "/presets", "/rules/status",
+    "/targets",
 }
 
 
@@ -1756,15 +1885,88 @@ async def chime_direct_info() -> dict:
 
 @app.get("/chimes")
 async def list_chimes() -> dict:
-    """Phase 11: multi-chime/group registry (no secrets)."""
+    """Phase 11: legacy multi-chime/group registry (no camera schema changes)."""
     return {
-        "chimes": [{"name": n, "id": r.desc.chime_id,
-                    "queue_depth": r.queue.depth,
-                    "direct_path": bool(r.desc.direct_ip),
-                    "capability_state": r.capability_state}
-                   for n, r in chime_runtimes.items()],
+        "chimes": [{"name": name, "id": runtime.desc.chime_id,
+                    "queue_depth": runtime.queue.depth,
+                    "direct_path": bool(runtime.desc.direct_ip),
+                    "capability_state": runtime.capability_state}
+                   for name, runtime in chime_runtimes.items()],
         "groups": GROUPS,
     }
+
+
+def _target_capabilities(runtime) -> dict[str, bool]:
+    if runtime.desc.kind == "camera":
+        available = (
+            isinstance(runtime.capability_state, dict)
+            and runtime.capability_state.get("status") == "available"
+        )
+        return {
+            "announce": available,
+            "play_preset": False,
+            "play_default": False,
+            "buzzer": False,
+            "volume": False,
+            "repeat": available,
+        }
+    return {
+        "announce": True,
+        "play_preset": True,
+        "play_default": True,
+        "buzzer": True,
+        "volume": True,
+        "repeat": True,
+    }
+
+
+def _group_capabilities(members: list[str]) -> dict[str, bool]:
+    member_capabilities = [
+        _target_capabilities(target_runtimes[name])
+        for name in members
+        if name in target_runtimes
+    ]
+    keys = ("announce", "play_preset", "play_default", "buzzer", "volume", "repeat")
+    return {
+        key: bool(member_capabilities)
+        and all(capabilities[key] for capabilities in member_capabilities)
+        for key in keys
+    }
+
+
+@app.get("/targets")
+async def list_targets() -> dict:
+    """Versioned, sanitized playback target catalog for capability-aware clients."""
+    targets = []
+    for name, runtime in target_runtimes.items():
+        target_type = runtime.desc.kind
+        item = {
+            "name": name,
+            "id": runtime.desc.device_id,
+            "type": target_type,
+            "queue_depth": runtime.queue.depth,
+            "capabilities": _target_capabilities(runtime),
+        }
+        if target_type == "camera":
+            state = runtime.capability_state
+            item["status"] = (
+                state.get("status", "unavailable")
+                if isinstance(state, dict) else "unavailable"
+            )
+            if isinstance(state, dict) and state.get("model"):
+                item["model"] = state["model"]
+        targets.append(item)
+    groups = [
+        {
+            "name": name,
+            "type": "group",
+            "members": [member for member in members if member in target_runtimes],
+            "capabilities": _group_capabilities(members),
+        }
+        for name, members in GROUPS.items()
+        if isinstance(members, list)
+    ]
+    return {"schema_version": 1, "targets": targets, "groups": groups}
 
 
 @app.get("/chime/capabilities")
@@ -1882,6 +2084,7 @@ dispatcher = AnnouncementDispatcher(
     track_reconciler=track_reconciler,
     ringtone_backend=protect_backends.ringtone,
     upload_lock=ringtone_upload_lock,
+    camera_playback=camera_talkback,
 )
 
 
@@ -1965,7 +2168,7 @@ async def rules_reload(request: Request) -> dict:
     services = request_services(request)
     return services.rules.load(
         presets=set(services.ringtone_index._by_name),
-        targets=set(services.chime_runtimes) | set(GROUPS) | {"default"},
+        targets=_available_rule_targets(),
     )
 
 
@@ -1980,6 +2183,9 @@ def build_services() -> AppServices:
         direct_http=_direct_http,
         events=events,
         chime_runtimes=chime_runtimes,
+        camera_runtimes=camera_runtimes,
+        target_runtimes=target_runtimes,
+        camera_talkback=camera_talkback,
         track_registry=track_registry,
         track_reconciler=track_reconciler,
         ringtone_index=ringtone_index,

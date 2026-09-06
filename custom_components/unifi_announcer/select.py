@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from homeassistant.components.select import SelectEntity
 
-from .entity import UniFiAnnouncerEntity, configured_targets
+from .entity import UniFiAnnouncerEntity, configured_targets, target_supports
 
 
 async def async_setup_entry(hass, entry, async_add_entities) -> None:
@@ -11,6 +11,7 @@ async def async_setup_entry(hass, entry, async_add_entities) -> None:
     async_add_entities([
         UniFiAnnouncerPresetSelect(entry, coordinator, target, chime_id, is_group)
         for target, chime_id, is_group in configured_targets(coordinator)
+        if target_supports(coordinator, target, "play_preset")
     ])
 
 

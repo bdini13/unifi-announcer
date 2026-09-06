@@ -12,7 +12,7 @@ Every REST, MQTT, and local-rule playback request is converted to one
 | `repeat_times` | Explicit repeat count, `1..6`. MQTT uses the same spelling. |
 | `profile` | Optional name from `VOLUME_PROFILES`. |
 | `priority` | `0..100`; lower numbers are more urgent. Default `50`. |
-| `target` | One chime name, group name, or `default`. |
+| `target` | One configured Chime/camera name, group name, or `default`. |
 
 The applicable fields are accepted by `POST /announce`,
 `POST /play-default`, and `POST /presets/{name}/play`. Buzzer commands only
@@ -29,6 +29,10 @@ The dispatcher resolves volume and repeats deterministically:
 
 An explicit volume of `0` is preserved. Unknown profiles contribute no values,
 so defaults apply.
+
+## Camera target limits
+
+Camera speakers are explicit experimental targets and never participate in implicit `default` resolution. They currently accept `announce` only. Repeats reuse the same validated AAC stream; per-request `volume` and `profile` are rejected because talkback volume remains device-managed. Buzzer, assigned-default, and ringtone-preset actions targeting a camera or a mixed group fail before any member plays.
 
 ## Quiet hours
 

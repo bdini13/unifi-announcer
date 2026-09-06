@@ -1,4 +1,6 @@
 from contextlib import asynccontextmanager
+from http.cookiejar import Cookie
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import httpx
@@ -157,6 +159,85 @@ async def test_api_key_is_required_on_mutating_routes(
         response = await client.request(method, path, json={})
 
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_target_catalog_requires_api_key(main_module, monkeypatch):
+    monkeypatch.setattr(main_module, "APP_API_KEY", "configured-test-key")
+    async with httpx.AsyncClient(
+        transport=transport_for(main_module), base_url="http://test"
+    ) as client:
+        denied = await client.get("/targets")
+        allowed = await client.get(
+            "/targets", headers={"X-API-Key": "configured-test-key"}
+        )
+
+    assert denied.status_code == 403
+    assert allowed.status_code == 200
+    assert allowed.json()["schema_version"] == 1
+
+
+@pytest.mark.asyncio
+async def test_talkback_cookie_header_sends_only_one_scoped_token(
+    main_module, monkeypatch
+):
+    monkeypatch.setattr(main_module, "UNIFI_HOST", "https://unifi.invalid")
+    cookies = httpx.Cookies()
+    cookies.set("TOKEN", "scoped-token", domain="unifi.invalid", path="/")
+    cookies.set("OTHER", "must-not-leak", domain="unifi.invalid", path="/")
+    cookies.set("TOKEN", "wrong-domain", domain="other.invalid", path="/")
+    client = main_module.ProtectClient()
+    client._logged_in = True
+    client._client_instance = SimpleNamespace(cookies=cookies)
+
+    assert await client.session_cookie_header() == "TOKEN=scoped-token"
+
+
+@pytest.mark.asyncio
+async def test_talkback_cookie_header_rejects_ambiguous_or_unscoped_auth(
+    main_module, monkeypatch
+):
+    monkeypatch.setattr(main_module, "UNIFI_HOST", "https://unifi.invalid")
+    cookies = httpx.Cookies()
+    cookies.set("TOKEN", "domainless-supercookie")
+    client = main_module.ProtectClient()
+    client._logged_in = True
+    client._client_instance = SimpleNamespace(cookies=cookies)
+
+    with pytest.raises(RuntimeError, match="authentication cookie is unavailable"):
+        await client.session_cookie_header()
+
+    path_mismatch = httpx.Cookies()
+    path_mismatch.set(
+        "TOKEN", "wrong-path", domain="unifi.invalid", path="/api-only"
+    )
+    client._client_instance = SimpleNamespace(cookies=path_mismatch)
+    with pytest.raises(RuntimeError, match="authentication cookie is unavailable"):
+        await client.session_cookie_header()
+
+    expired = httpx.Cookies()
+    expired.jar.set_cookie(Cookie(
+        version=0,
+        name="TOKEN",
+        value="expired-token",
+        port=None,
+        port_specified=False,
+        domain="unifi.invalid",
+        domain_specified=True,
+        domain_initial_dot=False,
+        path="/",
+        path_specified=True,
+        secure=True,
+        expires=1,
+        discard=False,
+        comment=None,
+        comment_url=None,
+        rest={},
+        rfc2109=False,
+    ))
+    client._client_instance = SimpleNamespace(cookies=expired)
+    with pytest.raises(RuntimeError, match="authentication cookie is unavailable"):
+        await client.session_cookie_header()
 
 
 @pytest.mark.asyncio

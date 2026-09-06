@@ -14,6 +14,7 @@ from custom_components.unifi_announcer.api import (
     UniFiAnnouncerClient,
 )
 from custom_components.unifi_announcer.const import DOMAIN
+from custom_components.unifi_announcer.notify import UniFiAnnouncerNotify
 
 
 BASE_DATA = {
@@ -91,7 +92,24 @@ async def test_full_setup_entity_topology_and_service(hass):
                         "capability_state": {"status": "available"},
                     }
                 ],
-                "groups": {"whole_house": ["kitchen"]},
+                "cameras": [
+                    {
+                        "name": "family_room_camera",
+                        "id": "camera-1",
+                        "target_type": "camera",
+                        "queue_depth": 0,
+                        "capability_state": {"status": "available"},
+                        "supports": ["announce"],
+                    }
+                ],
+                "groups": {
+                    "whole_house": ["kitchen"],
+                    "mixed": ["kitchen", "family_room_camera"],
+                },
+                "group_capabilities": {
+                    "whole_house": {"announce": True, "volume": True},
+                    "mixed": {"announce": True, "volume": False},
+                },
             }),
         ),
         patch.object(
@@ -111,9 +129,15 @@ async def test_full_setup_entity_topology_and_service(hass):
         chime_device = device_registry.async_get_device(
             identifiers={(DOMAIN, "chime-1")}
         )
+        camera_device = device_registry.async_get_device(
+            identifiers={(DOMAIN, "camera-1")}
+        )
         assert service_device is not None
         assert chime_device is not None
+        assert camera_device is not None
         assert chime_device.via_device_id == service_device.id
+        assert camera_device.via_device_id == service_device.id
+        assert camera_device.model == "Protect Camera Speaker"
 
         registry = er.async_get(hass)
         entries = [
@@ -127,6 +151,15 @@ async def test_full_setup_entity_topology_and_service(hass):
         # Logical groups expose dispositions/controls but no fake aggregate queue.
         assert f"{entry.entry_id}_whole_house_queue_depth" not in unique_ids
         assert f"{entry.entry_id}_whole_house_last_disposition" in unique_ids
+        camera_prefix = f"{entry.entry_id}_camera-1"
+        assert f"{camera_prefix}_media_player" in unique_ids
+        assert f"{camera_prefix}_notify" in unique_ids
+        assert f"{camera_prefix}_queue_depth" in unique_ids
+        assert f"{camera_prefix}_last_disposition" in unique_ids
+        assert f"{camera_prefix}_buzzer" not in unique_ids
+        assert f"{camera_prefix}_default" not in unique_ids
+        assert f"{camera_prefix}_preset" not in unique_ids
+        assert f"{camera_prefix}_preset_select" not in unique_ids
 
         await hass.services.async_call(
             DOMAIN,
@@ -134,11 +167,32 @@ async def test_full_setup_entity_topology_and_service(hass):
             {"message": "Test announcement"},
             blocking=True,
         )
-        announce_mock.assert_awaited()
-        _, kwargs = announce_mock.await_args
+        assert announce_mock.await_args is not None
+        kwargs = announce_mock.await_args.kwargs
         assert kwargs["target"] == "kitchen"
         assert kwargs["volume"] == 0
         assert kwargs["repeat_times"] == 2
+
+        await hass.services.async_call(
+            DOMAIN,
+            "announce",
+            {"message": "Camera test", "target": "family_room_camera"},
+            blocking=True,
+        )
+        assert announce_mock.await_args is not None
+        camera_kwargs = announce_mock.await_args.kwargs
+        assert camera_kwargs["target"] == "family_room_camera"
+        assert camera_kwargs["volume"] is None
+        assert camera_kwargs["repeat_times"] == 2
+
+        mixed_notify = UniFiAnnouncerNotify(
+            entry, entry.runtime_data.coordinator, "mixed", None, True, "group"
+        )
+        await mixed_notify.async_send_message("Mixed group test")
+        assert announce_mock.await_args is not None
+        mixed_kwargs = announce_mock.await_args.kwargs
+        assert mixed_kwargs["target"] == "mixed"
+        assert mixed_kwargs["volume"] is None
 
         assert hass.services.has_service(DOMAIN, "announce")
         assert await hass.config_entries.async_unload(entry.entry_id)

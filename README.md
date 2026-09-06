@@ -53,6 +53,7 @@ Typical uses include:
 | MCP server and playback tools | ✅ Stable |
 | MQTT discovery | ✅ Supported |
 | Multiple chimes and named groups | 🧪 Automated coverage; multi-device physical validation pending |
+| Protect camera-speaker TTS | 🧪 Experimental opt-in; verified AAC talkback transport, integrated-path physical validation pending |
 | Protect event rules | 🧪 Experimental |
 | Native HA `tts.speak` media ingestion | ⏭️ Planned for v2.2 |
 
@@ -60,10 +61,10 @@ Typical uses include:
 
 ```text
 Home Assistant ─┐
-REST            ├──► AnnouncementDispatcher ─► per-chime queue ─► Protect play-speaker ─► Smart Chime
-MQTT            │            ▲                                        ▲
-MCP ────────────┤            │                                        │
-Protect rules ──┘       policy / dedupe                         persistent TTS slot ID
+REST            ├──► AnnouncementDispatcher ─► per-target queue ─┬─► Protect play-speaker ─► Smart Chime
+MQTT            │            ▲                                   └─► Protect talkback WSS ─► Camera speaker
+MCP ────────────┤            │
+Protect rules ──┘       policy / dedupe
 ```
 
 Dynamic text follows this path:
@@ -387,6 +388,23 @@ GROUPS_CONFIG='{"downstairs":["kitchen"],"whole_house":["kitchen","upstairs"]}'
 
 Then target `whole_house` from REST/HA/MCP. Each physical Chime has its own bounded queue and group members execute concurrently. Content reuse is accepted only when every requested target has matching trusted content; otherwise the required targets are safely rewritten. Multi-Chime behavior has automated coverage but still requires independent physical multi-device validation.
 
+## Experimental camera-speaker TTS
+
+Compatible Protect cameras can be explicit text-announcement targets through the controller's private talkback WebSocket:
+
+```env
+CAMERAS_CONFIG='[
+  {"name":"family_room_camera","id":"<camera-id>"}
+]'
+GROUPS_CONFIG='{"mixed":["kitchen","family_room_camera"]}'
+```
+
+The backend reads each configured camera from Protect bootstrap, requires a connected speaker with the verified AAC/ADTS mono talkback profile, transcodes the existing bounded MP3, mints a fresh controller-authorized WebSocket, sends one complete ADTS frame at a time, and closes without retrying uncertain audio. Cameras are never auto-discovered into Announcer and never join the implicit default target.
+
+Camera targets currently support **text announcements and repeats only**. Per-request volume/profile overrides, buzzer, assigned-default, and ringtone-preset operations fail before synthesis or playback. Camera volume remains device-managed. Authenticated `GET /targets` publishes the sanitized capability catalog used by Home Assistant; legacy `GET /chimes` remains unchanged.
+
+The underlying private AAC talkback transport has been physically heard on a G3 Instant. This integrated Announcer path remains experimental until the exact candidate is physically validated on each claimed camera model. Opus/RTP camera profiles fail closed.
+
 ## MQTT and local rules
 
 MQTT discovery remains optional; configure `MQTT_URL`, `MQTT_USERNAME`, and `MQTT_PASSWORD`. See [MQTT](docs/MQTT.md).
@@ -560,7 +578,7 @@ See the evidence requirements in [Release checklist](docs/RELEASE_CHECKLIST.md).
 
 Development priorities after stable v2.1.8 are:
 
-1. **Camera-speaker TTS** through capability-gated Protect talkback sessions, with physical validation required per camera model.
+1. **Camera-speaker TTS** — experimental implementation in progress; physical validation is required per camera model before compatibility claims expand.
 2. **Native Home Assistant media ingestion**, including `tts.speak`, `media-source://`, and bounded binary media through the existing dispatcher.
 3. **Diagnostics and compatibility**, including redacted support bundles, stage-level latency reporting, and firmware capability warnings.
 

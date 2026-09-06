@@ -5,18 +5,24 @@ from homeassistant.components.button import ButtonEntity
 from homeassistant.exceptions import HomeAssistantError
 
 from .api import UniFiAnnouncerError
-from .entity import UniFiAnnouncerEntity, configured_targets
+from .entity import UniFiAnnouncerEntity, configured_targets, target_supports
 
 
 async def async_setup_entry(hass, entry, async_add_entities) -> None:
     coordinator = entry.runtime_data.coordinator
     entities = []
     for target, chime_id, is_group in configured_targets(coordinator):
-        entities.extend([
-            UniFiAnnouncerButton(entry, coordinator, target, chime_id, is_group, "buzzer"),
-            UniFiAnnouncerButton(entry, coordinator, target, chime_id, is_group, "default"),
-            UniFiAnnouncerButton(entry, coordinator, target, chime_id, is_group, "preset"),
-        ])
+        for kind, capability in (
+            ("buzzer", "buzzer"),
+            ("default", "play_default"),
+            ("preset", "play_preset"),
+        ):
+            if target_supports(coordinator, target, capability):
+                entities.append(
+                    UniFiAnnouncerButton(
+                        entry, coordinator, target, chime_id, is_group, kind
+                    )
+                )
     async_add_entities(entities)
 
 

@@ -7,20 +7,14 @@ Home Assistant ─┐
 REST routes ────┤
 local rules ────┼─> AnnouncementCommand -> AnnouncementDispatcher
 MQTT ───────────┤     validate -> profile -> quiet hours -> targets/groups
-MCP ────────────┘                         -> per-chime arbitration
+MCP ────────────┘                         -> per-target arbitration
 
 preset/default/buzzer --------------------------> Protect playback
 
 dynamic text
   -> bounded content-addressed host MP3 cache
-  -> DynamicTtsSlotManager
-  -> refresh target device identity / boot continuity
-  -> select trusted resident content when available
-  -> otherwise verify exact owned physical slot(s)
-  -> direct overwrite UA-TTS-1 or UA-TTS-2
-  -> persistent Protect ringtone identity
-  -> Protect play-speaker
-  -> Smart Chime
+  -> Chime: DynamicTtsSlotManager -> owned slot -> Protect play-speaker
+  -> camera: capability gate -> AAC/ADTS -> controller-minted talkback WSS
 ```
 
 ## Fixed-slot invariant
@@ -104,6 +98,7 @@ Cancelled preparations release both slot and target metadata.
 - `app/playback/dynamic_slots.py`: slot data model, ownership proof, overwrite, lease, migration primitives.
 - `app/playback/fixed_slots.py`: fail-closed production provisioning followed by conservative legacy migration.
 - `app/playback/production_slots.py`: v2.1.8 resident-content trust, boot epochs, lifecycle invalidation, content-aware acquisition, and slot-path timings.
+- `app/playback/camera_talkback.py`: experimental camera capability, AAC/ADTS, URL-confinement, and talkback transport boundary.
 - `app/playback/arbitration.py`: bounded per-Chime priority queues and dispositions.
 - `app/rules/engine.py`: local rule action contracts.
 - `app/integrations/mqtt.py`: MQTT lifecycle, discovery, events, and command adapter.
@@ -143,3 +138,11 @@ Direct Chime endpoints are **undocumented**, verified against UP Chime firmware 
 Credential retrieval is not implemented by UniFi Announcer. The supported onboarding path is Protect's authenticated Manual Recovery → Reveal UI flow documented in [`CREDENTIALS.md`](../CREDENTIALS.md).
 
 REST, Home Assistant, local rules, MQTT, and MCP all produce `AnnouncementCommand` values for the same dispatcher. Group fanout uses the existing independent per-Chime queues and common disposition semantics.
+
+## Experimental camera talkback targets
+
+Camera targets are explicitly configured by name and Protect ID; bootstrap discovery never opts cameras in automatically. The dispatcher partitions mixed groups before preparing audio. Smart Chime members continue through fixed slots unchanged, while camera members receive the same synthesized MP3 through a separately injected talkback backend and their own arbitration queues.
+
+Before each camera session, the backend re-reads Protect bootstrap and requires a connected camera with `hasSpeaker=true` plus the physically verified AAC, mono, 16-bit, `serverudp` profile. It converts MP3 to AAC-LC ADTS with a cancellable, streaming output bound; validates every frame's profile/rate/channel/single-block metadata; obtains a fresh controller-minted talkback URL; confines that URL to the configured controller host and verified talkback port `7443`; sends only the single scoped `TOKEN` cookie; opens and arms the socket before mixed-group Chime slot/playback effects; then sends complete frames at `1024 / sample_rate`, drains, and closes. It does not reconnect or replay after uncertain delivery.
+
+The first implementation excludes Opus/RTP profiles and camera ringtone semantics. Cameras support text announcements and repeats only; volume remains device-managed. Signed URLs and cookies are never persisted, returned, or logged.

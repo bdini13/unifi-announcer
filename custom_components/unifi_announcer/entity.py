@@ -51,13 +51,55 @@ def configured_targets(coordinator) -> list[tuple[str, str | None, bool]]:
     return targets
 
 
+def target_supports(coordinator, target: str | None, capability: str) -> bool:
+    """Read additive capabilities while preserving legacy Chime behavior."""
+    chime_data = (coordinator.data or {}).get("chimes", {})
+    for item in chime_data.get("chimes", []):
+        if str(item.get("name") or item.get("id")) == target:
+            capabilities = item.get("capabilities")
+            return True if not isinstance(capabilities, dict) else bool(
+                capabilities.get(capability)
+            )
+    for item in chime_data.get("cameras", []):
+        if str(item.get("name") or item.get("id")) == target:
+            capabilities = item.get("capabilities")
+            if isinstance(capabilities, dict):
+                return bool(capabilities.get(capability))
+            return capability in (item.get("supports") or [])
+    group_capabilities = chime_data.get("group_capabilities") or {}
+    if target in (chime_data.get("groups") or {}):
+        capabilities = group_capabilities.get(target)
+        return True if not isinstance(capabilities, dict) else bool(
+            capabilities.get(capability)
+        )
+    return False
+
+
+def configured_announcement_targets(
+    coordinator,
+) -> list[tuple[str, str | None, bool, str]]:
+    """Return all targets that safely accept arbitrary text announcements."""
+    targets = [
+        (name, target_id, is_group, "group" if is_group else "chime")
+        for name, target_id, is_group in configured_targets(coordinator)
+        if target_supports(coordinator, name, "announce")
+    ]
+    chime_data = (coordinator.data or {}).get("chimes", {})
+    for camera in chime_data.get("cameras", []):
+        name = str(camera.get("name") or camera.get("id") or "camera")
+        if target_supports(coordinator, name, "announce"):
+            targets.append((name, camera.get("id"), False, "camera"))
+    return targets
+
+
 class UniFiAnnouncerEntity(CoordinatorEntity):
     """Base coordinator-backed entity."""
 
     _attr_has_entity_name = True
 
     def __init__(self, entry, coordinator, target: str | None = None,
-                 chime_id: str | None = None, is_group: bool = False) -> None:
+                 chime_id: str | None = None, is_group: bool = False,
+                 target_type: str = "chime") -> None:
         service_identifier = (DOMAIN, entry.data["url"])
         dr.async_get(coordinator.hass).async_get_or_create(
             config_entry_id=entry.entry_id,
@@ -74,6 +116,7 @@ class UniFiAnnouncerEntity(CoordinatorEntity):
         self.target = target
         self.chime_id = chime_id
         self.is_group = is_group
+        self.target_type = target_type
 
     @property
     def entity_key(self) -> str:
@@ -88,7 +131,8 @@ class UniFiAnnouncerEntity(CoordinatorEntity):
                 identifiers={(DOMAIN, str(self.chime_id))},
                 name=target_display_name(self.target),
                 manufacturer="Ubiquiti",
-                model="Protect Smart Chime",
+                model=("Protect Camera Speaker"
+                       if self.target_type == "camera" else "Protect Smart Chime"),
                 via_device=service_identifier,
             )
         return DeviceInfo(

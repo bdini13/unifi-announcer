@@ -6,14 +6,21 @@ from homeassistant.const import STATE_IDLE
 from homeassistant.exceptions import HomeAssistantError
 
 from .api import UniFiAnnouncerError
-from .entity import UniFiAnnouncerEntity, configured_targets
+from .entity import (
+    UniFiAnnouncerEntity,
+    configured_announcement_targets,
+    target_supports,
+)
 
 
 async def async_setup_entry(hass, entry, async_add_entities) -> None:
     coordinator = entry.runtime_data.coordinator
     async_add_entities([
-        UniFiAnnouncerMediaPlayer(entry, coordinator, target, chime_id, is_group)
-        for target, chime_id, is_group in configured_targets(coordinator)
+        UniFiAnnouncerMediaPlayer(
+            entry, coordinator, target, target_id, is_group, target_type
+        )
+        for target, target_id, is_group, target_type
+        in configured_announcement_targets(coordinator)
     ])
 
 
@@ -25,8 +32,12 @@ class UniFiAnnouncerMediaPlayer(UniFiAnnouncerEntity, MediaPlayerEntity):
     _attr_translation_key = "speaker"
     _attr_name = "Announcement player"
 
-    def __init__(self, entry, coordinator, target, chime_id, is_group) -> None:
-        super().__init__(entry, coordinator, target, chime_id, is_group)
+    def __init__(
+        self, entry, coordinator, target, target_id, is_group, target_type="chime"
+    ) -> None:
+        super().__init__(
+            entry, coordinator, target, target_id, is_group, target_type
+        )
         self._attr_unique_id = f"{entry.entry_id}_{self.entity_key}_media_player"
 
     async def async_play_media(self, media_type: str, media_id: str, **kwargs) -> None:
@@ -37,6 +48,13 @@ class UniFiAnnouncerMediaPlayer(UniFiAnnouncerEntity, MediaPlayerEntity):
                     raise HomeAssistantError("Announcement text cannot be empty")
                 result = await self.runtime.client.async_announce(media_id.strip(), target=self.target)
             elif media_type == "unifi-announcer/preset":
+                if not target_supports(
+                    self.coordinator, self.target, "play_preset"
+                ):
+                    self.runtime.record_playback_result(self.target, "failed")
+                    raise HomeAssistantError(
+                        "This target does not support ringtone preset playback"
+                    )
                 result = await self.runtime.client.async_play_preset(media_id, target=self.target)
             else:
                 self.runtime.record_playback_result(self.target, "failed")
