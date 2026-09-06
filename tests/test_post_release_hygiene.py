@@ -1,8 +1,11 @@
 from pathlib import Path
 
 
-def test_completed_v2_1_7_publisher_is_retired():
-    assert not Path(".github/workflows/release.yml").exists()
+def test_completed_v2_1_7_publisher_remains_retired():
+    workflow = Path(".github/workflows/release.yml").read_text()
+    assert "name: release-v2.1.8" in workflow
+    assert "Publish v2.1.8 release" in workflow
+    assert "Publish v2.1.7 release" not in workflow
     guide = Path("docs/POST_RELEASE.md").read_text()
     assert "Stable `v2.1.7` has already been published" in guide
     assert "Publish v2.1.7 release" in guide

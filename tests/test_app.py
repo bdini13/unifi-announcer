@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock
 
 import httpx
@@ -156,3 +157,45 @@ async def test_api_key_is_required_on_mutating_routes(
         response = await client.request(method, path, json={})
 
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_reboot_invalidates_resident_content_before_device_reboot(
+    main_module, monkeypatch
+):
+    monkeypatch.setattr(main_module, "APP_API_KEY", "configured-test-key")
+    order = []
+
+    class DynamicSlotsFixture:
+        @asynccontextmanager
+        async def target_lifecycle_guard(self, target_ids, *, reason):
+            order.append(("guard-enter", list(target_ids), reason))
+            yield 2
+            order.append(("guard-exit",))
+
+    async def reboot_device():
+        order.append(("reboot",))
+        return {"rebooting": True, "state": "CONNECTED"}
+
+    monkeypatch.setattr(
+        main_module.app.state.services,
+        "dynamic_slots",
+        DynamicSlotsFixture(),
+        raising=False,
+    )
+    monkeypatch.setattr(main_module.protect, "reboot", reboot_device)
+
+    async with httpx.AsyncClient(
+        transport=transport_for(main_module), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/reboot?confirm=true",
+            headers={"X-API-Key": "configured-test-key"},
+        )
+
+    assert response.status_code == 200
+    assert order == [
+        ("guard-enter", ["chime-fixture"], "device_reboot"),
+        ("reboot",),
+        ("guard-exit",),
+    ]

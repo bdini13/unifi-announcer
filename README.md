@@ -511,6 +511,7 @@ See the exact pre-release evidence requirements in [Release checklist](docs/RELE
 - [Rules](docs/RULES.md)
 - [Track registry](docs/TRACKS.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
+- [v2.1.8 release notes (candidate)](docs/RELEASE_NOTES_v2.1.8.md)
 - [v2.1.7 release notes](docs/RELEASE_NOTES_v2.1.7.md)
 - [v2.1.6 release notes](docs/RELEASE_NOTES_v2.1.6.md)
 
@@ -554,6 +555,7 @@ This project was developed with assistance from AI coding and research tools for
 ## Release status
 
 - **Stable:** `v2.1.7` — validated Protect UI onboarding for the Smart Chime device password
+- **Release candidate:** `v2.1.8` — safe same-boot resident TTS reuse with reboot/reconnect invalidation
 - **Planned:** `v2.2.0` — native Home Assistant `tts.speak`, binary media ingestion, and optional SSE integration
 
 See [ROADMAP.md](ROADMAP.md) and the [Releases page](https://github.com/bdini13/unifi-announcer/releases).

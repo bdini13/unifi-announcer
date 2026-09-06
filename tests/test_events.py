@@ -134,3 +134,29 @@ async def test_protect_ws_fixture_parses_camera_last_ring(main_module, monkeypat
     assert data["lastRing"] == 1700000000000
     assert stream.recent[-1]["model"] == "camera"
     assert stream.recent[-1]["last_ring"] == 1700000000000
+
+
+@pytest.mark.asyncio
+async def test_chime_reconnect_emits_lifecycle_invalidation_once(
+    main_module, monkeypatch
+):
+    stream = main_module.ProtectEventStream()
+    reconnect = AsyncMock()
+    stream.on_chime_reconnect = reconnect
+    monkeypatch.setattr(main_module.mqtt_bridge, "publish_event", AsyncMock())
+    action = {"action": "update", "modelKey": "chime", "id": "chime-1"}
+
+    # First connected observation establishes a baseline and must not discard
+    # restart-safe content merely because the websocket subscribed.
+    await stream._handle(
+        action, {"modelKey": "chime", "id": "chime-1", "state": "CONNECTED"}
+    )
+    await stream._handle(
+        action, {"modelKey": "chime", "id": "chime-1", "state": "DISCONNECTED"}
+    )
+    await stream._handle(
+        action, {"modelKey": "chime", "id": "chime-1", "state": "CONNECTED"}
+    )
+    await asyncio.gather(*stream._rule_tasks)
+
+    reconnect.assert_awaited_once_with("chime-1")
