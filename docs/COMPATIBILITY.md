@@ -84,6 +84,8 @@ Live validation on UniFi OS `5.1.31`, Protect `7.2.105`, and Smart Chime firmwar
 
 Live inspection of the Protect frontend showed that **Reveal** performs `GET /devices/password/{deviceType}/{deviceId}`, while **Edit** uses `PATCH` on the same resource. The value returned by Reveal exactly matched the known working `CHIME_DIRECT_PASSWORD` and returned **HTTP 200** with username `ubnt` against the Smart Chime's read-only `/api/info` check.
 
+The earlier `HTTP 401` result attributed to a recovery value was traced to incorrectly captured UI text rather than the actual value returned by Reveal. That result is superseded by the verified Reveal flow.
+
 For onboarding, use **Reveal**, not **Edit**. Edit is a credential-changing operation and is not required to configure UniFi Announcer. The validated flow requires no SSH, Protect database access, backup scraping, credential reset, or exploit. See [`CREDENTIALS.md`](../CREDENTIALS.md).
 
 The project does not retrieve the credential automatically. MCP and Home Assistant receive only the Announcer application/API surfaces and never receive the physical device credential.
