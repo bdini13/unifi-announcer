@@ -26,12 +26,15 @@ v2.1.8 substantially reduces repeated-announcement request-path latency by avoid
 
 The next development work is ordered by user value and available validation hardware. Features that depend on undocumented Protect behavior remain experimental until they pass model-specific automated and physical validation.
 
-### 1. Camera-speaker TTS
+### 1. Camera-speaker TTS — experimental implementation
 
-- extend Announcer targets to compatible Protect cameras through controller-minted talkback sessions;
-- discover and enforce each camera's advertised codec, sample rate, channel count, and transport settings;
-- route generated speech through the existing dispatcher, queueing, quiet-hours, priority, and group model rather than creating a second playback stack;
-- fail closed for unsupported camera models and require physical audibility before claiming support.
+- explicit `CAMERAS_CONFIG` allowlist; cameras never join the implicit default target;
+- capability-gated private Protect talkback for the physically verified AAC/ADTS profile;
+- shared dispatcher, queueing, quiet-hours, priority, dedupe, and mixed-group behavior;
+- authenticated `/targets` capability catalog and capability-safe Home Assistant entities;
+- fail closed for unsupported camera models/profiles and require physical audibility before expanding compatibility claims.
+
+The implementation is automated-test complete but remains experimental pending exact-candidate physical validation through the integrated Announcer path.
 
 ### 2. Native Home Assistant media ingestion
 

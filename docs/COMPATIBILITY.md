@@ -12,6 +12,8 @@
 | Reboot/reconnect resident invalidation | Physical single-Chime reboot validation + automated lifecycle/concurrency tests | Supported; next request safely rewrites when continuity is broken |
 | Generic arbitrary direct staging | Insufficient safe ownership model | Disabled |
 | Direct HTTP playback | No verified route | Unsupported; playback remains Protect `play-speaker` |
+| Protect camera AAC talkback WebSocket | Prior physical G3 Instant transport evidence + automated integrated-path tests | Experimental explicit opt-in; per-model integrated validation pending |
+| Protect camera Opus/RTP talkback | Advertised by some camera bootstrap profiles but not physically validated in this service | Unsupported; fails closed |
 | Direct slot deletion | Semantics not proven | Unsupported; v2.1 migration overwrites proven legacy bytes with silence rather than guessing deletion |
 | Protect-internal UCP4 transport/trust | No supported transport or trust path found | Unsupported; disconnected research interface only |
 | Python | 3.12 container target; HA validation uses its pinned environment | Supported by CI |
@@ -97,3 +99,5 @@ The existing sanitized fixture covers one/two linked frames with an 8-byte heade
 ## Physical validation boundary
 
 Stable v2.1.8 physical validation covers one Smart Chime on Protect `7.2.105` / firmware `1.7.20`. Multiple Chimes/groups are covered by automated fixtures and concurrency tests but have not been physically validated on multiple devices. Request-path timing was measured, but no synchronized microphone benchmark was used; do not generalize the single-device timing numbers into a universal acoustic-latency claim.
+
+The private AAC talkback transport was separately heard on one G3 Instant during controlled research. The integrated camera-target implementation is not part of stable v2.1.8 and must remain experimental until its exact candidate is audibly validated. Metadata similarity does not establish support for another camera model.

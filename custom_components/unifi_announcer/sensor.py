@@ -4,7 +4,7 @@ from __future__ import annotations
 from homeassistant.components.sensor import SensorEntity
 
 from .const import INTEGRATION_VERSION
-from .entity import UniFiAnnouncerEntity, configured_targets
+from .entity import UniFiAnnouncerEntity, configured_announcement_targets
 
 
 async def async_setup_entry(hass, entry, async_add_entities) -> None:
@@ -13,16 +13,20 @@ async def async_setup_entry(hass, entry, async_add_entities) -> None:
         UniFiAnnouncerServiceSensor(entry, coordinator, "status"),
         UniFiAnnouncerServiceSensor(entry, coordinator, "version"),
     ]
-    for target, chime_id, is_group in configured_targets(coordinator):
+    for target, target_id, is_group, target_type in configured_announcement_targets(
+        coordinator
+    ):
         if not is_group:
             entities.append(
                 UniFiAnnouncerTargetSensor(
-                    entry, coordinator, target, chime_id, is_group, "queue_depth"
+                    entry, coordinator, target, target_id, is_group,
+                    "queue_depth", target_type
                 )
             )
         entities.append(
             UniFiAnnouncerTargetSensor(
-                entry, coordinator, target, chime_id, is_group, "last_disposition"
+                entry, coordinator, target, target_id, is_group,
+                "last_disposition", target_type
             )
         )
     async_add_entities(entities)
@@ -58,8 +62,11 @@ class UniFiAnnouncerServiceSensor(UniFiAnnouncerEntity, SensorEntity):
 class UniFiAnnouncerTargetSensor(UniFiAnnouncerEntity, SensorEntity):
     """Per-target queue/disposition sensor."""
 
-    def __init__(self, entry, coordinator, target, chime_id, is_group, kind: str) -> None:
-        super().__init__(entry, coordinator, target, chime_id, is_group)
+    def __init__(self, entry, coordinator, target, target_id, is_group, kind: str,
+                 target_type: str = "chime") -> None:
+        super().__init__(
+            entry, coordinator, target, target_id, is_group, target_type
+        )
         self.kind = kind
         self._attr_unique_id = f"{entry.entry_id}_{self.entity_key}_{kind}"
         self._attr_translation_key = kind
@@ -72,7 +79,8 @@ class UniFiAnnouncerTargetSensor(UniFiAnnouncerEntity, SensorEntity):
     def native_value(self):
         if self.kind == "last_disposition":
             return self.runtime.last_disposition.get(self.target, "unknown")
-        for item in (self.coordinator.data or {}).get("chimes", {}).get("chimes", []):
+        target_key = "cameras" if self.target_type == "camera" else "chimes"
+        for item in (self.coordinator.data or {}).get("chimes", {}).get(target_key, []):
             if item.get("id") == self.chime_id or item.get("name") == self.target:
                 return item.get("queue_depth", 0)
         return None

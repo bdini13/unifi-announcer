@@ -1,0 +1,90 @@
+from unittest.mock import AsyncMock
+
+import pytest
+
+from custom_components.unifi_announcer.api import (
+    InvalidResponse,
+    UniFiAnnouncerClient,
+)
+
+
+def _client_with_requests(*responses):
+    client = object.__new__(UniFiAnnouncerClient)
+    client._request = AsyncMock(side_effect=responses)
+    return client
+
+
+@pytest.mark.asyncio
+async def test_target_catalog_is_translated_for_existing_entity_consumers():
+    client = _client_with_requests((
+        200,
+        {
+            "schema_version": 1,
+            "targets": [
+                {
+                    "name": "kitchen",
+                    "id": "chime-one",
+                    "type": "chime",
+                    "queue_depth": 1,
+                    "capabilities": {"announce": True, "buzzer": True},
+                },
+                {
+                    "name": "family_camera",
+                    "id": "camera-one",
+                    "type": "camera",
+                    "model": "UVC G3 Instant",
+                    "status": "available",
+                    "queue_depth": 0,
+                    "capabilities": {"announce": True, "buzzer": False},
+                },
+            ],
+            "groups": [
+                {
+                    "name": "mixed",
+                    "type": "group",
+                    "members": ["kitchen", "family_camera"],
+                    "capabilities": {"announce": True, "buzzer": False},
+                }
+            ],
+        },
+    ))
+
+    result = await client.async_get_chimes()
+
+    assert result["chimes"][0]["id"] == "chime-one"
+    assert result["cameras"][0]["id"] == "camera-one"
+    assert result["cameras"][0]["capability_state"]["model"] == "UVC G3 Instant"
+    assert result["groups"] == {"mixed": ["kitchen", "family_camera"]}
+    assert result["group_capabilities"]["mixed"]["buzzer"] is False
+    client._request.assert_awaited_once_with("GET", "/targets")
+
+
+@pytest.mark.asyncio
+async def test_target_catalog_falls_back_to_legacy_chimes_only_on_404():
+    legacy = {
+        "chimes": [{"name": "default", "id": "chime-one", "queue_depth": 0}],
+        "groups": {"all": ["default"]},
+    }
+    client = _client_with_requests((404, {"detail": "missing"}), (200, legacy))
+
+    result = await client.async_get_targets()
+
+    assert result["schema_version"] == 1
+    assert result["targets"][0]["type"] == "chime"
+    assert result["targets"][0]["capabilities"]["play_default"] is True
+    assert result["groups"][0]["name"] == "all"
+    assert [call.args for call in client._request.await_args_list] == [
+        ("GET", "/targets"),
+        ("GET", "/chimes"),
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [401, 403, 500])
+async def test_target_catalog_does_not_hide_non_404_failures(status):
+    client = _client_with_requests((status, {"detail": "failed"}))
+
+    with pytest.raises(InvalidResponse, match="Invalid targets response"):
+        await client.async_get_targets()
+
+    assert client._request.await_count == 1

@@ -73,7 +73,8 @@ class AnnouncementDispatcher:
                  ringtone_backend: Any | None = None,
                  upload_lock: asyncio.Lock | None = None,
                  dynamic_slots: Any | None = None,
-                 synthesize_preset: Callable[[str], Awaitable[bytes]] | None = None) -> None:
+                 synthesize_preset: Callable[[str], Awaitable[bytes]] | None = None,
+                 camera_playback: Any | None = None) -> None:
         self.protect = protect
         self.ringtone_backend = ringtone_backend or protect
         self.chime = chime
@@ -93,6 +94,7 @@ class AnnouncementDispatcher:
         self.track_reconciler = track_reconciler
         self.dynamic_slots = dynamic_slots
         self.synthesize_preset = synthesize_preset
+        self.camera_playback = camera_playback
         self._creation_locks: dict[str, asyncio.Lock] = {}
         self._creation_lock_users: dict[str, int] = {}
         self._upload_lock = upload_lock or asyncio.Lock()
@@ -101,6 +103,7 @@ class AnnouncementDispatcher:
         total_started = perf_counter_ns()
         timing = AnnouncementTiming()
         dynamic_lease = None
+        prepared_camera_sessions: dict[str, Any] = {}
         repeat: int | None = None
         try:
             self._validate(command)
@@ -139,8 +142,39 @@ class AnnouncementDispatcher:
                     raise ValueError(f"unknown or empty target: {command.target}")
                 raise RuntimeError("no chime targets are configured")
 
+            chime_targets = [
+                target for target in targets
+                if getattr(target.desc, "kind", "chime") == "chime"
+            ]
+            camera_targets = [
+                target for target in targets
+                if getattr(target.desc, "kind", "chime") == "camera"
+            ]
+            if camera_targets and command.action != "announce":
+                raise ValueError("camera targets support announce only")
+            unavailable_cameras = [
+                target.desc.name for target in camera_targets
+                if not isinstance(getattr(target, "capability_state", None), dict)
+                or target.capability_state.get("status") != "available"
+            ]
+            if unavailable_cameras:
+                raise ValueError(
+                    f"camera target is unavailable: {unavailable_cameras[0]}"
+                )
+            if camera_targets and (command.volume is not None or command.profile is not None):
+                raise ValueError(
+                    "camera talkback uses device volume; volume/profile overrides are unsupported"
+                )
+            if camera_targets and self.camera_playback is None:
+                raise RuntimeError("camera talkback playback is not configured")
+            if camera_targets:
+                assert self.camera_playback is not None
+            if camera_targets and chime_targets and self.dynamic_slots is None:
+                raise RuntimeError("mixed camera/chime playback requires fixed TTS slots")
+
             ringtone_id: str | None = None
             ringtone_name: str | None = None
+            camera_audio: bytes | None = None
             if command.action == "play_preset":
                 ringtone_name = command.preset or ""
                 if self.dynamic_slots is not None and self.synthesize_preset is not None:
@@ -149,32 +183,58 @@ class AnnouncementDispatcher:
                     )
                     self._capture_audio_timings(timing, mp3)
                     dynamic_lease = await self._timed(
-                        timing, "upload", self.dynamic_slots.prepare(mp3, targets)
+                        timing, "upload", self.dynamic_slots.prepare(mp3, chime_targets)
                     )
                     ringtone_id = dynamic_lease.ringtone_id
                 else:
                     ringtone_id = await self.resolve_preset(ringtone_name)
             elif command.action == "announce":
-                if self.dynamic_slots is not None:
-                    mp3 = await self._timed(timing, "tts", self.synthesize(command.text or ""))
-                    self._capture_audio_timings(timing, mp3)
-                    dynamic_lease = await self._timed(
-                        timing, "upload", self.dynamic_slots.prepare(mp3, targets)
+                if camera_targets or self.dynamic_slots is not None:
+                    mp3 = await self._timed(
+                        timing, "tts", self.synthesize(command.text or "")
                     )
-                    ringtone_id = dynamic_lease.ringtone_id
+                    self._capture_audio_timings(timing, mp3)
+                    camera_audio = mp3
+                    for target in camera_targets:
+                        camera_id = target.desc.camera_id
+                        prepared_camera_sessions[camera_id] = await self._timed(
+                            timing,
+                            "camera_prepare",
+                            self.camera_playback.prepare(
+                                camera_id,
+                                mp3,
+                                repeat_times=repeat or self.repeat_default,
+                            ),
+                        )
+                    if chime_targets:
+                        dynamic_lease = await self._timed(
+                            timing, "upload", self.dynamic_slots.prepare(mp3, chime_targets)
+                        )
+                        ringtone_id = dynamic_lease.ringtone_id
                 else:
                     # Compatibility for direct unit construction and legacy app.main.
                     # Production app.server wires a fixed DynamicTtsSlotManager.
                     ringtone_name = self.slug(command.text or "")
-                    ringtone_id = await self._resolve_announcement(command, timing, targets)
+                    ringtone_id = await self._resolve_announcement(
+                        command, timing, chime_targets
+                    )
 
             async def submit(target):
-                chime_id = target.desc.chime_id
+                target_kind = getattr(target.desc, "kind", "chime")
+                chime_id = getattr(target.desc, "chime_id", "")
+                camera_id = getattr(target.desc, "camera_id", "")
                 dispatch_at_ns: int | None = None
 
                 async def play() -> dict[str, Any]:
                     nonlocal dispatch_at_ns, ringtone_id
                     dispatch_at_ns = perf_counter_ns()
+                    if target_kind == "camera":
+                        if camera_audio is None or not camera_id:
+                            raise RuntimeError("camera talkback target is not ready")
+                        prepared = prepared_camera_sessions.get(camera_id)
+                        if prepared is None:
+                            raise RuntimeError("camera talkback target is not prepared")
+                        return await prepared.play()
                     target_kw = {"chime_id": chime_id} if chime_id else {}
                     if command.action == "buzzer":
                         return await self.protect.play_buzzer(**target_kw)
@@ -217,21 +277,34 @@ class AnnouncementDispatcher:
                     dedupe_key=command.dedupe_key,
                     dedupe_window_ms=command.dedupe_window_ms,
                 ))
+                identity = (
+                    {"camera_id": camera_id}
+                    if target_kind == "camera"
+                    else {"chime_id": chime_id}
+                )
                 if isinstance(queued, QueueResult):
                     return {
                         "target": target.desc.name,
-                        "chime_id": chime_id,
+                        "target_type": target_kind,
+                        **identity,
                         "disposition": queued.disposition.value,
                         "queue_wait_ms": queued.queue_wait_ms,
                         "dispatch_at_ns": dispatch_at_ns,
                         **queued.result,
                     }
-                return {"target": target.desc.name, "chime_id": chime_id,
-                        "disposition": "played", "dispatch_at_ns": dispatch_at_ns,
-                        **dict(queued)}
+                return {
+                    "target": target.desc.name,
+                    "target_type": target_kind,
+                    **identity,
+                    "disposition": "played",
+                    "dispatch_at_ns": dispatch_at_ns,
+                    **dict(queued),
+                }
 
             jobs = await self._timed(timing, "play_request", asyncio.gather(
                 *(submit(target) for target in targets)))
+            for prepared in prepared_camera_sessions.values():
+                await prepared.close()
             dispatch_times = [j["dispatch_at_ns"] for j in jobs
                               if j.get("dispatch_at_ns") is not None]
             group_skew_ms = ((max(dispatch_times) - min(dispatch_times)) / 1_000_000
@@ -252,11 +325,19 @@ class AnnouncementDispatcher:
                 disposition = "partial"
 
             if dynamic_lease is not None:
-                possible_playback = any(
-                    value not in (QueueDisposition.DEDUPED.value, QueueDisposition.DROPPED.value)
-                    for value in dispositions
+                chime_dispositions = [
+                    job["disposition"]
+                    for target, job in zip(targets, jobs, strict=True)
+                    if getattr(target.desc, "kind", "chime") == "chime"
+                ]
+                possible_chime_playback = any(
+                    value not in (
+                        QueueDisposition.DEDUPED.value,
+                        QueueDisposition.DROPPED.value,
+                    )
+                    for value in chime_dispositions
                 )
-                if possible_playback:
+                if possible_chime_playback:
                     dynamic_lease.release_after(repeat or self.repeat_default)
                 else:
                     await dynamic_lease.release_now()
@@ -268,7 +349,18 @@ class AnnouncementDispatcher:
                 result_payload["group_skew_ms"] = group_skew_ms
             return self._finish(command, disposition, result_payload,
                                 timing, total_started)
+        except asyncio.CancelledError:
+            for prepared in prepared_camera_sessions.values():
+                await prepared.close()
+            if dynamic_lease is not None:
+                # Queue workers may already own the Chime playback request. Keep
+                # the slot leased conservatively, but always schedule release.
+                dynamic_lease.release_after(repeat or self.repeat_default)
+            self._record_finish("failed", timing, total_started)
+            raise
         except Exception:
+            for prepared in prepared_camera_sessions.values():
+                await prepared.close()
             if dynamic_lease is not None:
                 # A target may already have accepted play-speaker before another
                 # member failed. Hold the slot conservatively instead of reusing it.

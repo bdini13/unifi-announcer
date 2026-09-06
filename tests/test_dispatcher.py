@@ -1,6 +1,6 @@
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
@@ -60,6 +60,382 @@ async def test_dispatch_fans_out_concurrently_with_each_chime_id():
 
     assert entered == ["id-one", "id-two"]
     assert [job["chime_id"] for job in result.result["jobs"]] == ["id-one", "id-two"]
+
+
+@pytest.mark.asyncio
+async def test_announce_routes_camera_audio_without_touching_chime_slots():
+    prepared = SimpleNamespace(
+        play=AsyncMock(return_value={"played": True}), close=AsyncMock()
+    )
+    camera_playback = SimpleNamespace(prepare=AsyncMock(return_value=prepared))
+    synthesize = AsyncMock(return_value=b"mp3")
+    dynamic_slots = SimpleNamespace(prepare=AsyncMock())
+    target = SimpleNamespace(
+        desc=SimpleNamespace(
+            name="family-room-camera",
+            chime_id="",
+            camera_id="camera-one",
+            kind="camera",
+        ),
+        capability_state={"status": "available"},
+        queue=SimpleNamespace(submit=lambda request: request.run()),
+    )
+    dispatcher = AnnouncementDispatcher(
+        protect=SimpleNamespace(play=AsyncMock()),
+        chime=SimpleNamespace(),
+        ringtone_index=SimpleNamespace(),
+        synthesize=synthesize,
+        slug=lambda text: text,
+        resolve_preset=AsyncMock(),
+        resolve_targets=lambda selected: [target],
+        profile=lambda values: values,
+        quiet=lambda: False,
+        metrics=_Metrics(),
+        volume_default=50,
+        repeat_default=1,
+        dynamic_slots=dynamic_slots,
+        camera_playback=camera_playback,
+    )
+
+    result = await dispatcher.dispatch(AnnouncementCommand(
+        action="announce", text="hello camera", target="family-room-camera",
+        repeat_times=2,
+    ))
+
+    synthesize.assert_awaited_once_with("hello camera")
+    dynamic_slots.prepare.assert_not_awaited()
+    camera_playback.prepare.assert_awaited_once_with(
+        "camera-one", b"mp3", repeat_times=2
+    )
+    prepared.play.assert_awaited_once_with()
+    prepared.close.assert_awaited()
+    assert result.disposition == "played"
+    assert result.result["jobs"][0]["target_type"] == "camera"
+    assert result.result["jobs"][0]["camera_id"] == "camera-one"
+    assert "chime_id" not in result.result["jobs"][0]
+
+
+@pytest.mark.asyncio
+async def test_mixed_group_synthesizes_once_and_prepares_slots_for_chimes_only():
+    synthesize = AsyncMock(return_value=b"mp3")
+    lease = SimpleNamespace(
+        ringtone_id="tone-one",
+        logical_slot=1,
+        release_after=Mock(),
+        release_now=AsyncMock(),
+    )
+    dynamic_slots = SimpleNamespace(prepare=AsyncMock(return_value=lease))
+    prepared = SimpleNamespace(
+        play=AsyncMock(return_value={"played": True}), close=AsyncMock()
+    )
+    camera_playback = SimpleNamespace(prepare=AsyncMock(return_value=prepared))
+    protect = SimpleNamespace(play=AsyncMock(return_value={"played": True}))
+    queue = SimpleNamespace(submit=lambda request: request.run())
+    chime = SimpleNamespace(
+        desc=SimpleNamespace(name="kitchen", chime_id="chime-one", kind="chime"),
+        queue=queue,
+    )
+    camera = SimpleNamespace(
+        desc=SimpleNamespace(
+            name="family-room-camera", chime_id="", camera_id="camera-one", kind="camera"
+        ),
+        capability_state={"status": "available"},
+        queue=queue,
+    )
+    dispatcher = AnnouncementDispatcher(
+        protect=protect,
+        chime=SimpleNamespace(),
+        ringtone_index=SimpleNamespace(),
+        synthesize=synthesize,
+        slug=lambda text: text,
+        resolve_preset=AsyncMock(),
+        resolve_targets=lambda selected: [chime, camera],
+        profile=lambda values: values,
+        quiet=lambda: False,
+        metrics=_Metrics(),
+        volume_default=50,
+        repeat_default=1,
+        dynamic_slots=dynamic_slots,
+        camera_playback=camera_playback,
+    )
+
+    result = await dispatcher.dispatch(AnnouncementCommand(action="announce", text="mixed"))
+
+    synthesize.assert_awaited_once_with("mixed")
+    dynamic_slots.prepare.assert_awaited_once_with(b"mp3", [chime])
+    protect.play.assert_awaited_once_with(
+        "tone-one", 50, 1, chime_id="chime-one"
+    )
+    camera_playback.prepare.assert_awaited_once_with(
+        "camera-one", b"mp3", repeat_times=1
+    )
+    prepared.play.assert_awaited_once_with()
+    assert result.result["targets"] == 2
+
+
+@pytest.mark.asyncio
+async def test_mixed_group_camera_prepare_failure_prevents_chime_side_effects():
+    synthesize = AsyncMock(return_value=b"mp3")
+    dynamic_slots = SimpleNamespace(prepare=AsyncMock())
+    camera_playback = SimpleNamespace(
+        prepare=AsyncMock(side_effect=RuntimeError("camera unavailable"))
+    )
+    protect = SimpleNamespace(play=AsyncMock())
+    queue = SimpleNamespace(submit=AsyncMock())
+    chime = SimpleNamespace(
+        desc=SimpleNamespace(name="kitchen", chime_id="chime-one", kind="chime"),
+        queue=queue,
+    )
+    camera = SimpleNamespace(
+        desc=SimpleNamespace(
+            name="family-room-camera",
+            chime_id="",
+            camera_id="camera-one",
+            kind="camera",
+        ),
+        capability_state={"status": "available"},
+        queue=queue,
+    )
+    dispatcher = AnnouncementDispatcher(
+        protect=protect,
+        chime=SimpleNamespace(),
+        ringtone_index=SimpleNamespace(),
+        synthesize=synthesize,
+        slug=lambda text: text,
+        resolve_preset=AsyncMock(),
+        resolve_targets=lambda selected: [chime, camera],
+        profile=lambda values: values,
+        quiet=lambda: False,
+        metrics=_Metrics(),
+        volume_default=50,
+        repeat_default=1,
+        dynamic_slots=dynamic_slots,
+        camera_playback=camera_playback,
+    )
+
+    with pytest.raises(RuntimeError, match="camera unavailable"):
+        await dispatcher.dispatch(
+            AnnouncementCommand(action="announce", text="mixed")
+        )
+
+    camera_playback.prepare.assert_awaited_once()
+    dynamic_slots.prepare.assert_not_awaited()
+    queue.submit.assert_not_awaited()
+    protect.play.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_cancellation_schedules_dynamic_slot_release():
+    lease = SimpleNamespace(
+        ringtone_id="tone-one",
+        logical_slot=1,
+        release_after=Mock(),
+        release_now=AsyncMock(),
+    )
+    dynamic_slots = SimpleNamespace(prepare=AsyncMock(return_value=lease))
+
+    async def cancel_submit(_request):
+        raise asyncio.CancelledError
+
+    target = SimpleNamespace(
+        desc=SimpleNamespace(
+            name="kitchen", chime_id="chime-one", camera_id="", kind="chime"
+        ),
+        queue=SimpleNamespace(submit=cancel_submit),
+    )
+    dispatcher = AnnouncementDispatcher(
+        protect=SimpleNamespace(play=AsyncMock()),
+        chime=SimpleNamespace(),
+        ringtone_index=SimpleNamespace(),
+        synthesize=AsyncMock(return_value=b"mp3"),
+        slug=lambda text: text,
+        resolve_preset=AsyncMock(),
+        resolve_targets=lambda selected: [target],
+        profile=lambda values: values,
+        quiet=lambda: False,
+        metrics=_Metrics(),
+        volume_default=50,
+        repeat_default=1,
+        dynamic_slots=dynamic_slots,
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await dispatcher.dispatch(
+            AnnouncementCommand(action="announce", text="cancel me", repeat_times=2)
+        )
+
+    lease.release_after.assert_called_once_with(2)
+    lease.release_now.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_active_queue_submit_cancellation_cancels_and_reaps_playback():
+    from app.playback.arbitration import ArbitrationQueue, PlaybackRequest
+
+    entered = asyncio.Event()
+    cleaned = asyncio.Event()
+
+    async def blocked() -> dict:
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleaned.set()
+        return {}
+
+    queue = ArbitrationQueue("camera")
+    submitter = asyncio.create_task(queue.submit(PlaybackRequest(blocked)))
+    await asyncio.wait_for(entered.wait(), timeout=0.2)
+    submitter.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await submitter
+    await asyncio.wait_for(cleaned.wait(), timeout=0.2)
+    await asyncio.sleep(0)
+    assert queue.depth == 0
+    await queue.stop()
+
+
+@pytest.mark.asyncio
+async def test_queue_stop_cancels_active_submitter_and_playback():
+    from app.playback.arbitration import ArbitrationQueue, PlaybackRequest
+
+    entered = asyncio.Event()
+    cleaned = asyncio.Event()
+
+    async def blocked() -> dict:
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleaned.set()
+        return {}
+
+    queue = ArbitrationQueue("camera")
+    submitter = asyncio.create_task(queue.submit(PlaybackRequest(blocked)))
+    await asyncio.wait_for(entered.wait(), timeout=0.2)
+    await queue.stop()
+    with pytest.raises(asyncio.CancelledError):
+        await submitter
+    assert cleaned.is_set()
+    assert queue.depth == 0
+
+
+@pytest.mark.asyncio
+async def test_unavailable_camera_fails_before_synthesis_or_negotiation():
+    camera_playback = SimpleNamespace(play=AsyncMock())
+    synthesize = AsyncMock()
+    target = SimpleNamespace(
+        desc=SimpleNamespace(
+            name="family-room-camera", chime_id="", camera_id="camera-one", kind="camera"
+        ),
+        capability_state={"status": "unavailable"},
+        queue=SimpleNamespace(submit=lambda request: request.run()),
+    )
+    dispatcher = AnnouncementDispatcher(
+        protect=SimpleNamespace(play=AsyncMock()),
+        chime=SimpleNamespace(),
+        ringtone_index=SimpleNamespace(),
+        synthesize=synthesize,
+        slug=lambda text: text,
+        resolve_preset=AsyncMock(),
+        resolve_targets=lambda selected: [target],
+        profile=lambda values: values,
+        quiet=lambda: False,
+        metrics=_Metrics(),
+        volume_default=50,
+        repeat_default=1,
+        camera_playback=camera_playback,
+    )
+
+    with pytest.raises(ValueError, match="camera target is unavailable"):
+        await dispatcher.dispatch(AnnouncementCommand(action="announce", text="hello"))
+
+    synthesize.assert_not_awaited()
+    camera_playback.play.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "override",
+    [{"volume": 50}, {"profile": "day"}],
+)
+async def test_camera_volume_and_profile_overrides_fail_before_synthesis(override):
+    synthesize = AsyncMock()
+    camera_playback = SimpleNamespace(play=AsyncMock())
+    target = SimpleNamespace(
+        desc=SimpleNamespace(
+            name="family-room-camera",
+            chime_id="",
+            camera_id="camera-one",
+            kind="camera",
+        ),
+        capability_state={"status": "available"},
+        queue=SimpleNamespace(submit=lambda request: request.run()),
+    )
+    dispatcher = AnnouncementDispatcher(
+        protect=SimpleNamespace(play=AsyncMock()),
+        chime=SimpleNamespace(),
+        ringtone_index=SimpleNamespace(),
+        synthesize=synthesize,
+        slug=lambda text: text,
+        resolve_preset=AsyncMock(),
+        resolve_targets=lambda selected: [target],
+        profile=lambda values: values,
+        quiet=lambda: False,
+        metrics=_Metrics(),
+        volume_default=50,
+        repeat_default=1,
+        camera_playback=camera_playback,
+    )
+
+    with pytest.raises(ValueError, match="volume/profile overrides are unsupported"):
+        await dispatcher.dispatch(
+            AnnouncementCommand(action="announce", text="hello", **override)
+        )
+
+    synthesize.assert_not_awaited()
+    camera_playback.play.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["buzzer", "play_default", "play_preset"])
+async def test_camera_targets_reject_non_tts_actions_before_any_playback(action):
+    camera_playback = SimpleNamespace(play=AsyncMock())
+    protect = SimpleNamespace(play=AsyncMock(), play_buzzer=AsyncMock(), play_default=AsyncMock())
+    target = SimpleNamespace(
+        desc=SimpleNamespace(
+            name="family-room-camera", chime_id="", camera_id="camera-one", kind="camera"
+        ),
+        capability_state={"status": "available"},
+        queue=SimpleNamespace(submit=lambda request: request.run()),
+    )
+    dispatcher = AnnouncementDispatcher(
+        protect=protect,
+        chime=SimpleNamespace(),
+        ringtone_index=SimpleNamespace(),
+        synthesize=AsyncMock(),
+        slug=lambda text: text,
+        resolve_preset=AsyncMock(return_value="tone"),
+        resolve_targets=lambda selected: [target],
+        profile=lambda values: values,
+        quiet=lambda: False,
+        metrics=_Metrics(),
+        volume_default=50,
+        repeat_default=1,
+        camera_playback=camera_playback,
+    )
+    command = AnnouncementCommand(
+        action=action,
+        preset="tone" if action == "play_preset" else None,
+    )
+
+    with pytest.raises(ValueError, match="camera targets support announce only"):
+        await dispatcher.dispatch(command)
+
+    camera_playback.play.assert_not_awaited()
+    protect.play.assert_not_awaited()
+    protect.play_buzzer.assert_not_awaited()
+    protect.play_default.assert_not_awaited()
 
 
 @pytest.mark.asyncio

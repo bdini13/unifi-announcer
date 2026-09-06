@@ -11,7 +11,7 @@ announce:
         text:
     target:
       name: Target
-      description: Optional configured chime or group name.
+      description: Optional configured Chime, compatible camera, or group name.
       selector:
         text:
     volume:

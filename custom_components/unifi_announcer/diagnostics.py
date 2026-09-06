@@ -26,6 +26,19 @@ async def async_get_config_entry_diagnostics(hass, entry) -> dict:
             }
             for c in data.get("chimes", {}).get("chimes", [])
         ],
+        "cameras": [
+            {
+                "name": c.get("name"),
+                "model": (c.get("capability_state") or {}).get("model"),
+                "queue_depth": c.get("queue_depth"),
+                "status": (c.get("capability_state") or {}).get("status"),
+                "capabilities": c.get("capabilities") or {},
+            }
+            for c in data.get("chimes", {}).get("cameras", [])
+        ],
+        "group_capabilities": data.get("chimes", {}).get(
+            "group_capabilities", {}
+        ),
         "groups": list((data.get("chimes", {}).get("groups") or {}).keys()),
         "presets": [p.get("name") for p in data.get("presets", []) if p.get("name")],
     }

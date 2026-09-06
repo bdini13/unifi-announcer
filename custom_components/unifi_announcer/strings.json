@@ -43,7 +43,7 @@
         },
         "data_description": {
           "poll_interval": "Seconds between lightweight Home Assistant state refreshes.",
-          "default_target": "Optional chime or group used when the Announce action does not specify a target.",
+          "default_target": "Optional configured Chime, compatible camera, or group used when the Announce action does not specify a target.",
           "default_volume": "Default announcement volume from 0 to 100.",
           "default_repeat": "Default number of playback repetitions."
         }
