@@ -57,7 +57,7 @@ The merged camera-speaker implementation passed:
 - independent compatibility/API/Home Assistant review with no findings;
 - independent security review with no blocking P0/P1 findings.
 
-The current release-preparation diff has separately passed 376 backend tests, 18 Home Assistant tests, Ruff, Python compilation, JSON metadata, diff validation, and an added-line privacy scan locally. Release-PR and post-merge checks must pass again against their exact commits before any tag or publication decision; Compose, Docker build, HACS, and Hassfest results are not claimed for this versioned candidate until PR CI reports them.
+The draft release-preparation PR has separately passed 376 backend tests, 18 Home Assistant tests, Ruff, Python compilation, JSON metadata, diff validation, Docker Compose, Docker image build, HACS, Hassfest, and an added-line privacy scan. Final PR CI must remain green after evidence-only updates, and post-merge checks must pass against their exact commit before any tag or publication decision.
 
 ## Physical validation boundary
 

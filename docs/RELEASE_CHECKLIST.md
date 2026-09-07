@@ -137,7 +137,7 @@ Automated and review evidence:
 - [x] Legacy `/chimes`, Smart Chime slots, and existing Home Assistant identifiers remain unchanged.
 - [x] `APP_VERSION`, HA `INTEGRATION_VERSION`, and HA manifest version are prepared as `2.2.0-beta.1`.
 - [x] Stable install instructions remain pinned to immutable `v2.1.8` until a beta tag is separately approved and published.
-- [ ] Exact release-preparation branch-head and merge-ref CI pass.
+- [x] Exact release-preparation branch-head and merge-ref CI pass.
 - [ ] Trusted post-merge `main` CI passes for the versioned candidate.
 
 Required physical beta gate:
