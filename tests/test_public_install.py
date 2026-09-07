@@ -199,9 +199,14 @@ def test_release_identity_is_v2_2_0_beta_1():
 def test_beta_release_notes_preserve_experimental_physical_boundary():
     notes = Path("docs/RELEASE_NOTES_v2.2.0-beta.1.md").read_text()
     checklist = Path("docs/RELEASE_CHECKLIST.md").read_text()
-    assert "No integrated audible camera playback" in notes
+    assert "Integrated audible camera playback was physically confirmed" in notes
+    assert "one G3 Instant" in notes
     assert "must not be promoted to stable" in notes
     assert "Opus/RTP" in notes
+    assert "Live unavailable-camera mixed-group behavior" in notes
+    assert Path(
+        "docs/validation/v2.2.0-beta.1-g3-instant-camera-validation.md"
+    ).exists()
     assert "no tag, github release, image publication, deployment, or audible test" in notes.lower()
     assert "must remain draft" in notes
     assert "No publisher exists by default" in checklist

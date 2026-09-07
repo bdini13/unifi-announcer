@@ -61,19 +61,18 @@ The draft release-preparation PR has separately passed 376 backend tests, 18 Hom
 
 ## Physical validation boundary
 
-The underlying private AAC talkback transport was separately heard on one G3 Instant during controlled research. **No integrated audible camera playback** has been performed from this exact Announcer candidate.
+Integrated audible camera playback was physically confirmed on one G3 Instant using exact candidate `65954f29ac1996fde5dd470b95acb3bc6b38fd43`. Two separately authorized single-play requests returned success without Smart Chime slot-state changes; the listener confirmed clear and correct speech on the replay. See the [sanitized validation report](validation/v2.2.0-beta.1-g3-instant-camera-validation.md).
 
-This beta **must not be promoted to stable** until an approved physical test confirms, on the exact candidate and model:
+This beta **must not be promoted to stable** until the remaining approved physical tests confirm, on the exact candidate and model:
 
-- the expected phrase is audible and intelligible;
-- repeats do not overlap or replay unexpectedly;
+- `repeat_times` requests do not overlap or replay unexpectedly;
 - cancellation/failure does not trigger an automatic retry;
 - camera-only playback does not touch Smart Chime slots;
 - a deliberately unavailable camera prevents mixed-group Chime playback;
 - Home Assistant exposes only the supported camera controls;
 - service restart and a subsequent announcement remain safe.
 
-A passing test on one model must not be generalized to other models or Opus/RTP profiles.
+A passing test on this one G3 Instant must not be generalized to other models or Opus/RTP profiles. Live unavailable-camera mixed-group behavior, Announcer restart recovery, single-request `repeat_times`, uncertain-failure no-retry behavior, and independently instrumented proof of no Smart Chime write remain pending beta.1 gates.
 
 ## Upgrade and rollback
 

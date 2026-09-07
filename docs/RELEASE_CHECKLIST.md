@@ -142,16 +142,16 @@ Automated and review evidence:
 
 Required physical beta gate:
 
-- [ ] Back up `.env` and the actual `/data` mount with restrictive permissions and verify the archive/checksum.
-- [ ] Build and deploy the exact candidate SHA with `GIT_SHA` provenance and an immutable image digest.
-- [ ] Install/reload the matching Home Assistant candidate.
-- [ ] Confirm the expected phrase is audible and intelligible on the explicitly configured G3 Instant at the approved test volume.
+- [x] Back up `.env` and the actual `/data` mount with restrictive permissions and verify the archive/checksum.
+- [x] Build and deploy the exact candidate SHA with `GIT_SHA` provenance and an immutable image digest.
+- [x] Install/reload the matching Home Assistant candidate.
+- [x] Confirm the expected phrase is audible and intelligible on the explicitly configured G3 Instant at the approved test volume.
 - [ ] Confirm repeats do not overlap and uncertain failures are not retried.
-- [ ] Confirm camera-only playback performs no Smart Chime slot write.
+- [ ] Confirm camera-only playback performs no Smart Chime slot write. The successful test observed unchanged slot state but did not independently instrument the write path.
 - [ ] Confirm an unavailable camera prevents mixed-group Smart Chime playback before any physical effect.
-- [ ] Confirm Home Assistant exposes only capability-supported camera controls.
+- [x] Confirm Home Assistant exposes only capability-supported camera controls.
 - [ ] Confirm service restart followed by a camera announcement remains safe.
-- [ ] Record exact candidate SHA, app/HA versions, image revision/digest, sanitized target capability, and model-scoped outcome without private topology or credentials.
+- [x] Record exact candidate SHA, app/HA versions, image revision/digest, sanitized target capability, and model-scoped outcome without private topology or credentials in [the G3 Instant validation report](validation/v2.2.0-beta.1-g3-instant-camera-validation.md).
 
 Until every required physical item passes, beta.1 must not be promoted to stable and compatibility must not be generalized beyond the tested camera model/profile.
 
