@@ -6,7 +6,7 @@ UniFi Announcer includes a HACS-compatible custom integration under `custom_comp
 > The HACS integration is a **client for the UniFi Announcer Docker service**. Run and configure the Docker backend first; installing HACS alone does not provide Smart Chime playback or TTS.
 
 > [!WARNING]
-> Use the latest stable v2.1 release for new installations. `v2.1.0-beta.2` and earlier can leave device-side ringtone artifacts when many unique phrases are spoken. Stable v2.1 uses exactly two fixed service-owned dynamic TTS slots instead.
+> Use stable `v2.1.8` for new installations unless you intentionally want to test the experimental camera-speaker prerelease. `v2.2.0-beta.1` is published as a prerelease and its camera path is physically validated only on one UVC G3 Instant with the exact AAC-LC / 22.05 kHz / mono / 16-bit `serverudp` profile.
 
 ## Install
 
@@ -14,7 +14,7 @@ UniFi Announcer includes a HACS-compatible custom integration under `custom_comp
 
 1. Install and start the UniFi Announcer Docker service using the repository Quick Start.
 2. In HACS, add `https://github.com/bdini13/unifi-announcer` as an **Integration** custom repository.
-3. Select the latest stable release.
+3. Select the desired release; stable `v2.1.8` remains the recommended default.
 4. Install **UniFi Announcer**.
 5. Restart Home Assistant.
 6. Go to **Settings → Devices & services → Add integration → UniFi Announcer**.
@@ -25,7 +25,7 @@ UniFi Announcer includes a HACS-compatible custom integration under `custom_comp
 
 Copy `custom_components/unifi_announcer` into Home Assistant's `/config/custom_components/` directory and restart Home Assistant. The Docker backend is still required.
 
-Backend and Home Assistant integration versions should be upgraded together. For candidate testing, copy the component from the exact candidate commit rather than mixing a candidate backend with an older HACS component.
+Backend and Home Assistant integration versions should be upgraded together. For prerelease testing, copy/install the component from the exact same tag or candidate commit as the backend rather than mixing versions.
 
 ## Announcer-side requirement for arbitrary TTS
 
@@ -42,7 +42,7 @@ curl -fsS http://<announcer-host>:8095/version
 curl -fsS "${AUTH[@]}" http://<announcer-host>:8095/tts/slots/status
 ```
 
-Arbitrary TTS requires `"ready": true` and `"slot_count": 2`. Buzzer/default/preset behavior can remain available when fixed-slot dynamic TTS is not ready.
+Arbitrary Smart Chime TTS requires `"ready": true` and `"slot_count": 2`. Buzzer/default/preset behavior can remain available when fixed-slot dynamic TTS is not ready.
 
 If `/version` reports `git_sha: unknown`, rebuild the backend with exact checkout provenance:
 
@@ -63,7 +63,7 @@ No playback occurs during setup.
 
 If the application API key is rejected while Home Assistant loads the integration, the entry transitions to Home Assistant's reauthentication flow. If the Announcer service is temporarily unreachable, setup is retried instead of treating the outage as invalid configuration.
 
-The v2.1 integration deliberately supports one UniFi Announcer config entry. This avoids ambiguous routing for the global `unifi_announcer.announce` action.
+The integration deliberately supports one UniFi Announcer config entry. This avoids ambiguous routing for the global `unifi_announcer.announce` action.
 
 ## Options
 
@@ -78,7 +78,7 @@ Changing options reloads the integration. Volume `0` is valid and remains `0` ra
 
 ## Devices and entities
 
-Physical Smart Chimes and explicitly configured compatible camera speakers are represented as Ubiquiti devices using stable Protect IDs. Logical groups attach to the UniFi Announcer service device rather than pretending to be physical hardware.
+Physical Smart Chimes and explicitly configured camera speakers are represented as Ubiquiti devices using stable Protect IDs. Logical groups attach to the UniFi Announcer service device rather than pretending to be physical hardware.
 
 For each configured physical Chime the integration creates:
 
@@ -91,7 +91,7 @@ For each configured physical Chime the integration creates:
 - queue-depth sensor;
 - **Last playback result** sensor.
 
-Logical groups get the same playback controls and Last playback result sensor, but no queue-depth sensor. Queue depth belongs to physical Chimes; v2.1 intentionally avoids a fake aggregate group value.
+Logical groups get announcement controls and Last playback result state but no fake aggregate queue-depth sensor. Capabilities are the intersection of their physical members.
 
 Experimental camera targets get only capability-safe entities:
 
@@ -102,7 +102,13 @@ Experimental camera targets get only capability-safe entities:
 
 They do not get buzzer/default/preset buttons or a preset selector. Camera volume is device-managed, and Home Assistant does not send its configured default volume to a camera target. The backend still rejects any explicit camera volume/profile override before playback.
 
-If `CHIMES_CONFIG`, `CAMERAS_CONFIG`, or `GROUPS_CONFIG` changes after Home Assistant has loaded the integration, reload/restart the integration so entity topology is rebuilt.
+### Dynamic camera availability
+
+Explicitly configured camera and mixed-group text entities are created even if a camera is temporarily unavailable during Home Assistant setup. Authenticated `/targets` polling refreshes the camera's current capability state. The same entity therefore transitions unavailable/available as the camera disconnects or reconnects instead of disappearing and requiring entity recreation.
+
+Only an exact physically validated camera compatibility record can become available for announcement playback. In the current prerelease that means the UVC G3 Instant with AAC-LC / 22.05 kHz / mono / 16-bit `serverudp`. An unvalidated model/profile remains visible as configured but unavailable.
+
+Changing `CHIMES_CONFIG`, `CAMERAS_CONFIG`, or `GROUPS_CONFIG` still changes topology and therefore requires a Home Assistant reload/restart. A transient camera reconnect does not.
 
 ## Standard announcements
 
@@ -116,7 +122,7 @@ data:
   message: "Dinner is ready"
 ```
 
-The notify entity uses the integration's configured default volume/repeat behavior. The Announcer backend synthesizes/caches text and manages the fixed slots; Home Assistant does not create or manage ringtone objects.
+The notify entity uses the integration's configured default volume/repeat behavior for targets that support volume. Camera and mixed camera groups omit volume because their camera member uses device-managed volume.
 
 ## Advanced announcement action
 
@@ -165,7 +171,7 @@ Internal `UA-TTS-*` slot identities are filtered from the user-facing preset lis
 
 Camera media players accept `media_content_type: text` only. Preset playback remains a Chime capability and fails clearly on camera or mixed targets.
 
-Native `tts.speak` / `media-source://` binary ingestion is intentionally deferred to a later v2.2 prerelease. The beta.1 camera path remains a thin client over the existing dispatcher.
+Native `tts.speak` / `media-source://` binary ingestion is intentionally deferred to a later v2.2 prerelease. The camera path remains a thin client over the existing dispatcher.
 
 ## Last playback result
 
@@ -201,11 +207,19 @@ For **resident repeated content**, v2.1.8 may skip the write/sync/settle path en
 
 This distinction matters for latency: in live single-Chime validation, 10 same-boot resident HA requests measured roughly 0.54–0.66 seconds request round-trip with zero slot writes. These were request-path measurements, not synchronized acoustic benchmarks.
 
+## Experimental camera session safety
+
+The published `v2.2.0-beta.1` path uses a short-lived Protect talkback WebSocket. Production hardening adds a per-camera preparation lease held from profile revalidation through prepared-session playback/close. Two announcements cannot open overlapping talkback sessions to the same physical camera, while separate cameras remain independent.
+
+Camera capability is revalidated before each prepared session and refreshed for HA through `/targets`. Signed talkback URLs and Protect session cookies are never exposed through HA diagnostics. A transport failure after a potentially delivered frame is not automatically retried, avoiding duplicate speech.
+
 ## Availability
 
 The integration polls lightweight service state. A temporary Piper outage does not make buzzer/default/preset controls unavailable when Protect itself remains reachable.
 
-Fixed-slot readiness is an Announcer runtime concern. If `/tts/slots/status` is not ready, text announcement actions fail clearly rather than reverting to old per-phrase allocation behavior.
+Fixed-slot readiness is an Announcer runtime concern. If `/tts/slots/status` is not ready, Smart Chime text announcement actions fail clearly rather than reverting to old per-phrase allocation behavior.
+
+Camera entity availability follows the fresh `/targets` capability catalog. An offline camera or unvalidated profile is unavailable; a validated camera that reconnects can become available again on the next poll without entity recreation.
 
 ## Diagnostics
 
@@ -230,24 +244,34 @@ For a v2.1.8 deployment, verify the backend and matching HA component together:
 
 The release-specific physical evidence, including discovery and remediation of an earlier reboot-safety defect, is retained in [`validation/v2.1.8-live-latency-validation.md`](validation/v2.1.8-live-latency-validation.md).
 
+## Camera prerelease verification
+
+For `v2.2.0-beta.1` or a later camera candidate, verify the Docker backend and matching HA component together. Authenticated `/targets` should report the configured G3 Instant as `available` only when its exact physically validated profile is present. The camera should expose only text announcement/media-player, queue-depth, and Last playback result entities; no preset/default/buzzer controls should appear.
+
+A temporarily offline validated camera should remain represented but unavailable, then recover after reconnect and a subsequent coordinator poll. An unvalidated camera model/profile should remain unavailable and must not become playable solely because Protect reports `hasSpeaker=true` or AAC support.
+
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Integration not offered after HACS install | Docker backend not running or older integration installed | Start backend; select latest stable release; reinstall/restart HA |
+| Integration not offered after HACS install | Docker backend not running or older integration installed | Start backend; select the intended release; reinstall/restart HA |
 | Invalid API key / reauthentication requested | `APP_API_KEY` changed or mismatches | Enter the current application key in the reauth flow |
 | Cannot connect | HA cannot reach Docker host/port | Verify Announcer URL, port, and LAN routing |
 | No preset options | `/presets` failed or state is stale | Verify `/presets`, then reload the integration |
 | HA playback times out while direct slot tests work | Backend/client mismatch or non-stale slot-sync failure | Verify `/version`, update backend/client together, inspect slot timing/status and backend logs |
 | Last playback result stays `unknown` after an action | Action never reached the integration or old component is loaded | Update/restart the custom integration and retry |
-| Last playback result is `failure` | Backend/client action failed | Inspect the HA error plus Announcer logs; verify Protect and slot status |
+| Last playback result is `failure` | Backend/client action failed | Inspect the HA error plus Announcer logs; verify Protect and target status |
 | Text TTS fails but preset/buzzer works | Fixed slots not ready or direct credential stale | Check `/tts/slots/status` with `X-API-Key` |
 | Repeated text performs a write | Resident proof was missing/invalidated by lifecycle or boot change | Usually safe/expected; inspect `content_reuse` state and lifecycle counters |
 | First text after Chime reboot rewrites once | v2.1.8 correctly invalidated old resident bytes | Expected; the next same-boot replay can become a zero-write hit |
+| Camera entity is unavailable | Camera is offline or model/profile is outside the validated compatibility record | Check authenticated `/targets`; reconnect the camera or keep it unsupported until physically validated |
+| Camera came back online but entity is unavailable | Coordinator has not completed another `/targets` refresh | Wait for the next poll or reload the integration; entity recreation is not required |
+| Camera has speaker/AAC metadata but remains unavailable | Metadata alone is insufficient evidence | Only the physically validated G3 Instant 22.05 kHz AAC-LC profile is currently enabled |
+| Service refuses GROUPS_CONFIG | Unknown/duplicate member, reserved name, empty group, or malformed JSON | Correct the group definition; production intentionally fails closed |
 | Slot status reports ownership drift | Binding no longer matches persisted proof | Stop dynamic TTS and reconcile; never force an unknown slot |
 | `/version` shows `git_sha: unknown` | Container built without `GIT_SHA` | Rebuild with `export GIT_SHA="$(git rev-parse HEAD)"` |
 | TTS synthesis fails | Piper/Edge TTS unavailable | Check the configured TTS service separately |
-| Group has no queue sensor | Intentional in v2.1 | Inspect member-Chime queue sensors |
-| Newly configured Chime/group is absent | Entity topology predates config change | Reload/restart the integration |
+| Group has no queue sensor | Intentional | Inspect member-target queue sensors |
+| Newly configured target/group is absent | Entity topology predates config change | Reload/restart the integration |
 
 Keep UniFi Announcer on a trusted LAN/VPN or behind a deliberately configured authenticated reverse proxy. Do not expose it directly to the public internet.

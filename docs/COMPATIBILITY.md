@@ -12,7 +12,8 @@
 | Reboot/reconnect resident invalidation | Physical single-Chime reboot validation + automated lifecycle/concurrency tests | Supported; next request safely rewrites when continuity is broken |
 | Generic arbitrary direct staging | Insufficient safe ownership model | Disabled |
 | Direct HTTP playback | No verified route | Unsupported; playback remains Protect `play-speaker` |
-| Protect camera AAC talkback WebSocket | Prior physical G3 Instant transport evidence + automated integrated-path tests | Experimental explicit opt-in; per-model integrated validation pending |
+| Protect camera AAC talkback WebSocket | Integrated physical validation on one UVC G3 Instant + automated transport/dispatcher/HA tests | Experimental prerelease; only the exact validated G3 Instant AAC-LC 22.05 kHz mono profile is production-eligible |
+| Other AAC camera model/sample-rate profiles | No integrated physical evidence | Unsupported for playback; remain visible as unavailable until validated |
 | Protect camera Opus/RTP talkback | Advertised by some camera bootstrap profiles but not physically validated in this service | Unsupported; fails closed |
 | Direct slot deletion | Semantics not proven | Unsupported; v2.1 migration overwrites proven legacy bytes with silence rather than guessing deletion |
 | Protect-internal UCP4 transport/trust | No supported transport or trust path found | Unsupported; disconnected research interface only |
@@ -51,6 +52,29 @@ The first v2.1.8 candidate failed this gate and produced wrong audio after a phy
 
 If boot continuity is missing, malformed, or outside the configured tolerance, resident reuse is rejected and the phrase is rewritten.
 
+## Experimental camera-speaker compatibility boundary
+
+`v2.2.0-beta.1` is a published prerelease. The integrated camera path was physically validated on one **UVC G3 Instant**. Production camera playback is therefore evidence-gated to the exact observed profile:
+
+```text
+model: UVC G3 Instant
+codec: AAC-LC
+transport: serverudp
+sample rate: 22050 Hz
+channels: 1
+bits per sample: 16
+```
+
+A camera is not enabled merely because Protect reports `hasSpeaker=true` or an AAC talkback profile. Another camera model, another AAC sample rate, or any Opus/RTP profile remains unavailable until the exact integrated Announcer path is physically validated and a new compatibility entry is added.
+
+Configured cameras are re-inspected through authenticated `/targets` polling. Temporary offline state therefore changes target capability/availability without removing the configured target from Home Assistant. A reconnect can recover on the next poll without entity recreation.
+
+Only one prepared talkback session may exist per configured camera at a time. The per-camera preparation lease is held from capability/profile revalidation through prepared-session playback/close, preventing overlapping controller-minted WebSockets for the same physical camera. Different cameras remain independent.
+
+`GROUPS_CONFIG` is validated fail-closed in production. Unknown members, empty groups, duplicate members, reserved/colliding names, and malformed JSON are rejected at startup instead of being silently omitted.
+
+Camera targets currently support text announcements and repeats only. Camera volume remains device-managed. Per-request volume/profile overrides, preset/default/buzzer actions, generic raw media, and unsupported transport profiles remain blocked.
+
 ## Protect + direct responsibilities
 
 The v2.1 path intentionally uses both sides:
@@ -68,13 +92,15 @@ Protect/NVR
 
 A successful direct save is not itself enough to claim an arbitrary physical slot. Generic staging remains disabled.
 
+The experimental camera path remains Protect-mediated as well: Protect bootstrap supplies current camera capability state and the controller mints the short-lived talkback WebSocket. UniFi Announcer confines that URL back to the configured controller and never persists or returns its signed query or session cookie.
+
 ## Firmware evidence levels
 
 - **Level 1 — strings signature:** `scripts/fw_signature.py` extracts printable clues, exact/normalized full-phrase matches, offsets, and bounded contexts. String presence does not prove a route is registered or safe.
 - **Level 2 — controlled device evidence:** sanitized tests can prove exact slot/hash/size/lifecycle behavior without publishing deployment credentials.
 - **Level 3 — production enablement:** requires explicit ownership evidence, capability gating, lifecycle/boot safety where relevant, and fail-closed behavior in code.
 
-After a Smart Chime firmware update, treat fixed-slot writes and resident reuse as unverified until compatibility is retested. Signature changes alone must never enable direct writes.
+After a Smart Chime firmware update, treat fixed-slot writes and resident reuse as unverified until compatibility is retested. Signature changes alone must never enable direct writes. Likewise, camera metadata similarity is not sufficient to add another camera/profile to the compatibility table.
 
 ## Credential handling
 
@@ -92,6 +118,8 @@ For onboarding, use **Reveal**, not **Edit**. Edit is a credential-changing oper
 
 The project does not retrieve the credential automatically. MCP and Home Assistant receive only the Announcer application/API surfaces and never receive the physical device credential.
 
+Camera talkback uses the existing authenticated Protect session. The short-lived `TOKEN` cookie is selected through the HTTP cookie jar for the configured controller host and is never exposed through the public API or Home Assistant.
+
 ## Protect WebSocket framing
 
 The existing sanitized fixture covers one/two linked frames with an 8-byte header and JSON or zlib payload. It contains no live IDs, addresses, or auth. In v2.1.8, observed Smart Chime reconnect state is also used to revoke resident content proof before later playback trusts it.
@@ -100,4 +128,4 @@ The existing sanitized fixture covers one/two linked frames with an 8-byte heade
 
 Stable v2.1.8 physical validation covers one Smart Chime on Protect `7.2.105` / firmware `1.7.20`. Multiple Chimes/groups are covered by automated fixtures and concurrency tests but have not been physically validated on multiple devices. Request-path timing was measured, but no synchronized microphone benchmark was used; do not generalize the single-device timing numbers into a universal acoustic-latency claim.
 
-The private AAC talkback transport was separately heard on one G3 Instant during controlled research. The integrated camera-target implementation is not part of stable v2.1.8 and must remain experimental until its exact candidate is audibly validated. Metadata similarity does not establish support for another camera model.
+The `v2.2.0-beta.1` integrated camera path was physically validated on one UVC G3 Instant with the exact AAC-LC / 22.05 kHz / mono / 16-bit `serverudp` profile. Repeat behavior, restart behavior, Home Assistant entity exposure, camera-only Smart Chime slot isolation, mixed-group fail-closed behavior, and no-retry uncertain-send behavior were included in the beta gate. This result must not be generalized to another camera model or talkback profile.

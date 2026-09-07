@@ -26,17 +26,23 @@ v2.1.8 substantially reduces repeated-announcement request-path latency by avoid
 
 The next development work is ordered by user value and available validation hardware. Features that depend on undocumented Protect behavior remain experimental until they pass model-specific automated and physical validation.
 
-### 1. Camera-speaker TTS — experimental implementation
+### 1. Camera-speaker TTS — published experimental prerelease
 
-Release candidate: **v2.2.0-beta.1**. Stable `v2.1.8` remains the recommended release until the exact beta candidate completes its integrated physical gate.
+Published prerelease: **v2.2.0-beta.1**. Stable `v2.1.8` remains the recommended release.
 
-- explicit `CAMERAS_CONFIG` allowlist; cameras never join the implicit default target;
-- capability-gated private Protect talkback for the physically verified AAC/ADTS profile;
-- shared dispatcher, queueing, quiet-hours, priority, dedupe, and mixed-group behavior;
-- authenticated `/targets` capability catalog and capability-safe Home Assistant entities;
-- fail closed for unsupported camera models/profiles and require physical audibility before expanding compatibility claims.
+The integrated path has been physically validated on one **UVC G3 Instant** using the exact **AAC-LC / 22.05 kHz / mono / 16-bit `serverudp`** talkback profile. Compatibility is evidence-based rather than inferred from generic `hasSpeaker` or AAC metadata.
 
-The implementation is automated-test complete and release-candidate prepared but remains experimental pending exact-candidate physical validation through the integrated Announcer path.
+Current hardening priorities:
+
+- keep `CAMERAS_CONFIG` explicit; cameras never join the implicit default target;
+- permit playback only for exact model/profile records that have passed integrated physical validation;
+- keep one prepared talkback session per physical camera at a time while allowing different cameras to remain independent;
+- refresh camera availability through authenticated `/targets` polling so Home Assistant entities recover from reconnects without recreation;
+- reject malformed groups and unknown/duplicate members at startup rather than silently dropping them;
+- preserve shared dispatcher, queueing, quiet-hours, priority, dedupe, and mixed-group semantics;
+- keep camera volume device-managed and continue to reject preset/default/buzzer and unvalidated Opus/RTP paths.
+
+Additional camera models enter the compatibility table only after exact integrated-path audible validation and regression coverage. A metadata match alone is not sufficient.
 
 ### 2. Native Home Assistant media ingestion
 
@@ -47,8 +53,8 @@ The implementation is automated-test complete and release-candidate prepared but
 
 ### 3. Diagnostics and compatibility
 
-- redacted diagnostic bundles covering queue state, slot synchronization, resident-content lifecycle state, and release/build identity;
-- per-stage latency reporting that distinguishes Home Assistant dispatch, synthesis/cache work, device preflight, upload, synchronization, and playback acceptance;
+- redacted diagnostic bundles covering queue state, slot synchronization, resident-content lifecycle state, camera capability state, and release/build identity;
+- per-stage latency reporting that distinguishes Home Assistant dispatch, synthesis/cache work, device preflight, upload, synchronization, camera negotiation, and playback acceptance;
 - firmware compatibility warnings based on capability discovery rather than optimistic version assumptions;
 - compatibility reports across additional Protect, Smart Chime, and camera firmware versions.
 
@@ -68,6 +74,7 @@ AI Horn and AI Speaker support is a future expansion candidate, not a current co
 These are evidence gaps, not promises of unsupported behavior:
 
 - physical multi-Chime/group validation with more than one Smart Chime;
+- additional camera models and talkback profiles beyond the validated G3 Instant AAC profile;
 - independent compatibility reports from other UniFi console models and Protect/Chime versions;
 - synchronized acoustic latency measurement with a reproducible trigger/microphone setup;
 - longer-term compatibility evidence across firmware upgrades and real-world reboot/power-loss events.

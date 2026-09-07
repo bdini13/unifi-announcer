@@ -78,17 +78,20 @@ def target_supports(coordinator, target: str | None, capability: str) -> bool:
 def configured_announcement_targets(
     coordinator,
 ) -> list[tuple[str, str | None, bool, str]]:
-    """Return all targets that safely accept arbitrary text announcements."""
+    """Return stable text-announcement entities for configured targets.
+
+    Explicit cameras and groups remain represented even while temporarily
+    unavailable. Capability state controls entity availability dynamically so a
+    camera that reconnects does not require Home Assistant entity recreation.
+    """
     targets = [
         (name, target_id, is_group, "group" if is_group else "chime")
         for name, target_id, is_group in configured_targets(coordinator)
-        if target_supports(coordinator, name, "announce")
     ]
     chime_data = (coordinator.data or {}).get("chimes", {})
     for camera in chime_data.get("cameras", []):
         name = str(camera.get("name") or camera.get("id") or "camera")
-        if target_supports(coordinator, name, "announce"):
-            targets.append((name, camera.get("id"), False, "camera"))
+        targets.append((name, camera.get("id"), False, "camera"))
     return targets
 
 

@@ -17,6 +17,10 @@ from starlette.routing import Mount, Route
 from app import main as core
 from app.audio.bounded_cache import BoundedTtsSynthesizer
 from app.audio.tts import normalized_cache_key
+from app.playback.camera_hardening import (
+    HardenedCameraTalkback,
+    load_validated_groups,
+)
 from app.playback.production_slots import DynamicTtsSlotManager
 from app.version import APP_VERSION
 
@@ -29,6 +33,27 @@ SLOT_BACKED_PRESETS = tuple(
 # Keep FastAPI/OpenAPI metadata aligned with the released container even though
 # the legacy core module is intentionally not a packaging/version source.
 core.app.version = APP_VERSION
+
+# Production fails closed on malformed/partial group configuration. The legacy
+# core parser remains permissive for historical unit construction, but the
+# shipped ASGI composition refuses unknown members or ambiguous group names.
+core.GROUPS = load_validated_groups(
+    os.getenv("GROUPS_CONFIG", "{}"),
+    target_names=core.target_runtimes,
+)
+
+# Restrict camera talkback to physically validated model/profile evidence and
+# serialize physical session preparation per camera. Update every production
+# reference before entering the core lifespan so startup capability inspection,
+# dispatcher playback, rules, and diagnostics all see the same hardening layer.
+# Keep composition idempotent for test/reload tooling that imports app.server
+# more than once in the same interpreter.
+if not isinstance(core.camera_talkback, HardenedCameraTalkback):
+    core.camera_talkback = HardenedCameraTalkback(core.camera_talkback)
+core.dispatcher.camera_playback = core.camera_talkback
+setattr(core.app.state.services, "camera_talkback", core.camera_talkback)
+
+_camera_refresh_lock = asyncio.Lock()
 
 
 @core.app.get("/auth/check", include_in_schema=True)
@@ -152,6 +177,63 @@ setattr(core.app.state.services, "dynamic_slots", dynamic_slots)
 setattr(core.app.state.services, "tts_cache", tts_cache)
 
 
+async def _refresh_camera_capabilities() -> None:
+    """Refresh configured camera availability for polling clients and HA."""
+    if not core.camera_runtimes:
+        return
+    async with _camera_refresh_lock:
+        for name, runtime in core.camera_runtimes.items():
+            try:
+                runtime.capability_state = await core.camera_talkback.inspect(
+                    runtime.desc.camera_id
+                )
+            except Exception as exc:
+                runtime.capability_state = {
+                    "status": "unavailable",
+                    "error_type": type(exc).__name__,
+                }
+                core.log.debug(
+                    "camera target %s availability refresh failed: %s",
+                    name,
+                    type(exc).__name__,
+                )
+
+
+def _target_catalog_payload() -> dict:
+    targets = []
+    for name, runtime in core.target_runtimes.items():
+        target_type = runtime.desc.kind
+        item = {
+            "name": name,
+            "id": runtime.desc.device_id,
+            "type": target_type,
+            "queue_depth": runtime.queue.depth,
+            "capabilities": core._target_capabilities(runtime),
+        }
+        if target_type == "camera":
+            state = runtime.capability_state
+            item["status"] = (
+                state.get("status", "unavailable")
+                if isinstance(state, dict)
+                else "unavailable"
+            )
+            if isinstance(state, dict) and state.get("model"):
+                item["model"] = state["model"]
+            if isinstance(state, dict) and state.get("compatibility"):
+                item["compatibility"] = state["compatibility"]
+        targets.append(item)
+    groups = [
+        {
+            "name": name,
+            "type": "group",
+            "members": list(members),
+            "capabilities": core._group_capabilities(members),
+        }
+        for name, members in core.GROUPS.items()
+    ]
+    return {"schema_version": 1, "targets": targets, "groups": groups}
+
+
 async def health_check(_request) -> JSONResponse:
     """Return coarse readiness without leaking detailed device/cache state."""
     payload = dict(core.app.state.services.health.snapshot())
@@ -176,6 +258,14 @@ def _authorize_diagnostic(request) -> JSONResponse | None:
             {"detail": "invalid or missing API key"}, status_code=403
         )
     return None
+
+
+async def targets_status(request) -> JSONResponse:
+    """Return a fresh, sanitized capability catalog for configured targets."""
+    if denied := _authorize_diagnostic(request):
+        return denied
+    await _refresh_camera_capabilities()
+    return JSONResponse(_target_catalog_payload())
 
 
 async def filtered_presets(request) -> JSONResponse:
@@ -264,6 +354,7 @@ async def lifespan(_app: Starlette):
 routes = [
     Route("/health", health_check, methods=["GET"]),
     Route("/version", version_check, methods=["GET"]),
+    Route("/targets", targets_status, methods=["GET"]),
     Route("/presets", filtered_presets, methods=["GET"]),
     Route("/tts/slots/status", slot_status, methods=["GET"]),
     Route("/tts/cache/status", cache_status, methods=["GET"]),
