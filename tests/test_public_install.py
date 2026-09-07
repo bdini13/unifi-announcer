@@ -201,9 +201,10 @@ def test_beta_release_notes_preserve_experimental_physical_boundary():
     checklist = Path("docs/RELEASE_CHECKLIST.md").read_text()
     assert "Integrated audible camera playback was physically confirmed" in notes
     assert "one G3 Instant" in notes
-    assert "must not be promoted to stable" in notes
+    assert "does not authorize merge, tagging, publication" in notes
+    assert "stable promotion" in notes
     assert "Opus/RTP" in notes
-    assert "Live unavailable-camera mixed-group behavior" in notes
+    assert "deliberately unavailable camera prevents mixed-group Chime playback" in notes
     assert Path(
         "docs/validation/v2.2.0-beta.1-g3-instant-camera-validation.md"
     ).exists()
