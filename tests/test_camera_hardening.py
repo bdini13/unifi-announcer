@@ -63,6 +63,18 @@ def test_unvalidated_model_or_profile_fails_closed(camera):
         validate_camera_profile(camera)
 
 
+def test_malformed_profile_values_fail_closed_as_camera_errors():
+    camera = _camera(talkbackSettings={
+        "typeFmt": "aac",
+        "typeIn": "serverudp",
+        "samplingRate": "not-a-number",
+        "bitsPerSample": 16,
+        "channels": 1,
+    })
+    with pytest.raises(CameraTalkbackError, match="invalid talkback settings"):
+        validate_camera_profile(camera)
+
+
 def test_groups_reject_unknown_duplicate_or_reserved_members():
     known = {"kitchen", "family_room_camera"}
     assert load_validated_groups(
@@ -126,8 +138,7 @@ async def test_different_cameras_can_prepare_concurrently():
     release = asyncio.Event()
 
     async def camera(camera_id):
-        model = _camera(id=camera_id)
-        return model
+        return _camera(id=camera_id)
 
     async def prepare(camera_id, _mp3, **_kwargs):
         entered["one" if camera_id == "camera-one" else "two"].set()
