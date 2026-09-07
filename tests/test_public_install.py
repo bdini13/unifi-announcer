@@ -9,7 +9,7 @@ def test_compose_uses_named_volume_for_writable_default_data():
     assert "watchtower.enable" not in compose.lower()
 
 
-def test_readme_keeps_stable_install_and_identifies_beta_candidate():
+def test_readme_keeps_stable_install_and_identifies_published_beta():
     readme = Path("README.md").read_text()
     stable_clone = readme.split(
         "### 1. Clone the stable release and create private configuration", 1
@@ -19,11 +19,13 @@ def test_readme_keeps_stable_install_and_identifies_beta_candidate():
     )[0]
     assert "git checkout v2.1.8" in stable_clone
     assert "v2.2.0-beta.1" not in stable_clone
-    assert "Select the latest stable release" in ha_setup
+    assert "stable `v2.1.8` remains the recommended default" in ha_setup
     assert "img.shields.io/github/v/release/bdini13/unifi-announcer" in readme
     assert "releases/latest" in readme
     assert "**Stable:** `v2.1.8`" in readme
-    assert "**Release candidate:** `v2.2.0-beta.1`" in readme
+    assert "**Prerelease:** `v2.2.0-beta.1`" in readme
+    assert "**Release candidate:** `v2.2.0-beta.1`" not in readme
+    assert "physically validated on one UVC G3 Instant" in readme
     assert 'AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")' in readme
     assert "$UNIFI..." not in readme
     assert "scheduled for `v2.1.1`" not in readme
