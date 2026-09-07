@@ -40,13 +40,24 @@ class UniFiAnnouncerMediaPlayer(UniFiAnnouncerEntity, MediaPlayerEntity):
         )
         self._attr_unique_id = f"{entry.entry_id}_{self.entity_key}_media_player"
 
+    @property
+    def available(self) -> bool:
+        return target_supports(self.coordinator, self.target, "announce")
+
     async def async_play_media(self, media_type: str, media_id: str, **kwargs) -> None:
         try:
             if media_type == "text":
                 if not media_id or not media_id.strip():
                     self.runtime.record_playback_result(self.target, "failed")
                     raise HomeAssistantError("Announcement text cannot be empty")
-                result = await self.runtime.client.async_announce(media_id.strip(), target=self.target)
+                if not self.available:
+                    self.runtime.record_playback_result(self.target, "failed")
+                    raise HomeAssistantError(
+                        "This announcement target is currently unavailable"
+                    )
+                result = await self.runtime.client.async_announce(
+                    media_id.strip(), target=self.target
+                )
             elif media_type == "unifi-announcer/preset":
                 if not target_supports(
                     self.coordinator, self.target, "play_preset"
@@ -55,12 +66,15 @@ class UniFiAnnouncerMediaPlayer(UniFiAnnouncerEntity, MediaPlayerEntity):
                     raise HomeAssistantError(
                         "This target does not support ringtone preset playback"
                     )
-                result = await self.runtime.client.async_play_preset(media_id, target=self.target)
+                result = await self.runtime.client.async_play_preset(
+                    media_id, target=self.target
+                )
             else:
                 self.runtime.record_playback_result(self.target, "failed")
                 raise HomeAssistantError(
-                    "UniFi Announcer v2.1 supports media_content_type 'text' and "
-                    "'unifi-announcer/preset'. Native tts.speak/media-source support is planned for v2.2."
+                    "UniFi Announcer supports media_content_type 'text' and "
+                    "'unifi-announcer/preset'. Native tts.speak/media-source support "
+                    "is planned for a later v2.2 prerelease."
                 )
         except UniFiAnnouncerError as exc:
             self.runtime.record_playback_result(self.target, "failed")
