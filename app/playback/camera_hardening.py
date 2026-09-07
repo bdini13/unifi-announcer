@@ -48,14 +48,20 @@ def validate_camera_profile(camera: dict[str, Any]) -> ValidatedCameraProfile:
     if not isinstance(settings, dict):
         raise CameraTalkbackError("camera is missing talkback settings")
 
-    model = camera_model(camera)
+    try:
+        sample_rate = int(settings.get("samplingRate") or 0)
+        channels = int(settings.get("channels") or 0)
+        bits_per_sample = int(settings.get("bitsPerSample") or 0)
+    except (TypeError, ValueError):
+        raise CameraTalkbackError("camera has invalid talkback settings") from None
+
     observed = ValidatedCameraProfile(
-        model=model,
+        model=camera_model(camera),
         codec=str(settings.get("typeFmt") or "").lower(),
         transport=str(settings.get("typeIn") or "").lower(),
-        sample_rate=int(settings.get("samplingRate") or 0),
-        channels=int(settings.get("channels") or 0),
-        bits_per_sample=int(settings.get("bitsPerSample") or 0),
+        sample_rate=sample_rate,
+        channels=channels,
+        bits_per_sample=bits_per_sample,
     )
     if observed not in VALIDATED_CAMERA_PROFILES:
         raise CameraTalkbackError(
@@ -134,15 +140,15 @@ class HardenedCameraTalkback:
         self.delegate = delegate
         self._locks: dict[str, asyncio.Lock] = {}
 
-    async def _camera(self, camera_id: str) -> dict[str, Any]:
+    async def _validated_camera(
+        self, camera_id: str
+    ) -> tuple[dict[str, Any], ValidatedCameraProfile]:
         camera = await self.delegate._camera(camera_id)
-        validate_camera_profile(camera)
-        return camera
+        return camera, validate_camera_profile(camera)
 
     async def inspect(self, camera_id: str) -> dict[str, Any]:
         try:
-            camera = await self._camera(camera_id)
-            profile = validate_camera_profile(camera)
+            camera, profile = await self._validated_camera(camera_id)
         except CameraTalkbackError as exc:
             model = "camera"
             try:
@@ -176,7 +182,7 @@ class HardenedCameraTalkback:
         lock = self._locks.setdefault(camera_id, asyncio.Lock())
         await lock.acquire()
         try:
-            await self._camera(camera_id)
+            await self._validated_camera(camera_id)
             prepared = await self.delegate.prepare(
                 camera_id,
                 mp3,
