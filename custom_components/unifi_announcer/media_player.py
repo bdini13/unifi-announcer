@@ -42,7 +42,10 @@ class UniFiAnnouncerMediaPlayer(UniFiAnnouncerEntity, MediaPlayerEntity):
 
     @property
     def available(self) -> bool:
-        return target_supports(self.coordinator, self.target, "announce")
+        return bool(
+            super().available
+            and target_supports(self.coordinator, self.target, "announce")
+        )
 
     async def async_play_media(self, media_type: str, media_id: str, **kwargs) -> None:
         try:
