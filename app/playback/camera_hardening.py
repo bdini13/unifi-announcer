@@ -181,12 +181,18 @@ class HardenedCameraTalkback:
         profile = getattr(prepared, "profile", None)
         if profile is None:
             return False
+        try:
+            sample_rate = int(getattr(profile, "sample_rate", 0))
+            channels = int(getattr(profile, "channels", 0))
+            bits_per_sample = int(getattr(profile, "bits_per_sample", 0))
+        except (TypeError, ValueError):
+            return False
         return (
             str(getattr(profile, "codec", "")).lower() == expected.codec
             and str(getattr(profile, "transport", "")).lower() == expected.transport
-            and int(getattr(profile, "sample_rate", 0)) == expected.sample_rate
-            and int(getattr(profile, "channels", 0)) == expected.channels
-            and int(getattr(profile, "bits_per_sample", 0)) == expected.bits_per_sample
+            and sample_rate == expected.sample_rate
+            and channels == expected.channels
+            and bits_per_sample == expected.bits_per_sample
         )
 
     async def prepare(
