@@ -165,7 +165,7 @@ Internal `UA-TTS-*` slot identities are filtered from the user-facing preset lis
 
 Camera media players accept `media_content_type: text` only. Preset playback remains a Chime capability and fails clearly on camera or mixed targets.
 
-Native `tts.speak` / `media-source://` binary ingestion is intentionally deferred to v2.2 so v2.1 remains a thin client over the existing dispatcher.
+Native `tts.speak` / `media-source://` binary ingestion is intentionally deferred to a later v2.2 prerelease. The beta.1 camera path remains a thin client over the existing dispatcher.
 
 ## Last playback result
 

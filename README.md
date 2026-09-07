@@ -55,9 +55,9 @@ Typical uses include:
 | Multiple chimes and named groups | 🧪 Automated coverage; multi-device physical validation pending |
 | Protect camera-speaker TTS | 🧪 Experimental opt-in; verified AAC talkback transport, integrated-path physical validation pending |
 | Protect event rules | 🧪 Experimental |
-| Native HA `tts.speak` media ingestion | ⏭️ Planned for v2.2 |
+| Native HA `tts.speak` media ingestion | ⏭️ Planned for a later v2.2 prerelease |
 
-## How v2.1.8 playback works
+## How playback works
 
 ```text
 Home Assistant ─┐
@@ -390,6 +390,8 @@ Then target `whole_house` from REST/HA/MCP. Each physical Chime has its own boun
 
 ## Experimental camera-speaker TTS
 
+This opt-in path is the focus of the `v2.2.0-beta.1` candidate. It is not part of stable `v2.1.8`.
+
 Compatible Protect cameras can be explicit text-announcement targets through the controller's private talkback WebSocket:
 
 ```env
@@ -646,8 +648,8 @@ This project was developed with assistance from AI coding and research tools for
 ## Release status
 
 - **Stable:** `v2.1.8` — safe same-boot resident TTS reuse with Smart Chime reboot/reconnect invalidation
-- **Previous stable:** `v2.1.7` — validated Protect UI onboarding for the Smart Chime device password
-- **Planned:** camera-speaker TTS, followed by native Home Assistant media ingestion and expanded diagnostics
+- **Release candidate:** `v2.2.0-beta.1` — explicit, capability-gated Protect camera-speaker TTS; integrated physical validation pending
+- **Planned after beta.1:** native Home Assistant media ingestion and expanded diagnostics
 
 See [ROADMAP.md](ROADMAP.md) and the [Releases page](https://github.com/bdini13/unifi-announcer/releases).
 
