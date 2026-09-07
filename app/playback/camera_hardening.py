@@ -172,6 +172,23 @@ class HardenedCameraTalkback:
             "compatibility": "physically_validated",
         }
 
+    @staticmethod
+    def _prepared_profile_matches(
+        prepared: Any,
+        expected: ValidatedCameraProfile,
+    ) -> bool:
+        """Confirm the low-level session was actually built for the approved profile."""
+        profile = getattr(prepared, "profile", None)
+        if profile is None:
+            return False
+        return (
+            str(getattr(profile, "codec", "")).lower() == expected.codec
+            and str(getattr(profile, "transport", "")).lower() == expected.transport
+            and int(getattr(profile, "sample_rate", 0)) == expected.sample_rate
+            and int(getattr(profile, "channels", 0)) == expected.channels
+            and int(getattr(profile, "bits_per_sample", 0)) == expected.bits_per_sample
+        )
+
     async def prepare(
         self,
         camera_id: str,
@@ -181,15 +198,36 @@ class HardenedCameraTalkback:
     ) -> _LockedPreparedCameraTalkback:
         lock = self._locks.setdefault(camera_id, asyncio.Lock())
         await lock.acquire()
+        prepared = None
         try:
-            await self._validated_camera(camera_id)
+            _, expected = await self._validated_camera(camera_id)
             prepared = await self.delegate.prepare(
                 camera_id,
                 mp3,
                 repeat_times=repeat_times,
             )
+            if not self._prepared_profile_matches(prepared, expected):
+                await prepared.close()
+                raise CameraTalkbackError(
+                    "prepared camera talkback profile changed before playback"
+                )
+            # Re-read the camera after the low-level session is armed. This
+            # closes the broad delegate's second-bootstrap race: a camera/model
+            # or profile change between the first capability read and prepared
+            # session creation cannot become playable.
+            _, current = await self._validated_camera(camera_id)
+            if current != expected:
+                await prepared.close()
+                raise CameraTalkbackError(
+                    "camera model/talkback profile changed during preparation"
+                )
             return _LockedPreparedCameraTalkback(prepared, lock)
         except BaseException:
+            if prepared is not None and not getattr(prepared, "closed", False):
+                try:
+                    await prepared.close()
+                except Exception:
+                    pass
             if lock.locked():
                 lock.release()
             raise
