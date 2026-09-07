@@ -124,23 +124,54 @@ Release identity and publication:
 
 The unchecked final tagged deployment is an operational post-publication smoke check. It does not change the immutable GitHub release contents or the fact that the shipped runtime blobs match the physically validated remediation code, but it should be completed before broad public promotion.
 
-## Publish/deploy sequence
+## v2.2.0-beta.1 release-candidate gate — PENDING PHYSICAL VALIDATION
 
-Do not merge/tag until every required release-specific physical gate is satisfied.
+v2.2.0-beta.1 introduces explicit, capability-gated Protect camera-speaker TTS while preserving stable v2.1.8 Smart Chime behavior. Opening this draft release-preparation PR does not add a publisher and does not authorize a merge, tag, release, deployment, or audible test.
 
-1. Freeze an exact candidate SHA and run all automated gates.
-2. Back up `.env` and persistent `/data` state on the live host.
-3. Deploy that exact candidate SHA with `GIT_SHA` embedded.
-4. Install/reload the matching HA candidate component.
-5. Complete the release-specific physical gate and record evidence on the release PR.
-6. Update release notes/checklist so they explicitly record the live gate result before merge.
-7. Before publication, verify the release notes contain no unresolved future-tense blocker such as `must not be published until` and no unchecked release-specific gate that has actually passed.
-8. Merge only the validated candidate code/docs into `main`.
-9. Let trusted `main` CI complete successfully.
-10. Release workflow reruns required release validation against `workflow_run.head_sha` and publishes the release at that exact SHA.
-11. Deploy the immutable release tag/source using `GIT_SHA="$(git rev-parse HEAD)"` and repeat the minimal audible smoke test.
-12. Verify GitHub tag/release, app version, HA manifest version, `/version`, and deployed image revision all agree.
-13. Retire any completed fixed-version publisher so ordinary post-release `main` commits do not rerun historical publishing jobs.
+Automated and review evidence:
+
+- [x] Backend, Home Assistant, Ruff, compile, JSON, Compose, Docker build, HACS, and Hassfest checks passed for the implementation before release preparation.
+- [x] Independent compatibility/API/Home Assistant review reported no findings.
+- [x] Independent security review reported no blocking P0/P1 findings after adversarial cookie, deadline, ADTS, ffmpeg, cancellation, and mixed-group tests.
+- [x] Camera targets remain explicit opt-in and absent from implicit `default` resolution.
+- [x] Legacy `/chimes`, Smart Chime slots, and existing Home Assistant identifiers remain unchanged.
+- [x] `APP_VERSION`, HA `INTEGRATION_VERSION`, and HA manifest version are prepared as `2.2.0-beta.1`.
+- [x] Stable install instructions remain pinned to immutable `v2.1.8` until a beta tag is separately approved and published.
+- [x] Exact release-preparation branch-head and merge-ref CI pass.
+- [ ] Trusted post-merge `main` CI passes for the versioned candidate.
+
+Required physical beta gate:
+
+- [x] Back up `.env` and the actual `/data` mount with restrictive permissions and verify the archive/checksum.
+- [x] Build and deploy the exact candidate SHA with `GIT_SHA` provenance and an immutable image digest.
+- [x] Install/reload the matching Home Assistant candidate.
+- [x] Confirm the expected phrase is audible and intelligible on the explicitly configured G3 Instant at the approved test volume.
+- [x] Confirm repeats do not overlap; cancellation does not replay; and the tested post-send uncertain transport failure performs one negotiation, connection, and send attempt without retry.
+- [x] Confirm camera-only playback performs no Smart Chime slot write through instrumented dispatcher coverage; live slot state also remained unchanged.
+- [x] Confirm an unavailable camera prevents mixed-group Smart Chime playback before any physical effect.
+- [x] Confirm Home Assistant exposes only capability-supported camera controls.
+- [x] Confirm service restart followed by a camera announcement remains safe.
+- [x] Record exact candidate SHA, app/HA versions, image revision/digest, sanitized target capability, and model-scoped outcome without private topology or credentials in [the G3 Instant validation report](validation/v2.2.0-beta.1-g3-instant-camera-validation.md).
+
+Until every required physical item passes, beta.1 must not be promoted to stable and compatibility must not be generalized beyond the tested camera model/profile.
+
+## Approval-gated candidate, publish, and deploy sequence
+
+Opening a draft release-preparation PR is allowed before physical validation. Do not mark it ready, merge it, tag it, publish it, or deploy it without the gate and approval required for that step.
+
+1. Prepare version identity, release notes, checklist, and contract tests on a dedicated branch without adding publication automation.
+2. Open a **draft** release-preparation PR and freeze its exact head SHA.
+3. Run branch-head and merge-ref automated checks. CI success does not authorize physical testing or merge.
+4. With separate deployment/test approval, back up `.env` and persistent `/data`, then deploy that exact candidate SHA with `GIT_SHA` and immutable image-digest provenance.
+5. Install/reload the matching HA candidate component and complete the release-specific physical gate.
+6. Record sanitized evidence on the draft PR, update the release notes/checklist, and rerun exact-SHA CI.
+7. Before merge or publication, verify the release notes contain no unresolved future-tense blocker such as `must not be published until` and no release-specific gate remains unchecked after actually passing.
+8. Only after every required physical item passes and merge is separately approved, mark the draft ready and merge it into `main`.
+9. Let trusted post-merge `main` CI complete successfully and verify the merge SHA still carries the approved candidate content.
+10. With separate publication approval, create the immutable prerelease tag/GitHub release at that exact `main` SHA, either manually or through a newly reviewed one-version publisher. No publisher exists by default.
+11. Verify the tag, GitHub release, app version, HA manifest version, and source commit all agree.
+12. With separate release-deployment approval, deploy the immutable tag/image digest and repeat the minimal approved smoke test.
+13. Verify `/version`, deployed image revision/digest, and HA version agree; retire any one-version publisher introduced for publication.
 
 ## Rollback gate
 

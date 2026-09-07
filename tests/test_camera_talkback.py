@@ -232,6 +232,50 @@ async def test_camera_playback_wraps_transport_errors_without_signed_url():
 
 
 @pytest.mark.asyncio
+async def test_camera_playback_does_not_retry_after_uncertain_send_failure():
+    response = httpx.Response(
+        200,
+        json={"url": "wss://internal-console:7443/ws/talkback?token=opaque"},
+        request=httpx.Request("GET", "https://protect.example.test/negotiate"),
+    )
+    protect = SimpleNamespace(
+        bootstrap=AsyncMock(return_value={"cameras": [_camera()]}),
+        _do=AsyncMock(return_value=response),
+        session_cookie_header=lambda: "TOKEN=redacted",
+    )
+
+    class UncertainSocket:
+        def __init__(self):
+            self.send_attempts = 0
+
+        async def send(self, _frame):
+            self.send_attempts += 1
+            raise RuntimeError("connection lost after frame may have been accepted")
+
+    socket = UncertainSocket()
+    connection = _Connection(socket)
+    connector = AsyncMock(return_value=connection)
+    client = ProtectCameraTalkback(
+        protect=protect,
+        controller_url="https://protect.example.test",
+        verify_ssl=False,
+        transcode=AsyncMock(return_value=_adts_frame(b"possibly-delivered")),
+        connector=connector,
+        sleep=AsyncMock(),
+        arm_delay=0,
+        drain_delay=0,
+    )
+
+    with pytest.raises(CameraTalkbackError, match="transport failed"):
+        await client.play("camera-fixture", b"mp3")
+
+    protect._do.assert_awaited_once()
+    connector.assert_awaited_once()
+    assert socket.send_attempts == 1
+    assert connection.exited is True
+
+
+@pytest.mark.asyncio
 async def test_camera_playback_normalizes_non_object_negotiation_payload():
     response = httpx.Response(
         200,

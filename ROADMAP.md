@@ -28,13 +28,15 @@ The next development work is ordered by user value and available validation hard
 
 ### 1. Camera-speaker TTS — experimental implementation
 
+Release candidate: **v2.2.0-beta.1**. Stable `v2.1.8` remains the recommended release until the exact beta candidate completes its integrated physical gate.
+
 - explicit `CAMERAS_CONFIG` allowlist; cameras never join the implicit default target;
 - capability-gated private Protect talkback for the physically verified AAC/ADTS profile;
 - shared dispatcher, queueing, quiet-hours, priority, dedupe, and mixed-group behavior;
 - authenticated `/targets` capability catalog and capability-safe Home Assistant entities;
 - fail closed for unsupported camera models/profiles and require physical audibility before expanding compatibility claims.
 
-The implementation is automated-test complete but remains experimental pending exact-candidate physical validation through the integrated Announcer path.
+The implementation is automated-test complete and release-candidate prepared but remains experimental pending exact-candidate physical validation through the integrated Announcer path.
 
 ### 2. Native Home Assistant media ingestion
 
