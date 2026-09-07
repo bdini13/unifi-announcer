@@ -147,19 +147,14 @@ class HardenedCameraTalkback:
         return camera, validate_camera_profile(camera)
 
     async def inspect(self, camera_id: str) -> dict[str, Any]:
+        camera = await self.delegate._camera(camera_id)
         try:
-            camera, profile = await self._validated_camera(camera_id)
+            profile = validate_camera_profile(camera)
         except CameraTalkbackError as exc:
-            model = "camera"
-            try:
-                raw = await self.delegate._camera(camera_id)
-                model = camera_model(raw) or "camera"
-            except Exception:
-                pass
             return {
                 "status": "unavailable",
                 "error": str(exc),
-                "model": model,
+                "model": camera_model(camera) or "camera",
             }
         return {
             "status": "available",
