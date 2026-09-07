@@ -25,7 +25,7 @@ async def async_setup_entry(hass, entry, async_add_entities) -> None:
 
 
 class UniFiAnnouncerNotify(UniFiAnnouncerEntity, NotifyEntity):
-    """Standard notify.send_message target for one chime or group."""
+    """Standard notify.send_message target for one chime/camera/group."""
 
     _attr_translation_key = "announce"
     _attr_name = "Announcements"
@@ -38,10 +38,17 @@ class UniFiAnnouncerNotify(UniFiAnnouncerEntity, NotifyEntity):
         )
         self._attr_unique_id = f"{entry.entry_id}_{self.entity_key}_notify"
 
+    @property
+    def available(self) -> bool:
+        return target_supports(self.coordinator, self.target, "announce")
+
     async def async_send_message(self, message: str, title: str | None = None) -> None:
         if not message or not message.strip():
             self.runtime.record_playback_result(self.target, "failed")
             raise HomeAssistantError("Announcement message cannot be empty")
+        if not self.available:
+            self.runtime.record_playback_result(self.target, "failed")
+            raise HomeAssistantError("This announcement target is currently unavailable")
         options = self.entry.options
         try:
             result = await self.runtime.client.async_announce(
