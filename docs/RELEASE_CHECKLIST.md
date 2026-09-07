@@ -124,9 +124,9 @@ Release identity and publication:
 
 The unchecked final tagged deployment is an operational post-publication smoke check. It does not change the immutable GitHub release contents or the fact that the shipped runtime blobs match the physically validated remediation code, but it should be completed before broad public promotion.
 
-## v2.2.0-beta.1 release-candidate gate — PENDING PHYSICAL VALIDATION
+## v2.2.0-beta.1 release gate — PASS / PUBLISHED PRERELEASE
 
-v2.2.0-beta.1 introduces explicit, capability-gated Protect camera-speaker TTS while preserving stable v2.1.8 Smart Chime behavior. Opening this draft release-preparation PR does not add a publisher and does not authorize a merge, tag, release, deployment, or audible test.
+v2.2.0-beta.1 introduced explicit, capability-gated Protect camera-speaker TTS while preserving stable v2.1.8 Smart Chime behavior. Its integrated camera path was physically validated on one UVC G3 Instant before publication. The immutable prerelease tag/release targets merge SHA `4bc0f6cea06f65f971de80e8f618413c1cea1fab`. Stable `v2.1.8` remains the recommended public release.
 
 Automated and review evidence:
 
@@ -135,12 +135,13 @@ Automated and review evidence:
 - [x] Independent security review reported no blocking P0/P1 findings after adversarial cookie, deadline, ADTS, ffmpeg, cancellation, and mixed-group tests.
 - [x] Camera targets remain explicit opt-in and absent from implicit `default` resolution.
 - [x] Legacy `/chimes`, Smart Chime slots, and existing Home Assistant identifiers remain unchanged.
-- [x] `APP_VERSION`, HA `INTEGRATION_VERSION`, and HA manifest version are prepared as `2.2.0-beta.1`.
-- [x] Stable install instructions remain pinned to immutable `v2.1.8` until a beta tag is separately approved and published.
-- [x] Exact release-preparation branch-head and merge-ref CI pass.
-- [ ] Trusted post-merge `main` CI passes for the versioned candidate.
+- [x] `APP_VERSION`, HA `INTEGRATION_VERSION`, and HA manifest version all equal `2.2.0-beta.1` for the immutable beta.1 release.
+- [x] Stable install instructions remain pinned to immutable `v2.1.8`.
+- [x] Exact release-preparation branch-head and merge-ref CI passed.
+- [x] Trusted post-merge `main` pytest, Home Assistant, HACS, and Hassfest checks passed at merge SHA `4bc0f6cea06f65f971de80e8f618413c1cea1fab`.
+- [x] Immutable GitHub prerelease `v2.2.0-beta.1` was published at that exact merge SHA.
 
-Required physical beta gate:
+Physical beta gate:
 
 - [x] Back up `.env` and the actual `/data` mount with restrictive permissions and verify the archive/checksum.
 - [x] Build and deploy the exact candidate SHA with `GIT_SHA` provenance and an immutable image digest.
@@ -153,7 +154,22 @@ Required physical beta gate:
 - [x] Confirm service restart followed by a camera announcement remains safe.
 - [x] Record exact candidate SHA, app/HA versions, image revision/digest, sanitized target capability, and model-scoped outcome without private topology or credentials in [the G3 Instant validation report](validation/v2.2.0-beta.1-g3-instant-camera-validation.md).
 
-Until every required physical item passes, beta.1 must not be promoted to stable and compatibility must not be generalized beyond the tested camera model/profile.
+The beta.1 gate passed, but that evidence remains scoped to one UVC G3 Instant and its observed AAC-LC / 22.05 kHz / mono / 16-bit `serverudp` profile. Beta.1 remains a prerelease and must not be generalized to other camera models or talkback profiles.
+
+### Post-beta.1 hardening / beta.2 candidate boundary
+
+Hardening discovered after beta.1 publication must not mutate the immutable beta.1 tag/release. The next camera prerelease should be beta.2 or later and must preserve these additional invariants before publication:
+
+- [ ] Production compatibility is an explicit physically validated model/profile table rather than broad AAC/sample-rate inference.
+- [ ] The actual prepared talkback session is rechecked against the approved model/profile before any audio frame can be sent.
+- [ ] At most one prepared talkback session exists per physical camera while separate cameras remain independent.
+- [ ] Authenticated `/targets` polling refreshes transient camera availability without requiring Home Assistant entity recreation.
+- [ ] Home Assistant entity availability requires both coordinator health and current target capability.
+- [ ] Production `GROUPS_CONFIG` rejects unknown/duplicate members, empty groups, reserved/colliding names, and malformed JSON instead of silently omitting targets.
+- [ ] README, compatibility, Home Assistant, environment examples, and roadmap describe beta.1 as a published prerelease and retain the exact G3 Instant compatibility boundary.
+- [ ] Exact beta.2 candidate branch-head and merge-ref backend/HA/HACS/Hassfest/Docker checks pass.
+
+A later beta.2 publication or deployment remains separately approval-gated. Merging hardening code does not authorize a tag, release, image publication, deployment, stable promotion, or compatibility expansion.
 
 ## Approval-gated candidate, publish, and deploy sequence
 
@@ -193,5 +209,6 @@ If any candidate gate fails, restore the previous code/HA component first. Do no
 - Public CI uses sanitized fixtures and cannot prove physical audibility.
 - Generic arbitrary raw upload, unknown-route probing, controller identity reuse, direct slot deletion, and direct UCP4 transport remain unsupported and outside stable v2.1.
 - Credential onboarding is UI-assisted rather than automatic. On validated Protect `7.2.105`, **Devices → Smart WiFi Chime → Settings → Manage → Manual Recovery → Reveal** exposes the existing unique device password; that exact revealed value returned HTTP 200 with username `ubnt` against `/api/info`. Use Reveal, not Edit. The service does not retrieve this credential automatically and does not support SSH/database extraction as onboarding.
+- Camera prerelease compatibility is scoped to exact physically validated model/profile records; generic speaker/AAC metadata must never be treated as sufficient compatibility evidence.
 
-These limitations do not block the validated single-device fixed-slot implementation, but they must not be rewritten as broader physical validation claims.
+These limitations do not block the validated single-device fixed-slot implementation or the published G3 Instant beta evidence, but they must not be rewritten as broader physical validation claims.
