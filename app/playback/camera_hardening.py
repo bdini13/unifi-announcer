@@ -147,7 +147,14 @@ class HardenedCameraTalkback:
         return camera, validate_camera_profile(camera)
 
     async def inspect(self, camera_id: str) -> dict[str, Any]:
-        camera = await self.delegate._camera(camera_id)
+        try:
+            camera = await self.delegate._camera(camera_id)
+        except CameraTalkbackError as exc:
+            return {
+                "status": "unavailable",
+                "error": str(exc),
+                "model": "camera",
+            }
         try:
             profile = validate_camera_profile(camera)
         except CameraTalkbackError as exc:
@@ -212,10 +219,6 @@ class HardenedCameraTalkback:
                 raise CameraTalkbackError(
                     "prepared camera talkback profile changed before playback"
                 )
-            # Re-read the camera after the low-level session is armed. This
-            # closes the broad delegate's second-bootstrap race: a camera/model
-            # or profile change between the first capability read and prepared
-            # session creation cannot become playable.
             _, current = await self._validated_camera(camera_id)
             if current != expected:
                 await prepared.close()
