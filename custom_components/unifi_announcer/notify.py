@@ -40,7 +40,10 @@ class UniFiAnnouncerNotify(UniFiAnnouncerEntity, NotifyEntity):
 
     @property
     def available(self) -> bool:
-        return target_supports(self.coordinator, self.target, "announce")
+        return bool(
+            super().available
+            and target_supports(self.coordinator, self.target, "announce")
+        )
 
     async def async_send_message(self, message: str, title: str | None = None) -> None:
         if not message or not message.strip():
