@@ -1,5 +1,7 @@
 import pytest
 
+from app.playback.camera_hardening import load_validated_groups
+
 
 def test_chime_config_only_recovers_from_expected_json_errors(main_module, monkeypatch):
     monkeypatch.setattr(
@@ -59,18 +61,23 @@ def test_group_can_explicitly_mix_chime_and_camera_targets(main_module, monkeypa
         "CAMERAS_CONFIG", '[{"name":"family_room_camera","id":"camera-one"}]'
     )
     cameras = main_module._load_camera_runtimes()
-    monkeypatch.setattr(
-        main_module,
-        "target_runtimes",
-        {**main_module.chime_runtimes, **cameras},
+    target_runtimes = {**main_module.chime_runtimes, **cameras}
+    groups = load_validated_groups(
+        '{"mixed":["default","family_room_camera"]}',
+        target_names=target_runtimes,
     )
-    monkeypatch.setattr(
-        main_module,
-        "GROUPS",
-        {"mixed": ["default", "family_room_camera", "missing"]},
-    )
+    monkeypatch.setattr(main_module, "target_runtimes", target_runtimes)
+    monkeypatch.setattr(main_module, "GROUPS", groups)
     resolved = main_module.resolve_targets("mixed")
     assert [target.desc.kind for target in resolved] == ["chime", "camera"]
+
+
+def test_group_validation_rejects_unknown_member(main_module):
+    with pytest.raises(RuntimeError, match="unknown target"):
+        load_validated_groups(
+            '{"mixed":["default","missing"]}',
+            target_names=main_module.target_runtimes,
+        )
 
 
 def test_track_registry_load_does_not_hide_programming_errors(
