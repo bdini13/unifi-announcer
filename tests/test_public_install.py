@@ -19,7 +19,7 @@ def test_readme_keeps_stable_install_and_identifies_published_beta():
     )[0]
     assert "git checkout v2.1.8" in stable_clone
     assert "v2.2.0-beta.1" not in stable_clone
-    assert "stable `v2.1.8` remains the recommended default" in ha_setup
+    assert "Select the latest stable release" in ha_setup
     assert "img.shields.io/github/v/release/bdini13/unifi-announcer" in readme
     assert "releases/latest" in readme
     assert "**Stable:** `v2.1.8`" in readme
