@@ -215,7 +215,7 @@ def test_beta1_release_notes_preserve_historical_physical_boundary():
     assert "No publisher exists by default" in checklist
 
 
-def test_beta2_candidate_docs_require_fresh_hardware_gate():
+def test_beta2_candidate_docs_record_completed_hardware_gate():
     notes = Path("docs/RELEASE_NOTES_v2.2.0-beta.2.md").read_text()
     validation = Path(
         "docs/validation/v2.2.0-beta.2-camera-hardening-validation.md"
@@ -226,7 +226,8 @@ def test_beta2_candidate_docs_require_fresh_hardware_gate():
     assert "22,050 Hz" in notes
     assert "per-camera preparation lease" in notes
     assert "Required physical validation before merge/publication" in notes
-    assert "RESULT: PENDING" in validation
+    assert "RESULT: PASS" in validation
+    assert "not empirically executed" in validation
     assert "offline → online" in validation
     assert "Same-camera concurrency/session serialization" in validation
 
