@@ -221,3 +221,19 @@ async def test_inspect_reports_unvalidated_camera_as_unavailable_without_enablin
     assert state["status"] == "unavailable"
     assert state["model"] == "UVC G4 Instant"
     assert "validated" in state["error"]
+
+
+@pytest.mark.asyncio
+async def test_inspect_normalizes_missing_configured_camera_as_unavailable():
+    delegate = SimpleNamespace(
+        _camera=AsyncMock(
+            side_effect=CameraTalkbackError("configured camera is unavailable")
+        ),
+    )
+    hardened = HardenedCameraTalkback(delegate)
+    state = await hardened.inspect("camera-one")
+    assert state == {
+        "status": "unavailable",
+        "error": "configured camera is unavailable",
+        "model": "camera",
+    }
