@@ -46,7 +46,10 @@ core.GROUPS = load_validated_groups(
 # serialize physical session preparation per camera. Update every production
 # reference before entering the core lifespan so startup capability inspection,
 # dispatcher playback, rules, and diagnostics all see the same hardening layer.
-core.camera_talkback = HardenedCameraTalkback(core.camera_talkback)
+# Keep composition idempotent for test/reload tooling that imports app.server
+# more than once in the same interpreter.
+if not isinstance(core.camera_talkback, HardenedCameraTalkback):
+    core.camera_talkback = HardenedCameraTalkback(core.camera_talkback)
 core.dispatcher.camera_playback = core.camera_talkback
 setattr(core.app.state.services, "camera_talkback", core.camera_talkback)
 
