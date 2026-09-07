@@ -188,17 +188,17 @@ def test_upgrade_docs_preserve_legacy_default_bind_data_and_v218_state():
     assert "No manual data migration is required from v2.1.7" in readme
 
 
-def test_release_identity_is_v2_2_0_beta_1():
-    assert 'APP_VERSION = "2.2.0-beta.1"' in Path("app/version.py").read_text()
-    assert 'INTEGRATION_VERSION = "2.2.0-beta.1"' in Path(
+def test_release_identity_is_v2_2_0_beta_2():
+    assert 'APP_VERSION = "2.2.0-beta.2"' in Path("app/version.py").read_text()
+    assert 'INTEGRATION_VERSION = "2.2.0-beta.2"' in Path(
         "custom_components/unifi_announcer/const.py"
     ).read_text()
-    assert '"version": "2.2.0-beta.1"' in Path(
+    assert '"version": "2.2.0-beta.2"' in Path(
         "custom_components/unifi_announcer/manifest.json"
     ).read_text()
 
 
-def test_beta_release_notes_preserve_experimental_physical_boundary():
+def test_beta1_release_notes_preserve_historical_physical_boundary():
     notes = Path("docs/RELEASE_NOTES_v2.2.0-beta.1.md").read_text()
     checklist = Path("docs/RELEASE_CHECKLIST.md").read_text()
     assert "Integrated audible camera playback was physically confirmed" in notes
@@ -213,6 +213,22 @@ def test_beta_release_notes_preserve_experimental_physical_boundary():
     assert "no tag, github release, image publication, deployment, or audible test" in notes.lower()
     assert "must remain draft" in notes
     assert "No publisher exists by default" in checklist
+
+
+def test_beta2_candidate_docs_require_fresh_hardware_gate():
+    notes = Path("docs/RELEASE_NOTES_v2.2.0-beta.2.md").read_text()
+    validation = Path(
+        "docs/validation/v2.2.0-beta.2-camera-hardening-validation.md"
+    ).read_text()
+    assert "v2.2.0-beta.2" in notes
+    assert "Stable `v2.1.8` remains the recommended public release" in notes
+    assert "UVC G3 Instant" in notes
+    assert "22,050 Hz" in notes
+    assert "per-camera preparation lease" in notes
+    assert "Required physical validation before merge/publication" in notes
+    assert "RESULT: PENDING" in validation
+    assert "offline → online" in validation
+    assert "Same-camera concurrency/session serialization" in validation
 
 
 def test_fastapi_metadata_uses_release_identity(main_module):
