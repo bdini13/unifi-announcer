@@ -53,7 +53,7 @@ Typical uses include:
 | MCP server and playback tools | ✅ Stable |
 | MQTT discovery | ✅ Supported |
 | Multiple chimes and named groups | 🧪 Automated coverage; multi-device physical validation pending |
-| Protect camera-speaker TTS | 🧪 Experimental opt-in; verified AAC talkback transport, integrated-path physical validation pending |
+| Protect camera-speaker TTS | 🧪 `v2.2.0-beta.1`; physically validated on one UVC G3 Instant using AAC-LC / 22.05 kHz / mono / 16-bit `serverudp` |
 | Protect event rules | 🧪 Experimental |
 | Native HA `tts.speak` media ingestion | ⏭️ Planned for a later v2.2 prerelease |
 
@@ -388,11 +388,13 @@ GROUPS_CONFIG='{"downstairs":["kitchen"],"whole_house":["kitchen","upstairs"]}'
 
 Then target `whole_house` from REST/HA/MCP. Each physical Chime has its own bounded queue and group members execute concurrently. Content reuse is accepted only when every requested target has matching trusted content; otherwise the required targets are safely rewritten. Multi-Chime behavior has automated coverage but still requires independent physical multi-device validation.
 
+Production configuration now validates every group member at startup. Unknown targets, empty groups, duplicate members, reserved names, and malformed `GROUPS_CONFIG` fail closed instead of being silently ignored.
+
 ## Experimental camera-speaker TTS
 
-This opt-in path is the focus of the `v2.2.0-beta.1` candidate. It is not part of stable `v2.1.8`.
+`v2.2.0-beta.1` is a **published prerelease**, not part of stable `v2.1.8`. Its integrated path was physically validated on one **UVC G3 Instant**. Camera compatibility is evidence-based: the current production gate accepts only the exact validated profile — **AAC-LC, 22.05 kHz, mono, 16-bit, `serverudp`**. Other camera models, sample rates, and Opus/RTP profiles remain configured/discoverable but report unavailable and fail closed until they are physically validated.
 
-Compatible Protect cameras can be explicit text-announcement targets through the controller's private talkback WebSocket:
+Compatible Protect cameras are explicit text-announcement targets through the controller's private talkback WebSocket:
 
 ```env
 CAMERAS_CONFIG='[
@@ -401,11 +403,13 @@ CAMERAS_CONFIG='[
 GROUPS_CONFIG='{"mixed":["kitchen","family_room_camera"]}'
 ```
 
-The backend reads each configured camera from Protect bootstrap, requires a connected speaker with the verified AAC/ADTS mono talkback profile, transcodes the existing bounded MP3, mints a fresh controller-authorized WebSocket, sends one complete ADTS frame at a time, and closes without retrying uncertain audio. Cameras are never auto-discovered into Announcer and never join the implicit default target.
+The backend reads each configured camera from Protect bootstrap, validates the exact model/profile, transcodes the existing bounded MP3, mints a fresh controller-authorized WebSocket, sends one complete ADTS frame at a time, and closes without retrying uncertain audio. Cameras are never auto-discovered into Announcer and never join the implicit default target.
 
-Camera targets currently support **text announcements and repeats only**. Per-request volume/profile overrides, buzzer, assigned-default, and ringtone-preset operations fail before synthesis or playback. Camera volume remains device-managed. Authenticated `GET /targets` publishes the sanitized capability catalog used by Home Assistant; legacy `GET /chimes` remains unchanged.
+Camera targets currently support **text announcements and repeats only**. Per-request volume/profile overrides, buzzer, assigned-default, and ringtone-preset operations fail before synthesis or playback. Camera volume remains device-managed.
 
-The underlying private AAC talkback transport has been physically heard on a G3 Instant. This integrated Announcer path remains experimental until the exact candidate is physically validated on each claimed camera model. Opus/RTP camera profiles fail closed.
+A per-camera preparation lease prevents two simultaneous controller-minted talkback sessions from being opened for the same physical camera; another camera remains independent. Authenticated `GET /targets` refreshes configured camera capability/availability on every poll. Home Assistant keeps explicit camera and mixed-group announcement entities present while a camera is offline and toggles their availability from refreshed capability state, so a reconnect does not require entity recreation. Legacy `GET /chimes` remains unchanged.
+
+See [v2.2.0-beta.1 release notes](docs/RELEASE_NOTES_v2.2.0-beta.1.md) and the [G3 Instant validation report](docs/validation/v2.2.0-beta.1-g3-instant-camera-validation.md).
 
 ## MQTT and local rules
 
@@ -525,6 +529,9 @@ Verify the final `DATA_PATH` before starting the restored container.
 | Smart Chime credential is not configured | Protect credential has not been revealed yet | Open **Devices → Smart WiFi Chime → Settings → Manage → Manual Recovery → Reveal**; use Reveal, not Edit |
 | Repeated phrase unexpectedly performs a write | Resident proof was absent or invalidated by restart/reconnect/boot change | This can be safe/expected; inspect `content_reuse` state and boot/lifecycle counters before tuning anything |
 | First phrase after Chime reboot rewrites once | v2.1.8 boot continuity correctly invalidated resident content | Expected safety behavior; the next same-boot replay can become a zero-write hit |
+| Camera entity is unavailable | Camera is offline or its model/talkback profile is outside the physically validated beta compatibility record | Check authenticated `/targets`; reconnect the camera or leave it unsupported until its exact profile is physically validated |
+| Camera reconnects but HA entity stays unavailable | Coordinator has not completed its next `/targets` refresh | Wait for the next integration poll or reload the integration; entity recreation is not required |
+| Service refuses `GROUPS_CONFIG` at startup | Group contains an unknown/duplicate member, reserved name, empty list, or malformed JSON | Correct the group definition; production no longer silently drops invalid members |
 | Slot status reports ownership drift | Physical slot metadata no longer matches proof | Stop TTS and reconcile; do not force or guess a slot |
 | `/version` shows `git_sha: unknown` | Image was built without `GIT_SHA` | Rebuild with `export GIT_SHA="$(git rev-parse HEAD)"` |
 | Piper synthesis fails | Piper unavailable | Check `PIPER_URL` and Piper service |
@@ -552,6 +559,16 @@ Dynamic TTS safety properties:
 - filename/slot drift, ambiguity, device replacement, failed/partial writes, or missing ownership evidence fail closed;
 - destructive direct Chime endpoints are blocked before network I/O.
 
+Camera beta safety properties:
+
+- cameras are explicit opt-in targets and never join the implicit default target;
+- compatibility is an exact physically validated model/profile record, not inferred from generic `hasSpeaker` or AAC support;
+- only one prepared talkback session may exist per configured camera at a time;
+- signed talkback URLs and session cookies are not persisted or returned;
+- uncertain camera audio delivery is not retried automatically;
+- camera availability is refreshed through authenticated `/targets` polling and HA entity availability follows that state;
+- mixed groups and group configuration fail closed rather than silently omitting unresolved physical targets.
+
 See [Track registry](docs/TRACKS.md), [Playback policy](docs/POLICY.md), [Architecture](docs/ARCHITECTURE.md), and [v2.1.8 validation](docs/validation/v2.1.8-live-latency-validation.md).
 
 ## Validation boundary
@@ -572,6 +589,8 @@ The live v2.1.8 validation intentionally retains the history of an earlier candi
 
 Multi-Chime/group playback has **not** been physically validated with multiple Smart Chimes. No synchronized microphone benchmark was used, so the project does not claim measured acoustic latency. The ~0.54–0.66 second resident figures above are application/request-path measurements from the single-Chime validation.
 
+Camera-speaker beta validation has been physically completed on **one UVC G3 Instant** using the exact AAC-LC / 22.05 kHz / mono / 16-bit `serverudp` profile. This does not establish compatibility for any other camera model, sample rate, or Opus/RTP transport.
+
 Public CI uses sanitized fixtures and does not contact live UniFi equipment or play audio. It runs the backend suite, Home Assistant tests, Ruff, compile checks, metadata/Compose validation, Docker build, HACS validation, and Hassfest.
 
 See the evidence requirements in [Release checklist](docs/RELEASE_CHECKLIST.md).
@@ -580,7 +599,7 @@ See the evidence requirements in [Release checklist](docs/RELEASE_CHECKLIST.md).
 
 Development priorities after stable v2.1.8 are:
 
-1. **Camera-speaker TTS** — experimental implementation in progress; physical validation is required per camera model before compatibility claims expand.
+1. **Camera-speaker TTS hardening and compatibility expansion** — `v2.2.0-beta.1` is published and physically validated on one G3 Instant; additional models enter the compatibility table only after exact integrated-path validation.
 2. **Native Home Assistant media ingestion**, including `tts.speak`, `media-source://`, and bounded binary media through the existing dispatcher.
 3. **Diagnostics and compatibility**, including redacted support bundles, stage-level latency reporting, and firmware capability warnings.
 
@@ -603,6 +622,8 @@ See the detailed [project roadmap](ROADMAP.md).
 - [Rules](docs/RULES.md)
 - [Track registry](docs/TRACKS.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
+- [v2.2.0-beta.1 release notes](docs/RELEASE_NOTES_v2.2.0-beta.1.md)
+- [v2.2.0-beta.1 G3 Instant validation](docs/validation/v2.2.0-beta.1-g3-instant-camera-validation.md)
 - [v2.1.8 release notes](docs/RELEASE_NOTES_v2.1.8.md)
 - [v2.1.8 live validation](docs/validation/v2.1.8-live-latency-validation.md)
 - [v2.1.7 release notes](docs/RELEASE_NOTES_v2.1.7.md)
@@ -610,7 +631,7 @@ See the detailed [project roadmap](ROADMAP.md).
 
 ## Support and security
 
-Use [GitHub Issues](https://github.com/bdini13/unifi-announcer/issues) for reproducible bugs and focused feature requests. Include the Announcer version, Protect version, Smart Chime model/firmware, reproduction steps, and whether evidence came from automated fixtures or physical devices.
+Use [GitHub Issues](https://github.com/bdini13/unifi-announcer/issues) for reproducible bugs and focused feature requests. Include the Announcer version, Protect version, target model/firmware, reproduction steps, and whether evidence came from automated fixtures or physical devices.
 
 **Never post credentials, screenshots containing revealed credentials, private IPs/hostnames, device IDs, certificate material, raw authentication data, private audio, or unredacted support logs.** For vulnerabilities, follow [SECURITY.md](SECURITY.md) rather than opening a public issue.
 
@@ -648,8 +669,8 @@ This project was developed with assistance from AI coding and research tools for
 ## Release status
 
 - **Stable:** `v2.1.8` — safe same-boot resident TTS reuse with Smart Chime reboot/reconnect invalidation
-- **Release candidate:** `v2.2.0-beta.1` — explicit, capability-gated Protect camera-speaker TTS; integrated physical validation pending
-- **Planned after beta.1:** native Home Assistant media ingestion and expanded diagnostics
+- **Prerelease:** `v2.2.0-beta.1` — experimental Protect camera-speaker TTS, physically validated on one UVC G3 Instant profile; other camera profiles remain unsupported until validated
+- **Planned after beta.1:** camera hardening/compatibility expansion, native Home Assistant media ingestion, and expanded diagnostics
 
 See [ROADMAP.md](ROADMAP.md) and the [Releases page](https://github.com/bdini13/unifi-announcer/releases).
 
