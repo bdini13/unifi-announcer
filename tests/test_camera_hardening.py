@@ -31,6 +31,16 @@ def _camera(**overrides):
     return camera
 
 
+def _low_level_profile(*, sample_rate=22050):
+    return SimpleNamespace(
+        codec="aac",
+        transport="serverudp",
+        sample_rate=sample_rate,
+        channels=1,
+        bits_per_sample=16,
+    )
+
+
 def test_validated_camera_profile_is_exact_model_and_transport_contract():
     profile = validate_camera_profile(_camera())
     assert profile.model == "UVC G3 Instant"
@@ -97,9 +107,10 @@ def test_groups_reject_unknown_duplicate_or_reserved_members():
 
 
 class _Prepared:
-    def __init__(self):
+    def __init__(self, *, sample_rate=22050):
         self.closed = False
         self.played = False
+        self.profile = _low_level_profile(sample_rate=sample_rate)
 
     async def play(self):
         self.played = True
@@ -159,6 +170,45 @@ async def test_different_cameras_can_prepare_concurrently():
     prepared_one, prepared_two = await asyncio.gather(one, two)
     await prepared_one.close()
     await prepared_two.close()
+
+
+@pytest.mark.asyncio
+async def test_prepared_session_profile_mismatch_fails_before_playback():
+    prepared = _Prepared(sample_rate=48000)
+    delegate = SimpleNamespace(
+        _camera=AsyncMock(return_value=_camera()),
+        prepare=AsyncMock(return_value=prepared),
+    )
+    hardened = HardenedCameraTalkback(delegate)
+
+    with pytest.raises(CameraTalkbackError, match="profile changed before playback"):
+        await hardened.prepare("camera-one", b"mp3")
+
+    assert prepared.closed is True
+    assert prepared.played is False
+
+
+@pytest.mark.asyncio
+async def test_profile_change_during_preparation_fails_closed():
+    changed = _camera(talkbackSettings={
+        "typeFmt": "aac",
+        "typeIn": "serverudp",
+        "samplingRate": 48000,
+        "bitsPerSample": 16,
+        "channels": 1,
+    })
+    prepared = _Prepared()
+    delegate = SimpleNamespace(
+        _camera=AsyncMock(side_effect=[_camera(), changed]),
+        prepare=AsyncMock(return_value=prepared),
+    )
+    hardened = HardenedCameraTalkback(delegate)
+
+    with pytest.raises(CameraTalkbackError, match="not been physically validated"):
+        await hardened.prepare("camera-one", b"mp3")
+
+    assert prepared.closed is True
+    assert prepared.played is False
 
 
 @pytest.mark.asyncio
