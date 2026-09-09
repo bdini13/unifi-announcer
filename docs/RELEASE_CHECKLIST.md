@@ -182,7 +182,7 @@ Publication and deployment did not promote beta.2 to stable or expand compatibil
 - [x] `EXPERIMENTAL_CAMERA_PROFILES` defaults to empty and fails closed on malformed, duplicate, partial, extra-key, unsupported, or type-coerced entries.
 - [x] Exact opt-in matches all five wire-profile dimensions and labels unvalidated models `experimental_opt_in`.
 - [x] The validated G3 model/profile remains `physically_validated` and default behavior remains unchanged.
-- [ ] Exact beta.3 backend/HA identity, focused/full tests, Ruff, compile, JSON, Compose, Docker build, HACS, and Hassfest pass at the frozen draft-PR SHA.
+- [x] Exact beta.3 backend/HA identity, focused/full tests, Ruff, compile, JSON, Compose, Docker build, HACS, and Hassfest pass at the frozen draft-PR SHA.
 - [ ] The exact candidate is deployed only after separate approval and complete rollback backups.
 - [ ] One-device-at-a-time G4 physical validation is completed with an immediate room-readiness prompt before every audible action.
 - [ ] Sanitized evidence is recorded without private identifiers, credentials, signed URLs, or topology.
