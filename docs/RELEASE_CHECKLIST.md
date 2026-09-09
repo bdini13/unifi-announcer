@@ -175,7 +175,7 @@ Hardening after beta.1 was released as immutable prerelease `v2.2.0-beta.2` at m
 
 Publication and deployment did not promote beta.2 to stable or expand compatibility beyond the validated G3 Instant profile.
 
-## v2.2.0-beta.3 candidate gate — PRE-AUDIO
+## v2.2.0-beta.3 candidate gate — PARTIAL PHYSICAL VALIDATION
 
 - [x] Read-only Protect/bootstrap discovery found one connected G4 Instant with a speaker and AAC-LC / `serverudp` / 22,050 Hz / mono / 16-bit metadata.
 - [x] Discovery did not prepare a talkback session, send audio, or change Protect/camera settings.
@@ -183,11 +183,13 @@ Publication and deployment did not promote beta.2 to stable or expand compatibil
 - [x] Exact opt-in matches all five wire-profile dimensions and labels unvalidated models `experimental_opt_in`.
 - [x] The validated G3 model/profile remains `physically_validated` and default behavior remains unchanged.
 - [x] Exact beta.3 backend/HA identity, focused/full tests, Ruff, compile, JSON, Compose, Docker build, HACS, and Hassfest pass at the frozen draft-PR SHA.
-- [ ] The exact candidate is deployed only after separate approval and complete rollback backups.
+- [x] The exact candidate was deployed after separate approval and complete verified rollback backups.
 - [ ] One-device-at-a-time G4 physical validation is completed with an immediate room-readiness prompt before every audible action.
-- [ ] Sanitized evidence is recorded without private identifiers, credentials, signed URLs, or topology.
+- [x] Gate 1 normal speech was heard clearly once from the representative G4; queues drained, no other target was engaged, and Smart Chime slot proof remained unchanged.
+- [x] Further audible testing was paused before the repeat request; repeat, serialization, recovery, and restart gates remain pending.
+- [x] Sanitized partial evidence is recorded without private identifiers, credentials, signed URLs, or topology.
 
-The candidate must remain draft. Passing automated checks does not authorize deployment or sound, and metadata similarity does not establish G4 compatibility.
+The candidate must remain draft. One successful normal-speech observation does not complete the physical gate or establish broad G4/generic camera compatibility.
 
 ## Approval-gated candidate, publish, and deploy sequence
 

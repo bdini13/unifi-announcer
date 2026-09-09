@@ -250,7 +250,8 @@ def test_beta3_candidate_docs_preserve_opt_in_and_physical_gate():
     assert "empty by default" in notes
     assert "experimental_opt_in" in notes
     assert "G4 Instant" in validation
-    assert "No sound has been played" in validation
+    assert "Gate 1: PASS" in validation
+    assert "Further audible testing is paused" in validation
     assert "must remain draft" in validation
 
 
