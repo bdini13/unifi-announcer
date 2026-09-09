@@ -185,11 +185,12 @@ Publication and deployment did not promote beta.2 to stable or expand compatibil
 - [x] Exact beta.3 backend/HA identity, focused/full tests, Ruff, compile, JSON, Compose, Docker build, HACS, and Hassfest pass at the frozen draft-PR SHA.
 - [x] The exact candidate was deployed after separate approval and complete verified rollback backups.
 - [ ] One-device-at-a-time G4 physical validation is completed with an immediate room-readiness prompt before every audible action.
-- [x] Gate 1 normal speech was heard clearly once from the representative G4; queues drained, no other target was engaged, and Smart Chime slot proof remained unchanged.
-- [x] Further audible testing was paused before the repeat request; repeat, serialization, recovery, and restart gates remain pending.
+- [x] Normal, repeat-times-two, and rapid two-request serialization tests passed on the representative G4 with owner-observed clear sequential playback and no duplicate, overlap, stale audio, or other-device output.
+- [x] The approved G4 reboot produced an Announcer unavailable → available transition in 43.7 seconds; Protect confirmed connected/recording recovery.
+- [x] Further audible testing was paused before the post-recovery phrase; recovery playback and the Announcer restart gate remain pending.
 - [x] Sanitized partial evidence is recorded without private identifiers, credentials, signed URLs, or topology.
 
-The candidate must remain draft. One successful normal-speech observation does not complete the physical gate or establish broad G4/generic camera compatibility.
+The candidate must remain draft. Successful normal/repeat/serialization observations do not complete the recovery/restart gates or establish broad G4/generic camera compatibility.
 
 ## Approval-gated candidate, publish, and deploy sequence
 

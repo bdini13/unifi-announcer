@@ -675,7 +675,7 @@ This project was developed with assistance from AI coding and research tools for
 
 - **Stable:** `v2.1.8` — safe same-boot resident TTS reuse with Smart Chime reboot/reconnect invalidation
 - **Prerelease:** `v2.2.0-beta.2` — hardened experimental Protect camera-speaker TTS, physically validated on one UVC G3 Instant profile; other camera profiles remain unsupported until validated
-- **Release candidate:** `v2.2.0-beta.3` — draft-only exact protocol-profile opt-in; one representative G4 normal-speech gate passed, while repeat/serialization/recovery/restart validation and any compatibility claim remain pending
+- **Release candidate:** `v2.2.0-beta.3` — draft-only exact protocol-profile opt-in; representative G4 normal/repeat/serialization and unavailable→available recovery passed, while post-recovery playback, restart validation, and any broad compatibility claim remain pending
 - **Planned after beta.3:** native Home Assistant media ingestion and expanded diagnostics
 
 See [ROADMAP.md](ROADMAP.md) and the [Releases page](https://github.com/bdini13/unifi-announcer/releases).
