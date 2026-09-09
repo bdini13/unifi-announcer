@@ -23,15 +23,15 @@ def test_readme_keeps_stable_install_and_identifies_published_beta():
     assert "img.shields.io/github/v/release/bdini13/unifi-announcer" in readme
     assert "releases/latest" in readme
     assert "**Stable:** `v2.1.8`" in readme
-    assert "**Prerelease:** `v2.2.0-beta.1`" in readme
-    assert "**Release candidate:** `v2.2.0-beta.1`" not in readme
+    assert "**Prerelease:** `v2.2.0-beta.2`" in readme
+    assert "**Release candidate:** `v2.2.0-beta.2`" not in readme
     assert "physically validated on one UVC G3 Instant" in readme
     assert 'AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")' in readme
     assert "$UNIFI..." not in readme
     assert "scheduled for `v2.1.1`" not in readme
     assert "**Next release:** `v2.1.1`" not in readme
     assert Path("docs/RELEASE_NOTES_v2.1.8.md").exists()
-    assert Path("docs/RELEASE_NOTES_v2.2.0-beta.1.md").exists()
+    assert Path("docs/RELEASE_NOTES_v2.2.0-beta.2.md").exists()
     assert Path("docs/validation/v2.1.8-live-latency-validation.md").exists()
     checklist = Path("docs/RELEASE_CHECKLIST.md").read_text()
     assert "## v2.1.8 release gate" in checklist
@@ -215,7 +215,7 @@ def test_beta1_release_notes_preserve_historical_physical_boundary():
     assert "No publisher exists by default" in checklist
 
 
-def test_beta2_candidate_docs_record_completed_hardware_gate():
+def test_beta2_release_docs_record_publication_and_tagged_smoke_gate():
     notes = Path("docs/RELEASE_NOTES_v2.2.0-beta.2.md").read_text()
     validation = Path(
         "docs/validation/v2.2.0-beta.2-camera-hardening-validation.md"
@@ -225,11 +225,15 @@ def test_beta2_candidate_docs_record_completed_hardware_gate():
     assert "UVC G3 Instant" in notes
     assert "22,050 Hz" in notes
     assert "per-camera preparation lease" in notes
-    assert "Required physical validation before merge/publication" in notes
+    assert "Physical validation completed before publication" in notes
+    assert "9d8e8f845201cf8de1223cc7d5fc31c192194a5d" in notes
+    assert "published prerelease" in notes
     assert "RESULT: PASS" in validation
     assert "not empirically executed" in validation
     assert "offline → online" in validation
     assert "Same-camera concurrency/session serialization" in validation
+    assert "Tagged release and deployment smoke test" in validation
+    assert "volume 50" in validation
 
 
 def test_fastapi_metadata_uses_release_identity(main_module):

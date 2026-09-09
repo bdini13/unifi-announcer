@@ -28,11 +28,11 @@ The next development work is ordered by user value and available validation hard
 
 ### 1. Camera-speaker TTS — published experimental prerelease
 
-Published prerelease: **v2.2.0-beta.1**. Stable `v2.1.8` remains the recommended release.
+Current published prerelease: **v2.2.0-beta.2**. Stable `v2.1.8` remains the recommended release. Beta.2 adds exact model/profile gating, prepared-session revalidation, per-camera serialization, dynamic availability recovery, and strict group validation without broadening the validated camera boundary.
 
 The integrated path has been physically validated on one **UVC G3 Instant** using the exact **AAC-LC / 22.05 kHz / mono / 16-bit `serverudp`** talkback profile. Compatibility is evidence-based rather than inferred from generic `hasSpeaker` or AAC metadata.
 
-Current hardening priorities:
+Current compatibility-expansion priorities:
 
 - keep `CAMERAS_CONFIG` explicit; cameras never join the implicit default target;
 - permit playback only for exact model/profile records that have passed integrated physical validation;
@@ -42,7 +42,7 @@ Current hardening priorities:
 - preserve shared dispatcher, queueing, quiet-hours, priority, dedupe, and mixed-group semantics;
 - keep camera volume device-managed and continue to reject preset/default/buzzer and unvalidated Opus/RTP paths.
 
-Additional camera models enter the compatibility table only after exact integrated-path audible validation and regression coverage. A metadata match alone is not sufficient.
+Additional camera models enter the compatibility table only after exact integrated-path audible validation and regression coverage. The next representative target is an opt-in G4 Instant profile; success on that device must not be generalized to every UniFi camera. A metadata match alone is not sufficient.
 
 ### 2. Native Home Assistant media ingestion
 
