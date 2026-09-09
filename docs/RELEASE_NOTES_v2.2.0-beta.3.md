@@ -34,7 +34,7 @@ Protocol similarity is not physical validation. The candidate does not add the G
 
 ## Read-only G4 Instant discovery
 
-One available UVC G4 Instant was inspected through Protect's read-only camera inventory/bootstrap path. It reported a connected speaker and the same AAC-LC, `serverudp`, 22,050 Hz, mono, 16-bit talkback metadata as the validated G3 Instant. No talkback WebSocket was prepared, no camera or Protect setting was changed, and no audio frame was sent.
+One available UVC G4 Instant was initially inspected through Protect's read-only camera inventory/bootstrap path. It reported a connected speaker and the same AAC-LC, `serverudp`, 22,050 Hz, mono, 16-bit talkback metadata as the validated G3 Instant. The exact candidate later passed normal, repeat, serialization, camera-reboot recovery, and Announcer-restart physical playback on that representative device. This evidence is intentionally narrow and does not generalize compatibility to other G4 or camera models.
 
 ## Safety preserved
 

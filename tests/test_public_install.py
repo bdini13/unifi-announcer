@@ -250,11 +250,11 @@ def test_beta3_candidate_docs_preserve_opt_in_and_physical_gate():
     assert "empty by default" in notes
     assert "experimental_opt_in" in notes
     assert "G4 Instant" in validation
-    assert "RESULT: BLOCKED" in validation
-    assert "POST-RESTART OBSERVATION UNCERTAIN" in validation
+    assert "RESULT: PASS" in validation
+    assert "device speaker volume `100`" in validation
     assert "No automatic retry was sent" in validation
-    assert "rolled back to the exact beta.2" in validation
-    assert "must remain draft" in validation
+    assert "representative G4 Instant only" in validation
+    assert "does not authorize merge" in validation
 
 
 def test_fastapi_metadata_uses_release_identity(main_module):
