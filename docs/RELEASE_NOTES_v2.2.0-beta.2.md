@@ -1,8 +1,8 @@
-# v2.2.0-beta.2 — Camera-speaker hardening candidate
+# v2.2.0-beta.2 — Camera-speaker hardening
 
 ## Purpose
 
-v2.2.0-beta.2 hardens the experimental Protect camera-speaker path first published in `v2.2.0-beta.1`. Stable `v2.1.8` remains the recommended public release. This candidate does not broaden camera compatibility: production camera playback remains limited to the single physically validated UVC G3 Instant talkback profile until additional models are separately tested.
+v2.2.0-beta.2 is the published prerelease that hardens the experimental Protect camera-speaker path first introduced in `v2.2.0-beta.1`. Stable `v2.1.8` remains the recommended public release. This prerelease does not broaden camera compatibility: production camera playback remains limited to the single physically validated UVC G3 Instant talkback profile until additional models are separately tested.
 
 ## Camera compatibility boundary
 
@@ -58,11 +58,11 @@ Camera-only playback continues to avoid Smart Chime dynamic-slot preparation.
 
 ## Home Assistant
 
-Backend, HA integration, and manifest identity are aligned at `2.2.0-beta.2` for this candidate. Camera announcement entities now remain present through transient camera outages and report unavailable until the target becomes valid again. Camera targets still expose only supported text/repeat behavior; per-request camera volume/profile, presets, assigned-default and buzzer remain unsupported.
+Backend, HA integration, and manifest identity are aligned at `2.2.0-beta.2`. Camera announcement entities now remain present through transient camera outages and report unavailable until the target becomes valid again. Camera targets still expose only supported text/repeat behavior; per-request camera volume/profile, presets, assigned-default and buzzer remain unsupported.
 
 ## Automated validation
 
-The beta.2 candidate must pass, on the exact frozen branch head and merge-ref:
+The beta.2 candidate passed, on the exact frozen branch head, merge-ref, trusted `main` merge SHA, and immutable release tag:
 
 - backend pytest with warnings as errors;
 - Home Assistant custom-component tests;
@@ -74,25 +74,14 @@ The beta.2 candidate must pass, on the exact frozen branch head and merge-ref:
 - Hassfest;
 - focused camera hardening regressions for exact model/profile gating, profile changes during preparation, same-camera serialization, independent cameras, missing cameras, strict group validation, dynamic `/targets` refresh, and HA availability recovery.
 
-## Required physical validation before merge/publication
+## Physical validation completed before publication
 
-Because beta.2 changes live camera playback/session behavior, automated CI is not sufficient. Before this candidate may be merged or published, physically validate the exact frozen candidate on the previously tested UVC G3 Instant and record sanitized evidence that:
+Because beta.2 changes live camera playback/session behavior, automated CI was not treated as sufficient. The exact frozen runtime candidate passed normal speech, `repeat_times=2`, same-camera serialization, dynamic offline/online recovery, valid mixed Smart Chime + camera playback, camera-only Smart Chime isolation, and post-restart playback on the previously validated UVC G3 Instant profile.
 
-1. `/version` semantic version and Git SHA match the candidate and OCI revision.
-2. Normal Home Assistant → Announcer → camera speech is clear and correct.
-3. `repeat_times=2` produces exactly two sequential, non-overlapping repetitions.
-4. Two rapid/concurrent announcements to the same camera do not overlap, produce wrong audio, or create competing talkback behavior.
-5. A camera outage changes `/targets` and HA availability to unavailable.
-6. Camera recovery restores `/targets` and the existing HA entities without an integration restart.
-7. A valid mixed Smart Chime + camera group plays correctly.
-8. An unavailable camera causes a mixed group to fail before Smart Chime slot mutation or playback.
-9. Camera-only playback leaves Smart Chime slot state unchanged.
-10. An Announcer restart revalidates the camera and subsequent playback remains correct.
-
-See `docs/validation/v2.2.0-beta.2-camera-hardening-validation.md` for the evidence template.
+The repository owner explicitly waived the unavailable-camera mixed-group physical test. It was **not empirically run** and is not claimed as physical evidence; its automated fail-closed coverage remained green. See `docs/validation/v2.2.0-beta.2-camera-hardening-validation.md` for the complete sanitized evidence and tagged-release smoke result.
 
 ## Release boundary
 
-This branch is a candidate only. Passing CI or physical validation does not itself authorize merge, tagging, GitHub release publication, image publication, deployment as a release, stable promotion, or broader camera compatibility claims. Those actions remain separately approval-gated.
+The immutable `v2.2.0-beta.2` tag and GitHub prerelease target merge SHA `9d8e8f845201cf8de1223cc7d5fc31c192194a5d`. The tagged Docker backend and matching Home Assistant integration were deployed together and passed separate one-device-at-a-time smoke tests on the G3 Instant and Smart Chime.
 
-If beta.2 is later published, it must be an immutable **prerelease**. Stable install guidance must remain pinned to `v2.1.8` until a separate stable promotion is approved.
+Publication and deployment do not promote beta.2 to stable or authorize broader camera compatibility claims. Stable install guidance remains pinned to `v2.1.8` until a separate stable promotion is approved.

@@ -1,7 +1,10 @@
-# Post-release cleanup
+# Post-release state
 
-Stable `v2.1.8` has been published as an immutable release after its exact trusted `main` SHA passed the release workflow. The version-specific automatic publisher used to create that release is therefore intentionally retired after publication.
+- **Stable:** immutable `v2.1.8` remains the recommended public release.
+- **Prerelease:** immutable `v2.2.0-beta.2` is the current experimental camera-speaker release at merge SHA `9d8e8f845201cf8de1223cc7d5fc31c192194a5d`.
 
-This prevents unrelated post-release commits to `main` from repeatedly running a historical `Publish v2.1.8 release` job and rerunning release-only validation for a tag that already exists.
+Stable `v2.1.8` has been published as an immutable release. Its completed `Publish v2.1.8 release` workflow was intentionally retired so ordinary post-release commits cannot rerun a historical publisher.
 
-The immutable `v2.1.8` tag/release remains the release record. Historical release scripts, release notes, and validation evidence remain version-controlled. The next release PR must add or update an explicit publishing path for its own version, bind it to the exact trusted `main` SHA that passed the required gates, and retire that publisher again after successful immutable publication.
+Beta.2 was published manually after exact-SHA candidate, merge-ref, trusted `main`, physical, and tag-triggered validation. No persistent version-specific publisher was introduced, so there is no publisher workflow to retire. Historical release scripts, release notes, and validation evidence remain version-controlled.
+
+The next release PR must add or update an explicit publishing path for its own version, bind publication to the exact trusted `main` SHA that passed the required gates, and retire any one-version publisher after successful immutable publication.

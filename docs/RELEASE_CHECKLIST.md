@@ -156,20 +156,24 @@ Physical beta gate:
 
 The beta.1 gate passed, but that evidence remains scoped to one UVC G3 Instant and its observed AAC-LC / 22.05 kHz / mono / 16-bit `serverudp` profile. Beta.1 remains a prerelease and must not be generalized to other camera models or talkback profiles.
 
-### Post-beta.1 hardening / beta.2 candidate boundary
+## v2.2.0-beta.2 release gate — PASS / PUBLISHED PRERELEASE
 
-Hardening discovered after beta.1 publication must not mutate the immutable beta.1 tag/release. The next camera prerelease should be beta.2 or later and must preserve these additional invariants before publication:
+Hardening after beta.1 was released as immutable prerelease `v2.2.0-beta.2` at merge SHA `9d8e8f845201cf8de1223cc7d5fc31c192194a5d`. Stable `v2.1.8` remains the recommended public release.
 
-- [ ] Production compatibility is an explicit physically validated model/profile table rather than broad AAC/sample-rate inference.
-- [ ] The actual prepared talkback session is rechecked against the approved model/profile before any audio frame can be sent.
-- [ ] At most one prepared talkback session exists per physical camera while separate cameras remain independent.
-- [ ] Authenticated `/targets` polling refreshes transient camera availability without requiring Home Assistant entity recreation.
-- [ ] Home Assistant entity availability requires both coordinator health and current target capability.
-- [ ] Production `GROUPS_CONFIG` rejects unknown/duplicate members, empty groups, reserved/colliding names, and malformed JSON instead of silently omitting targets.
-- [ ] README, compatibility, Home Assistant, environment examples, and roadmap describe beta.1 as a published prerelease and retain the exact G3 Instant compatibility boundary.
-- [ ] Exact beta.2 candidate branch-head and merge-ref backend/HA/HACS/Hassfest/Docker checks pass.
+- [x] Production compatibility uses an explicit physically validated model/profile table rather than broad AAC/sample-rate inference.
+- [x] The actual prepared talkback session is rechecked against the approved model/profile before any audio frame can be sent.
+- [x] At most one prepared talkback session exists per physical camera while separate cameras remain independent.
+- [x] Authenticated `/targets` polling refreshes transient camera availability without requiring Home Assistant entity recreation.
+- [x] Home Assistant entity availability requires both coordinator health and current target capability.
+- [x] Production `GROUPS_CONFIG` rejects unknown/duplicate members, empty groups, reserved/colliding names, and malformed JSON instead of silently omitting targets.
+- [x] README, compatibility, Home Assistant, environment examples, and roadmap retain the exact G3 Instant compatibility boundary.
+- [x] Exact beta.2 branch-head, merge-ref, trusted `main`, and release-tag backend/HA/HACS/Hassfest/Docker checks passed.
+- [x] Candidate physical Gates 1–5 and 7–8 passed; Gate 6 was explicitly owner-waived and remains documented as not empirically run.
+- [x] Immutable GitHub prerelease and tag both target the exact merge SHA.
+- [x] The tagged Docker backend and matching HA integration reported beta.2 with exact build provenance.
+- [x] Separate tagged smoke tests played clearly once on the G3 Instant and once on the Smart Chime at volume 50.
 
-A later beta.2 publication or deployment remains separately approval-gated. Merging hardening code does not authorize a tag, release, image publication, deployment, stable promotion, or compatibility expansion.
+Publication and deployment did not promote beta.2 to stable or expand compatibility beyond the validated G3 Instant profile.
 
 ## Approval-gated candidate, publish, and deploy sequence
 

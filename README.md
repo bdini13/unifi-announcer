@@ -53,7 +53,7 @@ Typical uses include:
 | MCP server and playback tools | ✅ Stable |
 | MQTT discovery | ✅ Supported |
 | Multiple chimes and named groups | 🧪 Automated coverage; multi-device physical validation pending |
-| Protect camera-speaker TTS | 🧪 `v2.2.0-beta.1`; physically validated on one UVC G3 Instant using AAC-LC / 22.05 kHz / mono / 16-bit `serverudp` |
+| Protect camera-speaker TTS | 🧪 `v2.2.0-beta.2`; hardened and physically validated on one UVC G3 Instant using AAC-LC / 22.05 kHz / mono / 16-bit `serverudp` |
 | Protect event rules | 🧪 Experimental |
 | Native HA `tts.speak` media ingestion | ⏭️ Planned for a later v2.2 prerelease |
 
@@ -392,7 +392,7 @@ Production configuration now validates every group member at startup. Unknown ta
 
 ## Experimental camera-speaker TTS
 
-`v2.2.0-beta.1` is a **published prerelease**, not part of stable `v2.1.8`. Its integrated path was physically validated on one **UVC G3 Instant**. Camera compatibility is evidence-based: the current production gate accepts only the exact validated profile — **AAC-LC, 22.05 kHz, mono, 16-bit, `serverudp`**. Other camera models, sample rates, and Opus/RTP profiles remain configured/discoverable but report unavailable and fail closed until they are physically validated.
+`v2.2.0-beta.2` is the current **published prerelease**, not part of stable `v2.1.8`. It hardens the integrated path physically validated on one **UVC G3 Instant**. Camera compatibility is evidence-based: the current production gate accepts only the exact validated profile — **AAC-LC, 22.05 kHz, mono, 16-bit, `serverudp`**. Other camera models, sample rates, and Opus/RTP profiles remain configured/discoverable but report unavailable and fail closed until they are physically validated.
 
 Compatible Protect cameras are explicit text-announcement targets through the controller's private talkback WebSocket:
 
@@ -409,7 +409,7 @@ Camera targets currently support **text announcements and repeats only**. Per-re
 
 A per-camera preparation lease prevents two simultaneous controller-minted talkback sessions from being opened for the same physical camera; another camera remains independent. Authenticated `GET /targets` refreshes configured camera capability/availability on every poll. Home Assistant keeps explicit camera and mixed-group announcement entities present while a camera is offline and toggles their availability from refreshed capability state, so a reconnect does not require entity recreation. Legacy `GET /chimes` remains unchanged.
 
-See [v2.2.0-beta.1 release notes](docs/RELEASE_NOTES_v2.2.0-beta.1.md) and the [G3 Instant validation report](docs/validation/v2.2.0-beta.1-g3-instant-camera-validation.md).
+See [v2.2.0-beta.2 release notes](docs/RELEASE_NOTES_v2.2.0-beta.2.md), the [beta.2 hardening validation report](docs/validation/v2.2.0-beta.2-camera-hardening-validation.md), and the original [G3 Instant validation report](docs/validation/v2.2.0-beta.1-g3-instant-camera-validation.md).
 
 ## MQTT and local rules
 
@@ -599,7 +599,7 @@ See the evidence requirements in [Release checklist](docs/RELEASE_CHECKLIST.md).
 
 Development priorities after stable v2.1.8 are:
 
-1. **Camera-speaker TTS hardening and compatibility expansion** — `v2.2.0-beta.1` is published and physically validated on one G3 Instant; additional models enter the compatibility table only after exact integrated-path validation.
+1. **Camera-speaker TTS compatibility expansion** — `v2.2.0-beta.2` is published, hardened, and physically validated on one G3 Instant; additional models enter the compatibility table only after exact integrated-path validation.
 2. **Native Home Assistant media ingestion**, including `tts.speak`, `media-source://`, and bounded binary media through the existing dispatcher.
 3. **Diagnostics and compatibility**, including redacted support bundles, stage-level latency reporting, and firmware capability warnings.
 
@@ -622,7 +622,8 @@ See the detailed [project roadmap](ROADMAP.md).
 - [Rules](docs/RULES.md)
 - [Track registry](docs/TRACKS.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
-- [v2.2.0-beta.1 release notes](docs/RELEASE_NOTES_v2.2.0-beta.1.md)
+- [v2.2.0-beta.2 release notes](docs/RELEASE_NOTES_v2.2.0-beta.2.md)
+- [v2.2.0-beta.2 camera hardening validation](docs/validation/v2.2.0-beta.2-camera-hardening-validation.md)
 - [v2.2.0-beta.1 G3 Instant validation](docs/validation/v2.2.0-beta.1-g3-instant-camera-validation.md)
 - [v2.1.8 release notes](docs/RELEASE_NOTES_v2.1.8.md)
 - [v2.1.8 live validation](docs/validation/v2.1.8-live-latency-validation.md)
@@ -669,8 +670,8 @@ This project was developed with assistance from AI coding and research tools for
 ## Release status
 
 - **Stable:** `v2.1.8` — safe same-boot resident TTS reuse with Smart Chime reboot/reconnect invalidation
-- **Prerelease:** `v2.2.0-beta.1` — experimental Protect camera-speaker TTS, physically validated on one UVC G3 Instant profile; other camera profiles remain unsupported until validated
-- **Planned after beta.1:** camera hardening/compatibility expansion, native Home Assistant media ingestion, and expanded diagnostics
+- **Prerelease:** `v2.2.0-beta.2` — hardened experimental Protect camera-speaker TTS, physically validated on one UVC G3 Instant profile; other camera profiles remain unsupported until validated
+- **Planned after beta.2:** model/profile-gated camera compatibility expansion, native Home Assistant media ingestion, and expanded diagnostics
 
 See [ROADMAP.md](ROADMAP.md) and the [Releases page](https://github.com/bdini13/unifi-announcer/releases).
 
