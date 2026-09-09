@@ -6,7 +6,7 @@ UniFi Announcer includes a HACS-compatible custom integration under `custom_comp
 > The HACS integration is a **client for the UniFi Announcer Docker service**. Run and configure the Docker backend first; installing HACS alone does not provide Smart Chime playback or TTS.
 
 > [!WARNING]
-> Use stable `v2.1.8` for new installations unless you intentionally want to test the experimental camera-speaker prerelease. `v2.2.0-beta.1` is published as a prerelease and its camera path is physically validated only on one UVC G3 Instant with the exact AAC-LC / 22.05 kHz / mono / 16-bit `serverudp` profile.
+> Use stable `v2.1.8` for new installations unless you intentionally want to test the experimental camera-speaker prerelease. `v2.2.0-beta.2` is the current published prerelease and its camera path is physically validated only on one UVC G3 Instant with the exact AAC-LC / 22.05 kHz / mono / 16-bit `serverudp` profile. Draft beta.3 protocol-profile opt-ins remain pre-validation experiments, not compatibility claims.
 
 ## Install
 
@@ -106,7 +106,7 @@ They do not get buzzer/default/preset buttons or a preset selector. Camera volum
 
 Explicitly configured camera and mixed-group text entities are created even if a camera is temporarily unavailable during Home Assistant setup. Authenticated `/targets` polling refreshes the camera's current capability state. The same entity therefore transitions unavailable/available as the camera disconnects or reconnects instead of disappearing and requiring entity recreation.
 
-Only an exact physically validated camera compatibility record can become available for announcement playback. In the current prerelease that means the UVC G3 Instant with AAC-LC / 22.05 kHz / mono / 16-bit `serverudp`. An unvalidated model/profile remains visible as configured but unavailable.
+Only an exact compatibility decision can become available for announcement playback. In the published prerelease that means the physically validated UVC G3 Instant with AAC-LC / 22.05 kHz / mono / 16-bit `serverudp`. Draft beta.3 can additionally admit an exact wire profile through the empty-by-default `EXPERIMENTAL_CAMERA_PROFILES` setting; Home Assistant then receives `compatibility=experimental_opt_in`, never `physically_validated`. An unvalidated model/profile without that explicit opt-in remains visible as configured but unavailable.
 
 Changing `CHIMES_CONFIG`, `CAMERAS_CONFIG`, or `GROUPS_CONFIG` still changes topology and therefore requires a Home Assistant reload/restart. A transient camera reconnect does not.
 
@@ -264,9 +264,9 @@ A temporarily offline validated camera should remain represented but unavailable
 | Text TTS fails but preset/buzzer works | Fixed slots not ready or direct credential stale | Check `/tts/slots/status` with `X-API-Key` |
 | Repeated text performs a write | Resident proof was missing/invalidated by lifecycle or boot change | Usually safe/expected; inspect `content_reuse` state and lifecycle counters |
 | First text after Chime reboot rewrites once | v2.1.8 correctly invalidated old resident bytes | Expected; the next same-boot replay can become a zero-write hit |
-| Camera entity is unavailable | Camera is offline or model/profile is outside the validated compatibility record | Check authenticated `/targets`; reconnect the camera or keep it unsupported until physically validated |
+| Camera entity is unavailable | Camera is offline or model/profile is outside the validated/explicit experimental policy | Check authenticated `/targets`; reconnect it or keep it unsupported unless running an approved exact-profile candidate test |
 | Camera came back online but entity is unavailable | Coordinator has not completed another `/targets` refresh | Wait for the next poll or reload the integration; entity recreation is not required |
-| Camera has speaker/AAC metadata but remains unavailable | Metadata alone is insufficient evidence | Only the physically validated G3 Instant 22.05 kHz AAC-LC profile is currently enabled |
+| Camera has speaker/AAC metadata but remains unavailable | Metadata alone is insufficient evidence | Use the physically validated G3 record, or an explicitly approved beta.3 exact-profile opt-in that remains labeled experimental |
 | Service refuses GROUPS_CONFIG | Unknown/duplicate member, reserved name, empty group, or malformed JSON | Correct the group definition; production intentionally fails closed |
 | Slot status reports ownership drift | Binding no longer matches persisted proof | Stop dynamic TTS and reconcile; never force an unknown slot |
 | `/version` shows `git_sha: unknown` | Container built without `GIT_SHA` | Rebuild with `export GIT_SHA="$(git rev-parse HEAD)"` |

@@ -33,6 +33,7 @@ async def test_target_catalog_is_translated_for_existing_entity_consumers():
                     "id": "camera-one",
                     "type": "camera",
                     "model": "UVC G3 Instant",
+                    "compatibility": "experimental_opt_in",
                     "status": "available",
                     "queue_depth": 0,
                     "capabilities": {"announce": True, "buzzer": False},
@@ -54,9 +55,35 @@ async def test_target_catalog_is_translated_for_existing_entity_consumers():
     assert result["chimes"][0]["id"] == "chime-one"
     assert result["cameras"][0]["id"] == "camera-one"
     assert result["cameras"][0]["capability_state"]["model"] == "UVC G3 Instant"
+    assert (
+        result["cameras"][0]["capability_state"]["compatibility"]
+        == "experimental_opt_in"
+    )
     assert result["groups"] == {"mixed": ["kitchen", "family_camera"]}
     assert result["group_capabilities"]["mixed"]["buzzer"] is False
     client._request.assert_awaited_once_with("GET", "/targets")
+
+
+@pytest.mark.asyncio
+async def test_target_catalog_discards_unknown_compatibility_labels():
+    client = _client_with_requests((
+        200,
+        {
+            "schema_version": 1,
+            "targets": [{
+                "name": "camera",
+                "id": "camera-one",
+                "type": "camera",
+                "compatibility": "untrusted_future_value",
+                "capabilities": {"announce": False},
+            }],
+            "groups": [],
+        },
+    ))
+
+    result = await client.async_get_chimes()
+
+    assert "compatibility" not in result["cameras"][0]["capability_state"]
 
 
 @pytest.mark.asyncio

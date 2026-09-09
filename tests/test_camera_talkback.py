@@ -68,6 +68,22 @@ def test_camera_profile_fails_closed_for_unverified_capabilities(patch, message)
         CameraTalkbackProfile.from_camera(_camera(**patch))
 
 
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("samplingRate", 22050.0),
+        ("channels", True),
+        ("bitsPerSample", 16.0),
+    ],
+)
+def test_camera_profile_rejects_type_equivalent_numeric_metadata(field, value):
+    settings = dict(_camera()["talkbackSettings"])
+    settings[field] = value
+
+    with pytest.raises(CameraTalkbackError, match="unsupported talkback profile"):
+        CameraTalkbackProfile.from_camera(_camera(talkbackSettings=settings))
+
+
 def test_split_adts_frames_returns_complete_frames_and_rejects_truncation():
     first = _adts_frame(b"one")
     second = _adts_frame(b"two-two")

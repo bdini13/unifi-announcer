@@ -44,6 +44,8 @@ Current compatibility-expansion priorities:
 
 Additional camera models enter the compatibility table only after exact integrated-path audible validation and regression coverage. The next representative target is an opt-in G4 Instant profile; success on that device must not be generalized to every UniFi camera. A metadata match alone is not sufficient.
 
+Draft candidate `v2.2.0-beta.3` adds an empty-by-default, exact protocol-profile allowlist for pre-validation experiments. A matching unvalidated camera reports `experimental_opt_in`, while the G3 model/profile retains `physically_validated`. Read-only discovery found one G4 Instant with the same AAC-LC / 22.05 kHz / mono / 16-bit `serverudp` metadata, but no G4 sound has been played and the candidate remains blocked on physical validation.
+
 ### 2. Native Home Assistant media ingestion
 
 - native `tts.speak` support;
