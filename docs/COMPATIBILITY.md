@@ -13,7 +13,7 @@
 | Generic arbitrary direct staging | Insufficient safe ownership model | Disabled |
 | Direct HTTP playback | No verified route | Unsupported; playback remains Protect `play-speaker` |
 | Protect camera AAC talkback WebSocket | Integrated physical validation on one UVC G3 Instant + automated transport/dispatcher/HA tests | Experimental prerelease; the exact validated G3 Instant AAC-LC 22.05 kHz mono profile is production-eligible |
-| Exact AAC protocol-profile opt-in | G4 metadata + automated gates + clear normal/repeat/serialization observations + unavailable/available recovery | Draft beta.3 only; empty by default and labeled `experimental_opt_in`; post-recovery playback and restart validation pending |
+| Exact AAC protocol-profile opt-in | Normal/repeat/serialization/camera-recovery passed; post-Announcer-restart observation uncertain | Blocked draft beta.3; rolled back to beta.2; not physically validated |
 | Other AAC camera model/sample-rate profiles | No integrated physical evidence or explicit exact opt-in | Unsupported for playback; remain visible as unavailable |
 | Protect camera Opus/RTP talkback | Advertised by some camera bootstrap profiles but not physically validated in this service | Unsupported; fails closed |
 | Direct slot deletion | Semantics not proven | Unsupported; v2.1 migration overwrites proven legacy bytes with silence rather than guessing deletion |
@@ -68,7 +68,7 @@ bits per sample: 16
 
 A camera is not enabled merely because Protect reports `hasSpeaker=true` or an AAC talkback profile. Draft beta.3 adds an empty-by-default `EXPERIMENTAL_CAMERA_PROFILES` list for explicit exact wire-profile testing. A matching configured camera reports `experimental_opt_in`; it is not added to the physically validated model table. Opus/RTP, partial, malformed, or non-matching profiles remain unavailable and fail closed.
 
-One UVC G4 Instant reported AAC-LC, `serverudp`, 22,050 Hz, mono, 16-bit metadata. On the exact beta.3 candidate, normal speech, repeat-times-two, and rapid A→B serialization were heard correctly from that representative device. An approved camera reboot produced a clean unavailable → available transition, while G3/Smart Chime queues and Smart Chime slot proof remained unchanged. Post-recovery playback and Announcer restart testing remain pending; this partial evidence does not establish broad G4 or generic camera compatibility.
+One UVC G4 Instant reported AAC-LC, `serverudp`, 22,050 Hz, mono, 16-bit metadata. Normal speech, repeat-times-two, rapid A→B serialization, and camera-reboot recovery playback were heard correctly. After an Announcer-only restart, silent recovery and request handling passed but the physical result was uncertain. No retry was sent and the deployment was rolled back to beta.2. This blocked evidence does not establish G4 or generic camera compatibility.
 
 Configured cameras are re-inspected through authenticated `/targets` polling. Temporary offline state therefore changes target capability/availability without removing the configured target from Home Assistant. A reconnect can recover on the next poll without entity recreation.
 

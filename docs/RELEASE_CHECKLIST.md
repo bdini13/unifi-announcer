@@ -187,10 +187,12 @@ Publication and deployment did not promote beta.2 to stable or expand compatibil
 - [ ] One-device-at-a-time G4 physical validation is completed with an immediate room-readiness prompt before every audible action.
 - [x] Normal, repeat-times-two, and rapid two-request serialization tests passed on the representative G4 with owner-observed clear sequential playback and no duplicate, overlap, stale audio, or other-device output.
 - [x] The approved G4 reboot produced an Announcer unavailable → available transition in 43.7 seconds; Protect confirmed connected/recording recovery.
-- [x] Further audible testing was paused before the post-recovery phrase; recovery playback and the Announcer restart gate remain pending.
+- [x] Post-recovery playback was heard clearly once after the camera returned connected and recording.
+- [x] The Announcer-only restart passed silent recovery, but the owner's post-restart physical observation was uncertain; no retry was sent.
+- [x] The candidate was rolled back fail-closed to the exact beta.2 backend image/SHA and HA integration, with health and isolation verified.
 - [x] Sanitized partial evidence is recorded without private identifiers, credentials, signed URLs, or topology.
 
-The candidate must remain draft. Successful normal/repeat/serialization observations do not complete the recovery/restart gates or establish broad G4/generic camera compatibility.
+The candidate is blocked and must remain draft. An uncertain post-restart physical observation is not a pass and does not establish broad G4/generic camera compatibility.
 
 ## Approval-gated candidate, publish, and deploy sequence
 

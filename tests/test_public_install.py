@@ -250,9 +250,10 @@ def test_beta3_candidate_docs_preserve_opt_in_and_physical_gate():
     assert "empty by default" in notes
     assert "experimental_opt_in" in notes
     assert "G4 Instant" in validation
-    assert "Gates 1–3: PASS" in validation
-    assert "Further audible testing is paused" in validation
-    assert "No post-recovery phrase was sent" in validation
+    assert "RESULT: BLOCKED" in validation
+    assert "POST-RESTART OBSERVATION UNCERTAIN" in validation
+    assert "No automatic retry was sent" in validation
+    assert "rolled back to the exact beta.2" in validation
     assert "must remain draft" in validation
 
 
