@@ -5,6 +5,32 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from app.playback.camera_hardening import CameraProtocolProfile
+
+
+def test_production_composition_loads_exact_experimental_profiles(
+    main_module, monkeypatch
+):
+    monkeypatch.setenv("GROUPS_CONFIG", "{}")
+    monkeypatch.setenv(
+        "EXPERIMENTAL_CAMERA_PROFILES",
+        '[{"codec":"aac","transport":"serverudp","sample_rate":22050,'
+        '"channels":1,"bits_per_sample":16}]',
+    )
+    sys.modules.pop("app.server", None)
+
+    server = importlib.import_module("app.server")
+
+    assert server.core.camera_talkback.experimental_profiles == frozenset({
+        CameraProtocolProfile(
+            codec="aac",
+            transport="serverudp",
+            sample_rate=22050,
+            channels=1,
+            bits_per_sample=16,
+        )
+    })
+
 
 @pytest.mark.asyncio
 async def test_production_target_catalog_refreshes_camera_availability(

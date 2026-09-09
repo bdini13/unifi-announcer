@@ -56,6 +56,9 @@ class CameraTalkbackProfile:
         if (
             codec != "aac"
             or transport != "serverudp"
+            or type(sample_rate) is not int
+            or type(channels) is not int
+            or type(bits) is not int
             or sample_rate not in adts_rates
             or channels != 1
             or bits != 16

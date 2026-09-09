@@ -188,12 +188,12 @@ def test_upgrade_docs_preserve_legacy_default_bind_data_and_v218_state():
     assert "No manual data migration is required from v2.1.7" in readme
 
 
-def test_release_identity_is_v2_2_0_beta_2():
-    assert 'APP_VERSION = "2.2.0-beta.2"' in Path("app/version.py").read_text()
-    assert 'INTEGRATION_VERSION = "2.2.0-beta.2"' in Path(
+def test_release_identity_is_v2_2_0_beta_3():
+    assert 'APP_VERSION = "2.2.0-beta.3"' in Path("app/version.py").read_text()
+    assert 'INTEGRATION_VERSION = "2.2.0-beta.3"' in Path(
         "custom_components/unifi_announcer/const.py"
     ).read_text()
-    assert '"version": "2.2.0-beta.2"' in Path(
+    assert '"version": "2.2.0-beta.3"' in Path(
         "custom_components/unifi_announcer/manifest.json"
     ).read_text()
 
@@ -234,6 +234,33 @@ def test_beta2_release_docs_record_publication_and_tagged_smoke_gate():
     assert "Same-camera concurrency/session serialization" in validation
     assert "Tagged release and deployment smoke test" in validation
     assert "volume 50" in validation
+
+
+def test_beta3_candidate_docs_preserve_opt_in_and_physical_gate():
+    readme = Path("README.md").read_text()
+    env_example = Path(".env.example").read_text()
+    notes = Path("docs/RELEASE_NOTES_v2.2.0-beta.3.md").read_text()
+    checklist = Path("docs/RELEASE_CHECKLIST.md").read_text()
+    validation = Path(
+        "docs/validation/v2.2.0-beta.3-g4-instant-validation.md"
+    ).read_text()
+
+    assert "**Prerelease:** `v2.2.0-beta.2`" in readme
+    assert "**Release candidate:** `v2.2.0-beta.3`" in readme
+    assert "EXPERIMENTAL_CAMERA_PROFILES=[]" in env_example
+    assert "empty by default" in notes
+    assert "experimental_opt_in" in notes
+    assert "G4 Instant" in validation
+    assert "RESULT: PASS" in validation
+    assert "device speaker volume `100`" in validation
+    assert "No automatic retry was sent" in validation
+    assert "representative G4 Instant only" in validation
+    assert "does not authorize merge" in validation
+    assert "no G4 audio has been played" not in readme
+    assert "Until that gate is completed" not in notes
+    assert "PARTIAL PHYSICAL VALIDATION" not in checklist
+    assert "Sanitized partial evidence" not in checklist
+    assert "Physical gate — PARTIAL" not in validation
 
 
 def test_fastapi_metadata_uses_release_identity(main_module):

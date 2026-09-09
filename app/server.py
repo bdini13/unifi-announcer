@@ -19,6 +19,7 @@ from app.audio.bounded_cache import BoundedTtsSynthesizer
 from app.audio.tts import normalized_cache_key
 from app.playback.camera_hardening import (
     HardenedCameraTalkback,
+    load_experimental_camera_profiles,
     load_validated_groups,
 )
 from app.playback.production_slots import DynamicTtsSlotManager
@@ -48,8 +49,16 @@ core.GROUPS = load_validated_groups(
 # dispatcher playback, rules, and diagnostics all see the same hardening layer.
 # Keep composition idempotent for test/reload tooling that imports app.server
 # more than once in the same interpreter.
+_experimental_camera_profiles = load_experimental_camera_profiles(
+    os.getenv("EXPERIMENTAL_CAMERA_PROFILES", "")
+)
 if not isinstance(core.camera_talkback, HardenedCameraTalkback):
-    core.camera_talkback = HardenedCameraTalkback(core.camera_talkback)
+    core.camera_talkback = HardenedCameraTalkback(
+        core.camera_talkback,
+        experimental_profiles=_experimental_camera_profiles,
+    )
+else:
+    core.camera_talkback.experimental_profiles = _experimental_camera_profiles
 core.dispatcher.camera_playback = core.camera_talkback
 setattr(core.app.state.services, "camera_talkback", core.camera_talkback)
 

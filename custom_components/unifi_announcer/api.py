@@ -190,6 +190,12 @@ class UniFiAnnouncerClient:
                 "capability_state": {
                     "status": item.get("status", "available"),
                     **({"model": item["model"]} if item.get("model") else {}),
+                    **(
+                        {"compatibility": item["compatibility"]}
+                        if item.get("compatibility")
+                        in {"physically_validated", "experimental_opt_in"}
+                        else {}
+                    ),
                 },
                 "capabilities": item.get("capabilities") or {},
             }

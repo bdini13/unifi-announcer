@@ -12,8 +12,9 @@
 | Reboot/reconnect resident invalidation | Physical single-Chime reboot validation + automated lifecycle/concurrency tests | Supported; next request safely rewrites when continuity is broken |
 | Generic arbitrary direct staging | Insufficient safe ownership model | Disabled |
 | Direct HTTP playback | No verified route | Unsupported; playback remains Protect `play-speaker` |
-| Protect camera AAC talkback WebSocket | Integrated physical validation on one UVC G3 Instant + automated transport/dispatcher/HA tests | Experimental prerelease; only the exact validated G3 Instant AAC-LC 22.05 kHz mono profile is production-eligible |
-| Other AAC camera model/sample-rate profiles | No integrated physical evidence | Unsupported for playback; remain visible as unavailable until validated |
+| Protect camera AAC talkback WebSocket | Integrated physical validation on one UVC G3 Instant + automated transport/dispatcher/HA tests | Experimental prerelease; the exact validated G3 Instant AAC-LC 22.05 kHz mono profile is production-eligible |
+| Exact AAC protocol-profile opt-in | Full integrated physical gate on one representative G4 Instant exact profile | Draft beta.3; empty by default and labeled `experimental_opt_in`; evidence is not generalized to other G4/camera models |
+| Other AAC camera model/sample-rate profiles | No integrated physical evidence or explicit exact opt-in | Unsupported for playback; remain visible as unavailable |
 | Protect camera Opus/RTP talkback | Advertised by some camera bootstrap profiles but not physically validated in this service | Unsupported; fails closed |
 | Direct slot deletion | Semantics not proven | Unsupported; v2.1 migration overwrites proven legacy bytes with silence rather than guessing deletion |
 | Protect-internal UCP4 transport/trust | No supported transport or trust path found | Unsupported; disconnected research interface only |
@@ -54,7 +55,7 @@ If boot continuity is missing, malformed, or outside the configured tolerance, r
 
 ## Experimental camera-speaker compatibility boundary
 
-`v2.2.0-beta.1` is a published prerelease. The integrated camera path was physically validated on one **UVC G3 Instant**. Production camera playback is therefore evidence-gated to the exact observed profile:
+`v2.2.0-beta.2` is the current published prerelease. The integrated camera path was physically validated on one **UVC G3 Instant**. Production camera playback is therefore evidence-gated to the exact observed profile:
 
 ```text
 model: UVC G3 Instant
@@ -65,7 +66,9 @@ channels: 1
 bits per sample: 16
 ```
 
-A camera is not enabled merely because Protect reports `hasSpeaker=true` or an AAC talkback profile. Another camera model, another AAC sample rate, or any Opus/RTP profile remains unavailable until the exact integrated Announcer path is physically validated and a new compatibility entry is added.
+A camera is not enabled merely because Protect reports `hasSpeaker=true` or an AAC talkback profile. Draft beta.3 adds an empty-by-default `EXPERIMENTAL_CAMERA_PROFILES` list for explicit exact wire-profile testing. A matching configured camera reports `experimental_opt_in`; it is not added to the physically validated model table. Opus/RTP, partial, malformed, or non-matching profiles remain unavailable and fail closed.
+
+One UVC G4 Instant reported AAC-LC, `serverudp`, 22,050 Hz, mono, 16-bit metadata. Normal speech, repeat-times-two, rapid A→B serialization, camera-reboot recovery, and post-Announcer-restart playback were heard correctly. An initial uncertain restart observation triggered a fail-closed beta.2 rollback; a separately approved retry restored the same immutable candidate and was heard clearly once at confirmed device speaker volume `100`. This evidence applies only to the representative exact profile and does not establish broad G4 or generic camera compatibility.
 
 Configured cameras are re-inspected through authenticated `/targets` polling. Temporary offline state therefore changes target capability/availability without removing the configured target from Home Assistant. A reconnect can recover on the next poll without entity recreation.
 

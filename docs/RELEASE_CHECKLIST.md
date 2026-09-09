@@ -175,6 +175,26 @@ Hardening after beta.1 was released as immutable prerelease `v2.2.0-beta.2` at m
 
 Publication and deployment did not promote beta.2 to stable or expand compatibility beyond the validated G3 Instant profile.
 
+## v2.2.0-beta.3 candidate gate — PHYSICAL VALIDATION PASS
+
+- [x] Read-only Protect/bootstrap discovery found one connected G4 Instant with a speaker and AAC-LC / `serverudp` / 22,050 Hz / mono / 16-bit metadata.
+- [x] Discovery did not prepare a talkback session, send audio, or change Protect/camera settings.
+- [x] `EXPERIMENTAL_CAMERA_PROFILES` defaults to empty and fails closed on malformed, duplicate, partial, extra-key, unsupported, or type-coerced entries.
+- [x] Exact opt-in matches all five wire-profile dimensions and labels unvalidated models `experimental_opt_in`.
+- [x] The validated G3 model/profile remains `physically_validated` and default behavior remains unchanged.
+- [x] Exact beta.3 backend/HA identity, focused/full tests, Ruff, compile, JSON, Compose, Docker build, HACS, and Hassfest pass at the frozen draft-PR SHA.
+- [x] The exact candidate was deployed after separate approval and complete verified rollback backups.
+- [x] One-device-at-a-time G4 physical validation completed with an immediate room-readiness prompt before every audible action.
+- [x] Normal, repeat-times-two, and rapid two-request serialization tests passed on the representative G4 with owner-observed clear sequential playback and no duplicate, overlap, stale audio, or other-device output.
+- [x] The approved G4 reboot produced an Announcer unavailable → available transition in 43.7 seconds; Protect confirmed connected/recording recovery.
+- [x] Post-recovery playback was heard clearly once after the camera returned connected and recording.
+- [x] The Announcer-only restart passed silent recovery, but the owner's post-restart physical observation was uncertain; no retry was sent.
+- [x] The candidate was rolled back fail-closed to the exact beta.2 backend image/SHA and HA integration, with health and isolation verified.
+- [x] After explicit approval, the same immutable beta.3 candidate was restored and the Announcer-only restart gate was retried once at confirmed device speaker volume `100`; the phrase was heard clearly once.
+- [x] Sanitized validation evidence is recorded without private identifiers, credentials, signed URLs, or topology.
+
+The representative exact-profile physical gate passed. This does not authorize merge, publication, stable promotion, or broad G4/generic camera compatibility; those remain separate decisions.
+
 ## Approval-gated candidate, publish, and deploy sequence
 
 Opening a draft release-preparation PR is allowed before physical validation. Do not mark it ready, merge it, tag it, publish it, or deploy it without the gate and approval required for that step.

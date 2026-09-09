@@ -5,7 +5,9 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.playback.camera_hardening import (
+    CameraProtocolProfile,
     HardenedCameraTalkback,
+    load_experimental_camera_profiles,
     load_validated_groups,
     validate_camera_profile,
 )
@@ -31,11 +33,27 @@ def _camera(**overrides):
     return camera
 
 
-def _low_level_profile(*, sample_rate=22050):
-    return SimpleNamespace(
+def _low_level_profile(**overrides):
+    values = {
+        "codec": "aac",
+        "transport": "serverudp",
+        "sample_rate": 22050,
+        "channels": 1,
+        "bits_per_sample": 16,
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def _g4_camera(**overrides):
+    return _camera(type="UVC G4 Instant", **overrides)
+
+
+def _experimental_aac_profile():
+    return CameraProtocolProfile(
         codec="aac",
         transport="serverudp",
-        sample_rate=sample_rate,
+        sample_rate=22050,
         channels=1,
         bits_per_sample=16,
     )
@@ -73,6 +91,65 @@ def test_unvalidated_model_or_profile_fails_closed(camera):
         validate_camera_profile(camera)
 
 
+def test_experimental_profiles_default_to_empty_and_require_exact_opt_in():
+    assert load_experimental_camera_profiles("") == frozenset()
+    profiles = load_experimental_camera_profiles(
+        '[{"codec":"aac","transport":"serverudp","sample_rate":22050,'
+        '"channels":1,"bits_per_sample":16}]'
+    )
+    assert profiles == frozenset({_experimental_aac_profile()})
+
+    profile = validate_camera_profile(
+        _g4_camera(), experimental_profiles=profiles
+    )
+    assert profile.model == "UVC G4 Instant"
+
+    mismatched = _g4_camera(talkbackSettings={
+        "typeFmt": "aac",
+        "typeIn": "serverudp",
+        "samplingRate": 48000,
+        "bitsPerSample": 16,
+        "channels": 1,
+    })
+    with pytest.raises(CameraTalkbackError, match="not been physically validated"):
+        validate_camera_profile(mismatched, experimental_profiles=profiles)
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "not-json",
+        "{}",
+        "[{}]",
+        '[{"codec":"opus","transport":"serverudp-rtp",'
+        '"sample_rate":24000,"channels":1,"bits_per_sample":16}]',
+        '[{"codec":"aac","transport":"serverudp","sample_rate":22050,'
+        '"channels":1,"bits_per_sample":16,"unexpected":true}]',
+        '[{"codec":"aac","transport":"serverudp","sample_rate":22050,'
+        '"channels":1,"bits_per_sample":16},'
+        '{"codec":"aac","transport":"serverudp","sample_rate":22050,'
+        '"channels":1,"bits_per_sample":16}]',
+    ],
+)
+def test_experimental_profile_config_rejects_malformed_or_unsupported_entries(raw):
+    with pytest.raises(RuntimeError, match="EXPERIMENTAL_CAMERA_PROFILES"):
+        load_experimental_camera_profiles(raw)
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        '[{"codec":"aac","transport":"serverudp","sample_rate":"22050",'
+        '"channels":1,"bits_per_sample":16}]',
+        '[{"codec":"aac","transport":"serverudp","sample_rate":22050,'
+        '"channels":true,"bits_per_sample":16}]',
+    ],
+)
+def test_experimental_profile_config_rejects_coerced_numeric_types(raw):
+    with pytest.raises(RuntimeError, match="EXPERIMENTAL_CAMERA_PROFILES"):
+        load_experimental_camera_profiles(raw)
+
+
 def test_malformed_profile_values_fail_closed_as_camera_errors():
     camera = _camera(talkbackSettings={
         "typeFmt": "aac",
@@ -83,6 +160,22 @@ def test_malformed_profile_values_fail_closed_as_camera_errors():
     })
     with pytest.raises(CameraTalkbackError, match="invalid talkback settings"):
         validate_camera_profile(camera)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("samplingRate", 22050.0),
+        ("channels", True),
+        ("bitsPerSample", 16.0),
+    ],
+)
+def test_bootstrap_profile_rejects_type_equivalent_numeric_values(field, value):
+    settings = dict(_camera()["talkbackSettings"])
+    settings[field] = value
+
+    with pytest.raises(CameraTalkbackError, match="invalid talkback settings"):
+        validate_camera_profile(_camera(talkbackSettings=settings))
 
 
 def test_groups_reject_unknown_duplicate_or_reserved_members():
@@ -107,10 +200,10 @@ def test_groups_reject_unknown_duplicate_or_reserved_members():
 
 
 class _Prepared:
-    def __init__(self, *, sample_rate=22050):
+    def __init__(self, **profile_overrides):
         self.closed = False
         self.played = False
-        self.profile = _low_level_profile(sample_rate=sample_rate)
+        self.profile = _low_level_profile(**profile_overrides)
 
     async def play(self):
         self.played = True
@@ -189,6 +282,32 @@ async def test_prepared_session_profile_mismatch_fails_before_playback():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("sample_rate", 22050.0),
+        ("channels", True),
+        ("bits_per_sample", 16.0),
+    ],
+)
+async def test_prepared_session_rejects_type_equivalent_profile_values(
+    field, value
+):
+    prepared = _Prepared(**{field: value})
+    delegate = SimpleNamespace(
+        _camera=AsyncMock(return_value=_camera()),
+        prepare=AsyncMock(return_value=prepared),
+    )
+    hardened = HardenedCameraTalkback(delegate)
+
+    with pytest.raises(CameraTalkbackError, match="profile changed before playback"):
+        await hardened.prepare("camera-one", b"mp3")
+
+    assert prepared.closed is True
+    assert prepared.played is False
+
+
+@pytest.mark.asyncio
 async def test_profile_change_during_preparation_fails_closed():
     changed = _camera(talkbackSettings={
         "typeFmt": "aac",
@@ -221,6 +340,35 @@ async def test_inspect_reports_unvalidated_camera_as_unavailable_without_enablin
     assert state["status"] == "unavailable"
     assert state["model"] == "UVC G4 Instant"
     assert "validated" in state["error"]
+
+
+@pytest.mark.asyncio
+async def test_inspect_labels_exact_protocol_opt_in_as_experimental_not_validated():
+    delegate = SimpleNamespace(_camera=AsyncMock(return_value=_g4_camera()))
+    hardened = HardenedCameraTalkback(
+        delegate,
+        experimental_profiles=frozenset({_experimental_aac_profile()}),
+    )
+
+    state = await hardened.inspect("camera-one")
+
+    assert state["status"] == "available"
+    assert state["model"] == "UVC G4 Instant"
+    assert state["compatibility"] == "experimental_opt_in"
+
+
+@pytest.mark.asyncio
+async def test_validated_g3_label_wins_over_matching_experimental_profile():
+    delegate = SimpleNamespace(_camera=AsyncMock(return_value=_camera()))
+    hardened = HardenedCameraTalkback(
+        delegate,
+        experimental_profiles=frozenset({_experimental_aac_profile()}),
+    )
+
+    state = await hardened.inspect("camera-one")
+
+    assert state["status"] == "available"
+    assert state["compatibility"] == "physically_validated"
 
 
 @pytest.mark.asyncio

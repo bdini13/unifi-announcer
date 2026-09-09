@@ -44,6 +44,8 @@ Current compatibility-expansion priorities:
 
 Additional camera models enter the compatibility table only after exact integrated-path audible validation and regression coverage. The next representative target is an opt-in G4 Instant profile; success on that device must not be generalized to every UniFi camera. A metadata match alone is not sufficient.
 
+Draft candidate `v2.2.0-beta.3` adds an empty-by-default, exact protocol-profile allowlist for additional-camera experiments. Normal speech, repeat-times-two, rapid serialization, camera-reboot recovery, and post-Announcer-restart playback passed on one representative G4 Instant. An initially uncertain restart observation triggered a fail-closed beta.2 rollback; a later explicitly approved retry on the same immutable candidate was heard clearly once at confirmed device volume `100`. This validates only that representative exact profile and does not generalize to other G4 or camera models.
+
 ### 2. Native Home Assistant media ingestion
 
 - native `tts.speak` support;

@@ -394,6 +394,8 @@ Production configuration now validates every group member at startup. Unknown ta
 
 `v2.2.0-beta.2` is the current **published prerelease**, not part of stable `v2.1.8`. It hardens the integrated path physically validated on one **UVC G3 Instant**. Camera compatibility is evidence-based: the current production gate accepts only the exact validated profile — **AAC-LC, 22.05 kHz, mono, 16-bit, `serverudp`**. Other camera models, sample rates, and Opus/RTP profiles remain configured/discoverable but report unavailable and fail closed until they are physically validated.
 
+Draft candidate `v2.2.0-beta.3` adds a second, explicitly experimental path through `EXPERIMENTAL_CAMERA_PROFILES`. The setting is empty by default and accepts only complete exact AAC/ADTS wire-profile entries. A camera admitted this way reports `experimental_opt_in`, not `physically_validated`, and must also be explicitly named in `CAMERAS_CONFIG`. The complete integrated gate passed on one representative G4 Instant with the exact observed wire profile; this narrow evidence is not generalized to other G4 or camera models and does not authorize merge or release.
+
 Compatible Protect cameras are explicit text-announcement targets through the controller's private talkback WebSocket:
 
 ```env
@@ -529,7 +531,7 @@ Verify the final `DATA_PATH` before starting the restored container.
 | Smart Chime credential is not configured | Protect credential has not been revealed yet | Open **Devices → Smart WiFi Chime → Settings → Manage → Manual Recovery → Reveal**; use Reveal, not Edit |
 | Repeated phrase unexpectedly performs a write | Resident proof was absent or invalidated by restart/reconnect/boot change | This can be safe/expected; inspect `content_reuse` state and boot/lifecycle counters before tuning anything |
 | First phrase after Chime reboot rewrites once | v2.1.8 boot continuity correctly invalidated resident content | Expected safety behavior; the next same-boot replay can become a zero-write hit |
-| Camera entity is unavailable | Camera is offline or its model/talkback profile is outside the physically validated beta compatibility record | Check authenticated `/targets`; reconnect the camera or leave it unsupported until its exact profile is physically validated |
+| Camera entity is unavailable | Camera is offline or its model/talkback profile is outside the validated/explicit experimental compatibility policy | Check authenticated `/targets`; reconnect it, or use only a deliberately reviewed exact experimental profile during a gated candidate test |
 | Camera reconnects but HA entity stays unavailable | Coordinator has not completed its next `/targets` refresh | Wait for the next integration poll or reload the integration; entity recreation is not required |
 | Service refuses `GROUPS_CONFIG` at startup | Group contains an unknown/duplicate member, reserved name, empty list, or malformed JSON | Correct the group definition; production no longer silently drops invalid members |
 | Slot status reports ownership drift | Physical slot metadata no longer matches proof | Stop TTS and reconcile; do not force or guess a slot |
@@ -562,7 +564,7 @@ Dynamic TTS safety properties:
 Camera beta safety properties:
 
 - cameras are explicit opt-in targets and never join the implicit default target;
-- compatibility is an exact physically validated model/profile record, not inferred from generic `hasSpeaker` or AAC support;
+- compatibility is either an exact physically validated model/profile record or an empty-by-default exact protocol-profile opt-in labeled `experimental_opt_in`; neither is inferred from generic `hasSpeaker` or AAC support;
 - only one prepared talkback session may exist per configured camera at a time;
 - signed talkback URLs and session cookies are not persisted or returned;
 - uncertain camera audio delivery is not retried automatically;
@@ -624,6 +626,8 @@ See the detailed [project roadmap](ROADMAP.md).
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
 - [v2.2.0-beta.2 release notes](docs/RELEASE_NOTES_v2.2.0-beta.2.md)
 - [v2.2.0-beta.2 camera hardening validation](docs/validation/v2.2.0-beta.2-camera-hardening-validation.md)
+- [v2.2.0-beta.3 candidate notes](docs/RELEASE_NOTES_v2.2.0-beta.3.md)
+- [v2.2.0-beta.3 G4 Instant validation plan](docs/validation/v2.2.0-beta.3-g4-instant-validation.md)
 - [v2.2.0-beta.1 G3 Instant validation](docs/validation/v2.2.0-beta.1-g3-instant-camera-validation.md)
 - [v2.1.8 release notes](docs/RELEASE_NOTES_v2.1.8.md)
 - [v2.1.8 live validation](docs/validation/v2.1.8-live-latency-validation.md)
@@ -671,7 +675,8 @@ This project was developed with assistance from AI coding and research tools for
 
 - **Stable:** `v2.1.8` — safe same-boot resident TTS reuse with Smart Chime reboot/reconnect invalidation
 - **Prerelease:** `v2.2.0-beta.2` — hardened experimental Protect camera-speaker TTS, physically validated on one UVC G3 Instant profile; other camera profiles remain unsupported until validated
-- **Planned after beta.2:** model/profile-gated camera compatibility expansion, native Home Assistant media ingestion, and expanded diagnostics
+- **Release candidate:** `v2.2.0-beta.3` — draft exact-profile opt-in; the complete physical gate passed on one representative G4 Instant, without generalizing compatibility to other G4/camera models
+- **Planned after beta.3:** native Home Assistant media ingestion and expanded diagnostics
 
 See [ROADMAP.md](ROADMAP.md) and the [Releases page](https://github.com/bdini13/unifi-announcer/releases).
 
