@@ -240,6 +240,7 @@ def test_beta3_candidate_docs_preserve_opt_in_and_physical_gate():
     readme = Path("README.md").read_text()
     env_example = Path(".env.example").read_text()
     notes = Path("docs/RELEASE_NOTES_v2.2.0-beta.3.md").read_text()
+    checklist = Path("docs/RELEASE_CHECKLIST.md").read_text()
     validation = Path(
         "docs/validation/v2.2.0-beta.3-g4-instant-validation.md"
     ).read_text()
@@ -255,6 +256,11 @@ def test_beta3_candidate_docs_preserve_opt_in_and_physical_gate():
     assert "No automatic retry was sent" in validation
     assert "representative G4 Instant only" in validation
     assert "does not authorize merge" in validation
+    assert "no G4 audio has been played" not in readme
+    assert "Until that gate is completed" not in notes
+    assert "PARTIAL PHYSICAL VALIDATION" not in checklist
+    assert "Sanitized partial evidence" not in checklist
+    assert "Physical gate — PARTIAL" not in validation
 
 
 def test_fastapi_metadata_uses_release_identity(main_module):

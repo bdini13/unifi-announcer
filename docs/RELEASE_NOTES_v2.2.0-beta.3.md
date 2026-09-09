@@ -2,7 +2,7 @@
 
 ## Purpose
 
-v2.2.0-beta.3 prepares an explicitly opt-in experimental path for additional Protect camera models whose observed talkback wire profile exactly matches a supported AAC/ADTS transport. Stable `v2.1.8` remains the recommended public release, and published prerelease `v2.2.0-beta.2` remains the latest deployable camera prerelease until this candidate passes its physical gate.
+v2.2.0-beta.3 prepares an explicitly opt-in experimental path for additional Protect camera models whose observed talkback wire profile exactly matches a supported AAC/ADTS transport. Stable `v2.1.8` remains the recommended public release, and published prerelease `v2.2.0-beta.2` remains the latest published camera prerelease. The beta.3 representative physical gate has passed, but merge, tagging, publication, and release deployment still require separate owner authorization.
 
 ## Default-deny compatibility model
 
@@ -44,8 +44,8 @@ One available UVC G4 Instant was initially inspected through Protect's read-only
 - Smart Chime fixed slots and playback behavior are unchanged.
 - Home Assistant's coordinator translation retains the sanitized compatibility label from `/targets`; unsupported label values are discarded. The current MCP Chime listing does not claim camera compatibility reporting.
 
-## Required gate
+## Completed physical gate and remaining approvals
 
-Automated validation can prove default-deny parsing, exact matching, labeling, session checks, and regression safety, but cannot prove audibility or device behavior. Before beta.3 may be marked ready, merged, tagged, published, or deployed as a release, the exact frozen candidate must be deployed with rollback backups and physically validated on the representative G4 Instant one device at a time.
+Automated validation proved default-deny parsing, exact matching, labeling, session checks, and regression safety. The exact frozen runtime candidate was also deployed with rollback backups and passed one-device-at-a-time physical validation on the representative G4 Instant.
 
-See `docs/validation/v2.2.0-beta.3-g4-instant-validation.md`. Until that gate is completed, this work must remain a draft candidate and no compatibility claim extends beyond the already validated G3 Instant profile.
+See `docs/validation/v2.2.0-beta.3-g4-instant-validation.md`. Physical PASS does not itself authorize marking the PR ready, merge, tagging, publication, release deployment, stable promotion, or a compatibility claim beyond the representative exact profile; each remains a separate owner decision.

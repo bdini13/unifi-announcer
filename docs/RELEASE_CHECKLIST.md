@@ -175,7 +175,7 @@ Hardening after beta.1 was released as immutable prerelease `v2.2.0-beta.2` at m
 
 Publication and deployment did not promote beta.2 to stable or expand compatibility beyond the validated G3 Instant profile.
 
-## v2.2.0-beta.3 candidate gate — PARTIAL PHYSICAL VALIDATION
+## v2.2.0-beta.3 candidate gate — PHYSICAL VALIDATION PASS
 
 - [x] Read-only Protect/bootstrap discovery found one connected G4 Instant with a speaker and AAC-LC / `serverudp` / 22,050 Hz / mono / 16-bit metadata.
 - [x] Discovery did not prepare a talkback session, send audio, or change Protect/camera settings.
@@ -191,7 +191,7 @@ Publication and deployment did not promote beta.2 to stable or expand compatibil
 - [x] The Announcer-only restart passed silent recovery, but the owner's post-restart physical observation was uncertain; no retry was sent.
 - [x] The candidate was rolled back fail-closed to the exact beta.2 backend image/SHA and HA integration, with health and isolation verified.
 - [x] After explicit approval, the same immutable beta.3 candidate was restored and the Announcer-only restart gate was retried once at confirmed device speaker volume `100`; the phrase was heard clearly once.
-- [x] Sanitized partial evidence is recorded without private identifiers, credentials, signed URLs, or topology.
+- [x] Sanitized validation evidence is recorded without private identifiers, credentials, signed URLs, or topology.
 
 The representative exact-profile physical gate passed. This does not authorize merge, publication, stable promotion, or broad G4/generic camera compatibility; those remain separate decisions.
 
