@@ -81,3 +81,36 @@ async def test_production_target_catalog_refreshes_camera_availability(
     assert second["capabilities"]["announce"] is True
     assert second["compatibility"] == "physically_validated"
     assert inspect.await_count == 2
+
+
+def test_support_bundle_reads_only_already_observed_chime_firmware(
+    main_module, monkeypatch
+):
+    monkeypatch.setenv("GROUPS_CONFIG", "{}")
+    sys.modules.pop("app.server", None)
+    server = importlib.import_module("app.server")
+
+    observed = SimpleNamespace(
+        direct_client=SimpleNamespace(
+            capabilities=SimpleNamespace(firmware="1.7.20")
+        )
+    )
+    unobserved = SimpleNamespace(
+        direct_client=SimpleNamespace(capabilities=None)
+    )
+    malformed = SimpleNamespace(
+        direct_client=SimpleNamespace(
+            capabilities=SimpleNamespace(firmware="x" * 65)
+        )
+    )
+    monkeypatch.setattr(
+        server.core,
+        "chime_runtimes",
+        {
+            "kitchen": observed,
+            "garage": unobserved,
+            "invalid": malformed,
+        },
+    )
+
+    assert server._runtime_chime_firmware() == {"kitchen": "1.7.20"}
