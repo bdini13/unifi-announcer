@@ -1,6 +1,7 @@
 """Regression coverage for bounded binary-media ingestion."""
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -15,6 +16,23 @@ from app.audio.media_ingest import (
     UnsupportedMediaType,
 )
 from app.routes.media import MediaIngress
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"max_input_bytes": 0},
+        {"max_output_bytes": 0},
+        {"max_duration_seconds": 0},
+        {"max_duration_seconds": float("nan")},
+        {"max_duration_seconds": float("inf")},
+        {"normalize_timeout_seconds": 0},
+        {"normalize_timeout_seconds": float("nan")},
+    ],
+)
+def test_media_limits_fail_closed_on_invalid_configuration(kwargs):
+    with pytest.raises(ValueError, match="must be a positive"):
+        MediaLimits(**kwargs)
 
 
 @pytest.mark.asyncio
@@ -53,7 +71,7 @@ async def test_media_normalizer_rejects_audio_over_duration_limit():
 
 
 @pytest.mark.asyncio
-async def test_media_normalizer_converts_valid_audio_to_bounded_mp3():
+async def test_media_normalizer_pins_demuxer_and_converts_to_bounded_mp3():
     normalizer = AudioMediaNormalizer(
         MediaLimits(max_input_bytes=32, max_output_bytes=32, max_duration_seconds=5)
     )
@@ -75,9 +93,15 @@ async def test_media_normalizer_converts_valid_audio_to_bounded_mp3():
 
     assert bytes(result) == b"normalized-mp3"
     assert len(calls) == 2
-    ffmpeg = calls[1]
+    ffprobe, ffmpeg = calls
+    assert ffprobe[ffprobe.index("-f") + 1] == "wav"
+    assert ffmpeg[ffmpeg.index("-f") + 1] == "wav"
     assert ("-ac", "1") == ffmpeg[ffmpeg.index("-ac"):ffmpeg.index("-ac") + 2]
     assert ("-ar", "22050") == ffmpeg[ffmpeg.index("-ar"):ffmpeg.index("-ar") + 2]
+    assert ("-map_metadata", "-1") == ffmpeg[
+        ffmpeg.index("-map_metadata"):ffmpeg.index("-map_metadata") + 2
+    ]
+    assert ("-t", "5") == ffmpeg[ffmpeg.index("-t"):ffmpeg.index("-t") + 2]
     assert "libmp3lame" in ffmpeg
 
 
@@ -88,21 +112,28 @@ class _FakeNormalizer:
 
     async def normalize(self, payload: bytes, media_type: str) -> bytes:
         self.calls.append((payload, media_type))
-        return b"normalized"
+        await asyncio.sleep(0)
+        return b"normalized:" + payload
 
 
 class _FakeDispatcher:
     def __init__(self) -> None:
         self.synthesize = None
-        self.command = None
-        self.audio = None
+        self.commands = []
+        self.audios = []
 
     async def dispatch(self, command):
-        self.command = command
-        self.audio = await self.synthesize(command.text)
+        self.commands.append(command)
+        await asyncio.sleep(0)
+        audio = await self.synthesize(command.text)
+        self.audios.append(audio)
         return SimpleNamespace(
             disposition="played",
-            response=lambda: {"disposition": "played", "targets": 1},
+            response=lambda: {
+                "disposition": "played",
+                "targets": 1,
+                "test_audio": audio.decode(),
+            },
         )
 
 
@@ -144,18 +175,49 @@ async def test_media_route_uses_canonical_dispatcher_with_task_local_audio():
 
     assert response.status_code == 200
     assert normalizer.calls == [(b"source-audio", "audio/wav")]
-    assert dispatcher.audio == b"normalized"
-    assert dispatcher.command.action == "announce"
-    assert dispatcher.command.target == "kitchen"
-    assert dispatcher.command.repeat_times == 2
-    assert dispatcher.command.priority == 40
-    assert dispatcher.command.source == "media_api"
+    assert dispatcher.audios == [b"normalized:source-audio"]
+    command = dispatcher.commands[0]
+    assert command.action == "announce"
+    assert command.target == "kitchen"
+    assert command.repeat_times == 2
+    assert command.priority == 40
+    assert command.source == "media_api"
     assert response.json()["media"] == {
         "input_content_type": "audio/wav",
         "normalized_content_type": "audio/mpeg",
         "input_bytes": len(b"source-audio"),
-        "normalized_bytes": len(b"normalized"),
+        "normalized_bytes": len(b"normalized:source-audio"),
     }
+
+
+@pytest.mark.asyncio
+async def test_media_payloads_remain_task_local_under_concurrency():
+    normalizer = _FakeNormalizer()
+    app, dispatcher = _media_app(normalizer)
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        first, second = await asyncio.gather(
+            client.post(
+                "/media/announce?target=one",
+                content=b"alpha",
+                headers={"X-API-Key": "test-key", "Content-Type": "audio/wav"},
+            ),
+            client.post(
+                "/media/announce?target=two",
+                content=b"beta",
+                headers={"X-API-Key": "test-key", "Content-Type": "audio/wav"},
+            ),
+        )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert {first.json()["test_audio"], second.json()["test_audio"]} == {
+        "normalized:alpha",
+        "normalized:beta",
+    }
+    assert set(dispatcher.audios) == {b"normalized:alpha", b"normalized:beta"}
 
 
 @pytest.mark.asyncio
@@ -188,4 +250,4 @@ async def test_media_route_rejects_oversized_body_while_streaming():
         )
 
     assert response.status_code == 413
-    assert dispatcher.command is None
+    assert dispatcher.commands == []
