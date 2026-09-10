@@ -8,6 +8,11 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.unifi_announcer.api import CommandResult, UniFiAnnouncerClient
 from custom_components.unifi_announcer.const import DOMAIN
+from custom_components.unifi_announcer.media import (
+    MAX_MEDIA_BYTES,
+    MediaSourceFetchError,
+    _read_local_media,
+)
 
 
 BASE_DATA = {
@@ -140,3 +145,19 @@ async def test_media_player_rejects_arbitrary_url_playback(hass):
     finally:
         media_patch.stop()
         await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_local_media_read_stops_at_byte_ceiling(hass, tmp_path):
+    path = tmp_path / "oversized.wav"
+    path.write_bytes(b"x" * (MAX_MEDIA_BYTES + 1))
+
+    with pytest.raises(MediaSourceFetchError, match="exceeds"):
+        await _read_local_media(hass, path)
+
+
+async def test_local_media_read_accepts_exact_byte_ceiling(hass, tmp_path):
+    path = tmp_path / "bounded.wav"
+    expected = b"x" * MAX_MEDIA_BYTES
+    path.write_bytes(expected)
+
+    assert await _read_local_media(hass, path) == expected
