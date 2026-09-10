@@ -46,12 +46,31 @@ Additional camera models enter the established compatibility table only after ex
 
 Published prerelease `v2.2.0-beta.3` adds an empty-by-default, exact protocol-profile allowlist for additional-camera experiments. Normal speech, repeat-times-two, rapid serialization, camera-reboot recovery, and post-Announcer-restart playback passed on one representative G4 Instant. An initially uncertain restart observation triggered a fail-closed beta.2 rollback; a later explicitly approved retry on the same immutable candidate was heard clearly once at confirmed device volume `100`. The tagged release was subsequently deployed by immutable digest with exact source/OCI/runtime provenance and clean silent verification. This validates only that representative exact profile and does not generalize to other G4 or camera models or promote the prerelease to stable.
 
-### 2. Native Home Assistant media ingestion
+### 2. Native Home Assistant media ingestion — beta.4 candidate in progress
 
-- native `tts.speak` support;
-- `media-source://` ingestion;
-- bounded binary media ingestion through the same validated dispatcher and target backends;
-- clear format, duration, and size validation before media reaches a Protect device.
+The `v2.2.0-beta.4` candidate implements the planned native-media vertical slice while retaining beta.3 as the latest published prerelease until physical validation and publication are complete:
+
+- native `tts.speak` handoff through Home Assistant's `media-source://` resolution path;
+- bounded local/HTTP media-source reads inside Home Assistant rather than arbitrary backend URL fetching;
+- authenticated raw-audio `POST /media/announce` ingestion;
+- exact supported audio-MIME allowlist plus streamed input-size, decode, finite-duration, and normalized-output validation;
+- normalization to the existing mono 22.05 kHz / 64 kbps MP3 contract before playback;
+- task-local media injection into the existing `AnnouncementDispatcher`, preserving target resolution, queueing, quiet hours, priority, dedupe, Smart Chime fixed slots, camera hardening, and mixed-group semantics;
+- automated backend and Home Assistant regression coverage;
+- explicit physical validation plan before beta.4 can be tagged or published.
+
+The candidate does not turn the media player into a general streaming speaker: pause, seek, playback position, and persistent transport state remain unsupported. It also does not accept arbitrary caller-supplied URLs as a generic fetch primitive.
+
+See `docs/MEDIA_INGESTION.md` and `docs/validation/v2.2.0-beta.4-media-ingestion-validation.md`.
+
+Remaining beta.4 gate:
+
+- freeze one exact CI-green candidate;
+- physically validate native `tts.speak` and non-MP3 media on Smart Chime;
+- validate native `tts.speak` on the physically validated G3 Instant;
+- validate one mixed Chime/camera media request and fail-before-playback rejection cases;
+- verify ordinary Announcer text TTS remains isolated after media playback;
+- publish only the exact validated candidate.
 
 ### 3. Diagnostics and compatibility
 
