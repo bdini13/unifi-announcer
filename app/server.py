@@ -17,6 +17,7 @@ from starlette.routing import Mount, Route
 from app import main as core
 from app.audio.bounded_cache import BoundedTtsSynthesizer
 from app.audio.tts import normalized_cache_key
+from app.diagnostics import build_support_bundle
 from app.playback.camera_hardening import (
     HardenedCameraTalkback,
     load_experimental_camera_profiles,
@@ -313,6 +314,32 @@ async def cache_status(request) -> JSONResponse:
     return JSONResponse(tts_cache.stats())
 
 
+async def support_bundle(request) -> JSONResponse:
+    """Return an authenticated, shareable diagnostic snapshot with IDs removed."""
+    if denied := _authorize_diagnostic(request):
+        return denied
+    await _refresh_camera_capabilities()
+    release = await core.version()
+    protocols = dict(release.get("protocols") or {})
+    protocols["direct_device_http"] = "production_owned_tts_slot_overwrite"
+    release = {"version": APP_VERSION, **release, "protocols": protocols}
+    bundle = build_support_bundle(
+        release=release,
+        health=core.app.state.services.health.snapshot(),
+        target_catalog=_target_catalog_payload(),
+        slot_status=dynamic_slots.status(),
+        cache_stats=tts_cache.stats(),
+        metrics=core.metrics.snapshot(),
+        media_limits=media_ingress.normalizer.limits,
+    )
+    return JSONResponse(
+        bundle,
+        headers={
+            "Content-Disposition": 'attachment; filename="unifi-announcer-diagnostics.json"'
+        },
+    )
+
+
 MCP_ENABLED = os.getenv("MCP_ENABLED", "false").lower() == "true"
 MCP_API_KEY = os.getenv("MCP_API_KEY", "")
 MCP_ALLOWED_HOSTS = [
@@ -370,6 +397,7 @@ routes = [
     Route("/presets", filtered_presets, methods=["GET"]),
     Route("/tts/slots/status", slot_status, methods=["GET"]),
     Route("/tts/cache/status", cache_status, methods=["GET"]),
+    Route("/diagnostics/support", support_bundle, methods=["GET"]),
     Route("/media/announce", media_ingress.endpoint, methods=["POST"]),
 ]
 if _mcp_runtime is not None:
