@@ -118,6 +118,23 @@ async def test_target_catalog_does_not_hide_non_404_failures(status):
 
 
 @pytest.mark.asyncio
+async def test_support_bundle_client_requires_redacted_v1_contract():
+    payload = {
+        "schema_version": 1,
+        "redaction": {"device_identifiers": "omitted"},
+        "targets": [],
+    }
+    client = _client_with_requests((200, payload))
+
+    assert await client.async_get_support_bundle() == payload
+    client._request.assert_awaited_once_with("GET", "/diagnostics/support")
+
+    invalid = _client_with_requests((200, {"schema_version": 1}))
+    with pytest.raises(InvalidResponse, match="Invalid support bundle response"):
+        await invalid.async_get_support_bundle()
+
+
+@pytest.mark.asyncio
 async def test_media_announce_uploads_raw_audio_with_bounded_request_timeout():
     client = _client_with_requests((200, {"disposition": "played"}))
 
