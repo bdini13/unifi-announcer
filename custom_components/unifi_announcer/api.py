@@ -73,10 +73,11 @@ class UniFiAnnouncerClient:
                        **kwargs: Any) -> tuple[int, Any]:
         headers = dict(kwargs.pop("headers", {}))
         headers.update(self.headers)
+        timeout = kwargs.pop("timeout", self._timeout)
         try:
             async with self._session.request(
                 method, f"{self.base_url}{path}", headers=headers,
-                timeout=self._timeout, **kwargs
+                timeout=timeout, **kwargs
             ) as response:
                 if response.status in {401, 403, 503} and path == "/auth/check":
                     raise AuthenticationError("UniFi Announcer rejected the API key")
@@ -229,6 +230,20 @@ class UniFiAnnouncerClient:
     async def async_announce(self, text: str, **options: Any) -> CommandResult:
         body = {"text": text, **{k: v for k, v in options.items() if v is not None}}
         return await self._command("POST", "/announce", json=body)
+
+    async def async_announce_media(
+        self, audio: bytes, content_type: str, **options: Any
+    ) -> CommandResult:
+        """Upload bounded audio for announcement through the canonical dispatcher."""
+        params = {k: v for k, v in options.items() if v is not None}
+        return await self._command(
+            "POST",
+            "/media/announce",
+            params=params,
+            data=audio,
+            headers={"Content-Type": content_type},
+            timeout=aiohttp.ClientTimeout(total=60.0),
+        )
 
     async def async_play_preset(self, name: str, **options: Any) -> CommandResult:
         params = {k: v for k, v in options.items() if v is not None}
