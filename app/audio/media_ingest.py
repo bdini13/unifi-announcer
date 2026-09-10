@@ -65,10 +65,9 @@ class MediaLimits:
             ("MEDIA_MAX_DURATION_SECONDS", self.max_duration_seconds),
             ("MEDIA_NORMALIZE_TIMEOUT_SECONDS", self.normalize_timeout_seconds),
         ):
-            try:
-                number = float(value)
-            except (TypeError, ValueError) as exc:
-                raise ValueError(f"{name} must be a positive finite number") from exc
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError(f"{name} must be a positive finite number")
+            number = float(value)
             if not math.isfinite(number) or number <= 0:
                 raise ValueError(f"{name} must be a positive finite number")
 
@@ -216,6 +215,16 @@ class AudioMediaNormalizer:
                 return duration
         raise InvalidMedia("media duration could not be determined")
 
+    @staticmethod
+    async def _terminate_process(process: asyncio.subprocess.Process) -> None:
+        """Kill and reap a decoder process after timeout or caller cancellation."""
+        if process.returncode is None:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
+        await process.communicate()
+
     async def _run(self, *command: str) -> bytes:
         try:
             process = await asyncio.create_subprocess_exec(
@@ -230,9 +239,11 @@ class AudioMediaNormalizer:
             stdout, stderr = await asyncio.wait_for(
                 process.communicate(), timeout=self.limits.normalize_timeout_seconds
             )
+        except asyncio.CancelledError:
+            await asyncio.shield(self._terminate_process(process))
+            raise
         except TimeoutError as exc:
-            process.kill()
-            await process.communicate()
+            await self._terminate_process(process)
             raise InvalidMedia("media normalization timed out") from exc
         if process.returncode != 0:
             detail = stderr.decode("utf-8", errors="replace").strip().splitlines()
