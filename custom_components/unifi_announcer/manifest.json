@@ -3,6 +3,7 @@
   "name": "UniFi Announcer",
   "codeowners": ["@bdini13"],
   "config_flow": true,
+  "dependencies": ["media_source"],
   "documentation": "https://github.com/bdini13/unifi-announcer",
   "integration_type": "hub",
   "iot_class": "local_polling",
