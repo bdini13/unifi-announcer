@@ -189,12 +189,12 @@ def test_upgrade_docs_preserve_legacy_default_bind_data_and_v218_state():
     assert "No manual data migration is required from v2.1.7" in readme
 
 
-def test_release_identity_is_v2_2_0_beta_3():
-    assert 'APP_VERSION = "2.2.0-beta.3"' in Path("app/version.py").read_text()
-    assert 'INTEGRATION_VERSION = "2.2.0-beta.3"' in Path(
+def test_release_identity_is_v2_2_0_beta_4_candidate():
+    assert 'APP_VERSION = "2.2.0-beta.4"' in Path("app/version.py").read_text()
+    assert 'INTEGRATION_VERSION = "2.2.0-beta.4"' in Path(
         "custom_components/unifi_announcer/const.py"
     ).read_text()
-    assert '"version": "2.2.0-beta.3"' in Path(
+    assert '"version": "2.2.0-beta.4"' in Path(
         "custom_components/unifi_announcer/manifest.json"
     ).read_text()
 
@@ -288,6 +288,33 @@ def test_beta3_candidate_docs_preserve_opt_in_and_physical_gate():
     assert "PARTIAL PHYSICAL VALIDATION" not in checklist
     assert "Sanitized partial evidence" not in checklist
     assert "Physical gate — PARTIAL" not in validation
+
+
+def test_beta4_candidate_docs_preserve_published_beta3_boundary():
+    readme = Path("README.md").read_text()
+    env_example = Path(".env.example").read_text()
+    notes = Path("docs/RELEASE_NOTES_v2.2.0-beta.4.md").read_text()
+    guide = Path("docs/MEDIA_INGESTION.md").read_text()
+    validation = Path(
+        "docs/validation/v2.2.0-beta.4-media-ingestion-validation.md"
+    ).read_text()
+    roadmap = Path("ROADMAP.md").read_text()
+    ha_docs = Path("docs/HOME_ASSISTANT.md").read_text()
+
+    assert "**Prerelease:** `v2.2.0-beta.3`" in readme
+    assert "v2.2.0-beta.4" in notes
+    assert "currently a **candidate**, not a published prerelease" in notes
+    assert "Do not tag or publish beta.4" in notes
+    assert "media-source://" in guide
+    assert "POST /media/announce" in guide
+    assert "arbitrary" in guide.lower() and "URL" in guide
+    assert "MEDIA_MAX_INPUT_BYTES=4194304" in env_example
+    assert "MEDIA_MAX_DURATION_SECONDS=30" in env_example
+    assert "beta.4 candidate in progress" in roadmap
+    assert "v2.2.0-beta.3` remains the current published prerelease" in ha_docs
+    assert "candidate validation pending" in validation
+    assert "candidate source SHA: `PENDING`" in validation
+    assert "Until those boxes are complete" in validation
 
 
 def test_fastapi_metadata_uses_release_identity(main_module):
