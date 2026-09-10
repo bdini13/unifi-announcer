@@ -1,6 +1,6 @@
 """Constants for the UniFi Announcer Home Assistant integration."""
 DOMAIN = "unifi_announcer"
-INTEGRATION_VERSION = "2.2.0-beta.4"
+INTEGRATION_VERSION = "2.2.0-beta.5"
 PLATFORMS = ["notify", "button", "select", "sensor", "media_player"]
 CONF_URL = "url"
 CONF_API_KEY = "api_key"
