@@ -27,7 +27,6 @@ _LATENCY_STAGES = (
     "slot_settle_ms",
     "slot_prepare_ms",
     "camera_prepare_ms",
-    "camera_play_ms",
 )
 
 _SAFE_LAST_PREPARE_FIELDS = (
@@ -87,7 +86,9 @@ def _safe_counters(metrics: Mapping[str, Any]) -> dict[str, int | float]:
     return result
 
 
-def _target_aliases(target_catalog: Mapping[str, Any]) -> tuple[dict[str, str], list[dict[str, Any]]]:
+def _target_aliases(
+    target_catalog: Mapping[str, Any],
+) -> tuple[dict[str, str], list[dict[str, Any]]]:
     aliases: dict[str, str] = {}
     result = []
     raw_targets = target_catalog.get("targets")
@@ -116,7 +117,9 @@ def _target_aliases(target_catalog: Mapping[str, Any]) -> tuple[dict[str, str], 
             }
         if entry["type"] == "camera":
             status = str(item.get("status") or "unavailable")
-            entry["status"] = status if status in {"available", "unavailable"} else "unknown"
+            entry["status"] = (
+                status if status in {"available", "unavailable"} else "unknown"
+            )
             model = item.get("model")
             if isinstance(model, str) and 0 < len(model) <= 128:
                 entry["model"] = model
@@ -127,7 +130,9 @@ def _target_aliases(target_catalog: Mapping[str, Any]) -> tuple[dict[str, str], 
     return aliases, result
 
 
-def _safe_groups(target_catalog: Mapping[str, Any], aliases: Mapping[str, str]) -> list[dict[str, Any]]:
+def _safe_groups(
+    target_catalog: Mapping[str, Any], aliases: Mapping[str, str]
+) -> list[dict[str, Any]]:
     raw_groups = target_catalog.get("groups")
     if not isinstance(raw_groups, list):
         return []
@@ -147,11 +152,13 @@ def _safe_groups(target_catalog: Mapping[str, Any], aliases: Mapping[str, str]) 
                 for key, value in sorted(capabilities.items())
                 if isinstance(value, bool)
             }
-        groups.append({
-            "group": f"group_{index}",
-            "members": safe_members,
-            "capabilities": safe_capabilities,
-        })
+        groups.append(
+            {
+                "group": f"group_{index}",
+                "members": safe_members,
+                "capabilities": safe_capabilities,
+            }
+        )
     return groups
 
 
@@ -178,13 +185,19 @@ def _safe_slot_state(slot_status: Mapping[str, Any]) -> dict[str, Any]:
             if isinstance(content_reuse, Mapping)
             else {}
         )
-        for raw_number, raw_slot in sorted(slots.items(), key=lambda pair: str(pair[0])):
+        for raw_number, raw_slot in sorted(
+            slots.items(), key=lambda pair: str(pair[0])
+        ):
             if not isinstance(raw_slot, Mapping):
                 continue
             bindings = raw_slot.get("bindings")
             binding_count = len(bindings) if isinstance(bindings, Mapping) else 0
             trusted_count = 0
-            assignment = assignments.get(str(raw_number)) if isinstance(assignments, Mapping) else None
+            assignment = (
+                assignments.get(str(raw_number))
+                if isinstance(assignments, Mapping)
+                else None
+            )
             if isinstance(assignment, Mapping):
                 trusted_count = sum(
                     1
@@ -195,11 +208,13 @@ def _safe_slot_state(slot_status: Mapping[str, Any]) -> dict[str, Any]:
                 logical_slot = int(raw_number)
             except (TypeError, ValueError):
                 continue
-            summaries.append({
-                "logical_slot": logical_slot,
-                "binding_count": binding_count,
-                "trusted_binding_count": trusted_count,
-            })
+            summaries.append(
+                {
+                    "logical_slot": logical_slot,
+                    "binding_count": binding_count,
+                    "trusted_binding_count": trusted_count,
+                }
+            )
     result["slots"] = summaries
 
     reuse = slot_status.get("content_reuse")
@@ -258,6 +273,23 @@ def _safe_media_limits(media_limits: Any | None) -> dict[str, int | float]:
     return result
 
 
+def _safe_tested_firmware(value: Any) -> dict[str, list[str]]:
+    if not isinstance(value, Mapping):
+        return {}
+    result: dict[str, list[str]] = {}
+    for name, versions in sorted(value.items()):
+        if not isinstance(name, str) or not isinstance(versions, list):
+            continue
+        clean = [
+            version
+            for version in versions
+            if isinstance(version, str) and 0 < len(version) <= 64
+        ]
+        if clean:
+            result[name] = clean
+    return result
+
+
 def _warnings(
     *,
     release: Mapping[str, Any],
@@ -279,23 +311,29 @@ def _warnings(
             continue
         alias = str(target.get("target"))
         if target.get("status") != "available":
-            warnings.append({
-                "code": "camera_unavailable",
-                "severity": "warning",
-                "target": alias,
-            })
+            warnings.append(
+                {
+                    "code": "camera_unavailable",
+                    "severity": "warning",
+                    "target": alias,
+                }
+            )
         elif target.get("compatibility") == "experimental_opt_in":
-            warnings.append({
-                "code": "camera_experimental_opt_in",
-                "severity": "info",
-                "target": alias,
-            })
+            warnings.append(
+                {
+                    "code": "camera_experimental_opt_in",
+                    "severity": "info",
+                    "target": alias,
+                }
+            )
         elif target.get("compatibility") != "physically_validated":
-            warnings.append({
-                "code": "camera_compatibility_unproven",
-                "severity": "warning",
-                "target": alias,
-            })
+            warnings.append(
+                {
+                    "code": "camera_compatibility_unproven",
+                    "severity": "warning",
+                    "target": alias,
+                }
+            )
     return warnings
 
 
@@ -314,7 +352,7 @@ def build_support_bundle(
     groups = _safe_groups(target_catalog, aliases)
     safe_health = _safe_health(health)
     safe_slots = _safe_slot_state(slot_status)
-    safe_release = {
+    safe_release: dict[str, Any] = {
         "version": str(release.get("version") or "unknown"),
         "git_sha": str(release.get("git_sha") or "unknown"),
         "service": "unifi-announcer",
@@ -326,13 +364,9 @@ def build_support_bundle(
             for name, value in sorted(protocols.items())
             if isinstance(name, str) and isinstance(value, str)
         }
-    tested_firmware = release.get("tested_firmware")
-    if isinstance(tested_firmware, Mapping):
-        safe_release["tested_firmware"] = {
-            str(name): str(value)
-            for name, value in sorted(tested_firmware.items())
-            if isinstance(name, str) and isinstance(value, str)
-        }
+    tested_firmware = _safe_tested_firmware(release.get("tested_firmware"))
+    if tested_firmware:
+        safe_release["tested_firmware"] = tested_firmware
 
     return {
         "schema_version": 1,
