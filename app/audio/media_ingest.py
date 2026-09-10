@@ -13,17 +13,21 @@ from pathlib import Path
 from app.audio.tts import EncodedAudio
 
 
-SUPPORTED_MEDIA_TYPES = {
-    "audio/aac": ".aac",
-    "audio/flac": ".flac",
-    "audio/mpeg": ".mp3",
-    "audio/mp3": ".mp3",
-    "audio/mp4": ".m4a",
-    "audio/ogg": ".ogg",
-    "audio/wav": ".wav",
-    "audio/webm": ".webm",
-    "audio/x-m4a": ".m4a",
-    "audio/x-wav": ".wav",
+# MIME type -> (safe temporary suffix, explicitly selected ffmpeg demuxer).
+# Pinning the demuxer prevents a caller from declaring an audio MIME type while
+# relying on ffmpeg auto-detection to interpret the body as another container or
+# playlist format.
+SUPPORTED_MEDIA_TYPES: dict[str, tuple[str, str]] = {
+    "audio/aac": (".aac", "aac"),
+    "audio/flac": (".flac", "flac"),
+    "audio/mpeg": (".mp3", "mp3"),
+    "audio/mp3": (".mp3", "mp3"),
+    "audio/mp4": (".m4a", "mov,mp4,m4a,3gp,3g2,mj2"),
+    "audio/ogg": (".ogg", "ogg"),
+    "audio/wav": (".wav", "wav"),
+    "audio/webm": (".webm", "matroska,webm"),
+    "audio/x-m4a": (".m4a", "mov,mp4,m4a,3gp,3g2,mj2"),
+    "audio/x-wav": (".wav", "wav"),
 }
 
 
@@ -52,6 +56,22 @@ class MediaLimits:
     max_duration_seconds: float = 30.0
     normalize_timeout_seconds: float = 15.0
 
+    def __post_init__(self) -> None:
+        if type(self.max_input_bytes) is not int or self.max_input_bytes <= 0:
+            raise ValueError("MEDIA_MAX_INPUT_BYTES must be a positive integer")
+        if type(self.max_output_bytes) is not int or self.max_output_bytes <= 0:
+            raise ValueError("MAX_MP3_BYTES must be a positive integer")
+        for name, value in (
+            ("MEDIA_MAX_DURATION_SECONDS", self.max_duration_seconds),
+            ("MEDIA_NORMALIZE_TIMEOUT_SECONDS", self.normalize_timeout_seconds),
+        ):
+            try:
+                number = float(value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"{name} must be a positive finite number") from exc
+            if not math.isfinite(number) or number <= 0:
+                raise ValueError(f"{name} must be a positive finite number")
+
     @classmethod
     def from_env(cls) -> "MediaLimits":
         return cls(
@@ -77,9 +97,12 @@ class AudioMediaNormalizer:
 
     async def normalize(self, payload: bytes, media_type: str) -> EncodedAudio:
         canonical = canonical_media_type(media_type)
-        suffix = SUPPORTED_MEDIA_TYPES.get(canonical)
-        if suffix is None:
-            raise UnsupportedMediaType(f"unsupported audio content type: {canonical or 'missing'}")
+        media_format = SUPPORTED_MEDIA_TYPES.get(canonical)
+        if media_format is None:
+            raise UnsupportedMediaType(
+                f"unsupported audio content type: {canonical or 'missing'}"
+            )
+        suffix, demuxer = media_format
         if not payload:
             raise InvalidMedia("media payload cannot be empty")
         if len(payload) > self.limits.max_input_bytes:
@@ -92,7 +115,7 @@ class AudioMediaNormalizer:
         path = Path(raw_path)
         try:
             await asyncio.to_thread(path.write_bytes, payload)
-            duration = await self._probe_duration(path)
+            duration = await self._probe_duration(path, demuxer)
             if duration <= 0 or not math.isfinite(duration):
                 raise InvalidMedia("media duration is invalid")
             if duration > self.limits.max_duration_seconds:
@@ -109,10 +132,14 @@ class AudioMediaNormalizer:
                 "error",
                 "-protocol_whitelist",
                 "file,pipe",
+                "-f",
+                demuxer,
                 "-i",
                 str(path),
                 "-map",
                 "0:a:0",
+                "-map_metadata",
+                "-1",
                 "-vn",
                 "-ac",
                 "1",
@@ -122,6 +149,11 @@ class AudioMediaNormalizer:
                 "libmp3lame",
                 "-b:a",
                 "64k",
+                # Also cap decoder output even after the independent ffprobe
+                # duration gate, so malformed duration metadata cannot create an
+                # unbounded in-memory encode before the final byte-size check.
+                "-t",
+                f"{self.limits.max_duration_seconds:g}",
                 "-f",
                 "mp3",
                 "pipe:1",
@@ -138,20 +170,23 @@ class AudioMediaNormalizer:
         finally:
             await asyncio.to_thread(path.unlink, missing_ok=True)
 
-    async def _probe_duration(self, path: Path) -> float:
+    async def _probe_duration(self, path: Path, demuxer: str) -> float:
         output = await self._run(
             "ffprobe",
             "-v",
             "error",
             "-protocol_whitelist",
             "file,pipe",
+            "-f",
+            demuxer,
+            "-i",
+            str(path),
             "-select_streams",
             "a:0",
             "-show_entries",
             "stream=codec_type,duration:format=duration",
             "-of",
             "json",
-            str(path),
         )
         try:
             document = json.loads(output.decode("utf-8"))
