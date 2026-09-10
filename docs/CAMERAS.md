@@ -37,16 +37,14 @@ Before configuring a camera, have:
 
 Camera support requires the backend and Home Assistant custom integration from the same `v2.2.0-beta.3` release.
 
-For a source-built backend:
+For a source-built backend, select the published prerelease before changing configuration:
 
 ```bash
 git fetch --tags
 git checkout v2.2.0-beta.3
-export GIT_SHA="$(git rev-parse HEAD)"
-docker compose up -d --build
 ```
 
-`GET /version` should report semantic version `2.2.0-beta.3`. When built as above, `git_sha` should match the checked-out tag commit.
+Do not start the new backend yet; configure and verify the intended camera profile first, then recreate it in Step 5 with exact build provenance.
 
 If Home Assistant is installed, select the same prerelease in HACS and reload/restart the integration as required. Do not mix a stable HA component with a prerelease backend or vice versa.
 
@@ -101,7 +99,7 @@ Do not copy authentication cookies, signed talkback URLs, controller credentials
 
 ## 3. Configure the camera target
 
-Add only the intended camera IDs to `.env`.
+Add only the intended camera IDs to `.env`. Keep your existing working Piper or Edge TTS configuration enabled; the camera path consumes the same synthesized MP3 input as other text announcements.
 
 ### Physically validated G3 Instant profile
 
@@ -147,7 +145,7 @@ Cameras never join the implicit `default` target. They must be addressed by thei
 
 ## 5. Recreate and verify without playing audio
 
-Recreate the backend after changing topology or experimental profile configuration:
+Recreate the backend after changing topology or experimental profile configuration, embedding the checked-out source revision in the image:
 
 ```bash
 export GIT_SHA="$(git rev-parse HEAD)"
@@ -165,6 +163,8 @@ curl -fsS "$ANNOUNCER_URL/health"
 curl -fsS "$ANNOUNCER_URL/version"
 curl -fsS "${AUTH[@]}" "$ANNOUNCER_URL/targets"
 ```
+
+`GET /version` should report semantic version `2.2.0-beta.3`. When built as above, `git_sha` should match `git rev-parse HEAD` for the checked-out tag.
 
 Expected camera states:
 
