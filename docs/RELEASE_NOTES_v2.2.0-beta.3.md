@@ -30,7 +30,7 @@ A non-validated model admitted only by the explicit protocol allowlist reports:
 compatibility=experimental_opt_in
 ```
 
-Protocol similarity is not physical validation. The candidate does not add the G4 Instant to the physically validated model table and must not claim support for every UniFi camera.
+Protocol similarity is not physical validation. The published prerelease does not add the G4 Instant to the physically validated model table and must not claim support for every UniFi camera.
 
 ## Read-only G4 Instant discovery
 

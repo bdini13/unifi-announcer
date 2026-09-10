@@ -282,6 +282,7 @@ def test_beta3_candidate_docs_preserve_opt_in_and_physical_gate():
     assert "v2.2.0-beta.3 candidate notes" not in readme
     assert "v2.2.0-beta.3 G4 Instant validation plan" not in readme
     assert "Example beta.3 candidate opt-in" not in env_example
+    assert "The candidate does not add the G4 Instant" not in notes
     assert "no G4 audio has been played" not in readme
     assert "Until that gate is completed" not in notes
     assert "PARTIAL PHYSICAL VALIDATION" not in checklist
