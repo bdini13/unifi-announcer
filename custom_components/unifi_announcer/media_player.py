@@ -1,6 +1,7 @@
-"""Honest media_player targets for text and existing presets."""
+"""Announcement media_player targets for text, presets, and HA media sources."""
 from __future__ import annotations
 
+from homeassistant.components import media_source
 from homeassistant.components.media_player import MediaPlayerEntity, MediaPlayerEntityFeature
 from homeassistant.const import STATE_IDLE
 from homeassistant.exceptions import HomeAssistantError
@@ -11,6 +12,7 @@ from .entity import (
     configured_announcement_targets,
     target_supports,
 )
+from .media import async_resolve_media_bytes
 
 
 async def async_setup_entry(hass, entry, async_add_entities) -> None:
@@ -25,7 +27,7 @@ async def async_setup_entry(hass, entry, async_add_entities) -> None:
 
 
 class UniFiAnnouncerMediaPlayer(UniFiAnnouncerEntity, MediaPlayerEntity):
-    """Announcement target; not a streaming transport."""
+    """Announcement target; media is bounded and forwarded, never streamed."""
 
     _attr_supported_features = MediaPlayerEntityFeature.PLAY_MEDIA
     _attr_state = STATE_IDLE
@@ -72,12 +74,23 @@ class UniFiAnnouncerMediaPlayer(UniFiAnnouncerEntity, MediaPlayerEntity):
                 result = await self.runtime.client.async_play_preset(
                     media_id, target=self.target
                 )
+            elif media_source.is_media_source_id(media_id):
+                if not self.available:
+                    self.runtime.record_playback_result(self.target, "failed")
+                    raise HomeAssistantError(
+                        "This announcement target is currently unavailable"
+                    )
+                audio, content_type = await async_resolve_media_bytes(
+                    self.hass, media_id, self.entity_id
+                )
+                result = await self.runtime.client.async_announce_media(
+                    audio, content_type, target=self.target
+                )
             else:
                 self.runtime.record_playback_result(self.target, "failed")
                 raise HomeAssistantError(
-                    "UniFi Announcer supports media_content_type 'text' and "
-                    "'unifi-announcer/preset'. Native tts.speak/media-source support "
-                    "is planned for a later v2.2 prerelease."
+                    "UniFi Announcer supports media_content_type 'text', "
+                    "'unifi-announcer/preset', and Home Assistant media-source URIs."
                 )
         except UniFiAnnouncerError as exc:
             self.runtime.record_playback_result(self.target, "failed")
