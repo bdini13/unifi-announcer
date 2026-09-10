@@ -247,6 +247,18 @@ def _target_catalog_payload() -> dict:
     return {"schema_version": 1, "targets": targets, "groups": groups}
 
 
+def _runtime_chime_firmware() -> dict[str, str]:
+    """Return only firmware already observed by existing direct-device preflight."""
+    observed: dict[str, str] = {}
+    for name, runtime in core.chime_runtimes.items():
+        direct_client = getattr(runtime, "direct_client", None)
+        capabilities = getattr(direct_client, "capabilities", None)
+        firmware = getattr(capabilities, "firmware", None)
+        if isinstance(firmware, str) and 0 < len(firmware) <= 64:
+            observed[name] = firmware
+    return observed
+
+
 async def health_check(_request) -> JSONResponse:
     """Return coarse readiness without leaking detailed device/cache state."""
     payload = dict(core.app.state.services.health.snapshot())
@@ -331,6 +343,7 @@ async def support_bundle(request) -> JSONResponse:
         cache_stats=tts_cache.stats(),
         metrics=core.metrics.snapshot(),
         media_limits=media_ingress.normalizer.limits,
+        runtime_firmware=_runtime_chime_firmware(),
     )
     return JSONResponse(
         bundle,
