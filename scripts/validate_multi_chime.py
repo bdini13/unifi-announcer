@@ -128,13 +128,23 @@ async def _announce(
     }
 
 
+async def _announce_after(
+    delay: float,
+    client: httpx.AsyncClient,
+    phase: str,
+    target_alias: str,
+    target: str,
+    text: str,
+) -> dict[str, Any]:
+    """Stagger one concurrent submission enough to make enqueue order explicit."""
+    await asyncio.sleep(delay)
+    return await _announce(client, phase, target_alias, target, text)
+
+
 def _require_played(result: dict[str, Any]) -> None:
-    if result["http_status"] not in {200, 207} or result["disposition"] not in {
-        "played",
-        "partial",
-    }:
+    if result["http_status"] != 200 or result["disposition"] != "played":
         raise RuntimeError(
-            f"phase {result['phase']} did not produce a playable disposition: "
+            f"phase {result['phase']} did not fully play: "
             f"HTTP {result['http_status']} / {result['disposition']}"
         )
 
@@ -198,9 +208,8 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
             _require_played(result)
         await asyncio.sleep(args.pause)
 
-        # Same-target requests are deliberately submitted together. The existing
-        # per-target queue must serialize them; the human should hear first then
-        # second, never overlapping or stale/cross-request content.
+        # Same-target requests overlap in-flight, but the second enqueue is
+        # deliberately delayed 50 ms so the acoustic order is deterministic.
         same_target = await asyncio.gather(
             _announce(
                 client,
@@ -209,7 +218,8 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                 args.target_a,
                 f"Serialize first {suffix}",
             ),
-            _announce(
+            _announce_after(
+                0.05,
                 client,
                 "same_target_serialized_second",
                 "target_a",
