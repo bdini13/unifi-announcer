@@ -249,6 +249,7 @@ def test_beta3_candidate_docs_preserve_opt_in_and_physical_gate():
     roadmap = Path("ROADMAP.md").read_text()
     compatibility = Path("docs/COMPATIBILITY.md").read_text()
     ha_docs = Path("docs/HOME_ASSISTANT.md").read_text()
+    post_release = Path("docs/POST_RELEASE.md").read_text()
 
     assert "**Prerelease:** `v2.2.0-beta.3`" in readme
     assert "**Previous prerelease:** `v2.2.0-beta.2`" in readme
@@ -270,6 +271,12 @@ def test_beta3_candidate_docs_preserve_opt_in_and_physical_gate():
     assert "Draft beta.3" not in compatibility
     assert "Draft beta.3" not in ha_docs
     assert "latest published camera prerelease" not in notes
+    assert "Current published prerelease: **v2.2.0-beta.2**" not in roadmap
+    assert "next representative target is an opt-in G4 Instant" not in roadmap
+    assert "`v2.2.0-beta.2` is the current published prerelease" not in compatibility
+    assert "`v2.2.0-beta.3` is the current experimental camera-speaker release" in post_release
+    assert "`v2.2.0-beta.2` is the current experimental camera-speaker release" not in post_release
+    assert "Candidate-validation deployed prerelease rollback target at that time" in validation
     assert "no G4 audio has been played" not in readme
     assert "Until that gate is completed" not in notes
     assert "PARTIAL PHYSICAL VALIDATION" not in checklist

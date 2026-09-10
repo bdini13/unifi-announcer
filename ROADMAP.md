@@ -28,7 +28,7 @@ The next development work is ordered by user value and available validation hard
 
 ### 1. Camera-speaker TTS — published experimental prerelease
 
-Current published prerelease: **v2.2.0-beta.2**. Stable `v2.1.8` remains the recommended release. Beta.2 adds exact model/profile gating, prepared-session revalidation, per-camera serialization, dynamic availability recovery, and strict group validation without broadening the validated camera boundary.
+Current published prerelease: **v2.2.0-beta.3**. Stable `v2.1.8` remains the recommended release. Beta.3 retains beta.2's exact model/profile hardening and adds an empty-by-default exact protocol-profile opt-in without broadening the established physically validated model table.
 
 The integrated path has been physically validated on one **UVC G3 Instant** using the exact **AAC-LC / 22.05 kHz / mono / 16-bit `serverudp`** talkback profile. Compatibility is evidence-based rather than inferred from generic `hasSpeaker` or AAC metadata.
 
@@ -42,7 +42,7 @@ Current compatibility-expansion priorities:
 - preserve shared dispatcher, queueing, quiet-hours, priority, dedupe, and mixed-group semantics;
 - keep camera volume device-managed and continue to reject preset/default/buzzer and unvalidated Opus/RTP paths.
 
-Additional camera models enter the compatibility table only after exact integrated-path audible validation and regression coverage. The next representative target is an opt-in G4 Instant profile; success on that device must not be generalized to every UniFi camera. A metadata match alone is not sufficient.
+Additional camera models enter the established compatibility table only after exact integrated-path audible validation and regression coverage. The representative G4 Instant exact-profile experiment is complete; its success must not be generalized to every G4 or UniFi camera. Future targets still require their own evidence, and a metadata match alone is not sufficient.
 
 Published prerelease `v2.2.0-beta.3` adds an empty-by-default, exact protocol-profile allowlist for additional-camera experiments. Normal speech, repeat-times-two, rapid serialization, camera-reboot recovery, and post-Announcer-restart playback passed on one representative G4 Instant. An initially uncertain restart observation triggered a fail-closed beta.2 rollback; a later explicitly approved retry on the same immutable candidate was heard clearly once at confirmed device volume `100`. The tagged release was subsequently deployed by immutable digest with exact source/OCI/runtime provenance and clean silent verification. This validates only that representative exact profile and does not generalize to other G4 or camera models or promote the prerelease to stable.
 

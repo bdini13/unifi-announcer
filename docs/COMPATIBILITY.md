@@ -55,7 +55,7 @@ If boot continuity is missing, malformed, or outside the configured tolerance, r
 
 ## Experimental camera-speaker compatibility boundary
 
-`v2.2.0-beta.2` is the current published prerelease. The integrated camera path was physically validated on one **UVC G3 Instant**. Production camera playback is therefore evidence-gated to the exact observed profile:
+`v2.2.0-beta.3` is the current published prerelease. The established integrated camera path was physically validated on one **UVC G3 Instant**. Model-table playback is therefore evidence-gated to the exact observed profile:
 
 ```text
 model: UVC G3 Instant
