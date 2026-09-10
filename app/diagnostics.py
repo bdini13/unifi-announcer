@@ -86,14 +86,38 @@ def _safe_counters(metrics: Mapping[str, Any]) -> dict[str, int | float]:
     return result
 
 
+def _normalize_firmware(value: str) -> str:
+    return value.strip().lower().removeprefix("v")
+
+
+def _firmware_evidence(
+    firmware: str, tested_versions: list[str] | None
+) -> str:
+    """Classify only exact physical evidence; never infer from version order."""
+    if not firmware or firmware == "unknown":
+        return "unknown"
+    tested = {
+        _normalize_firmware(version)
+        for version in (tested_versions or [])
+        if isinstance(version, str)
+    }
+    if _normalize_firmware(firmware) in tested:
+        return "physically_tested_exact"
+    return "not_physically_tested_exact"
+
+
 def _target_aliases(
     target_catalog: Mapping[str, Any],
+    *,
+    runtime_firmware: Mapping[str, str] | None = None,
+    tested_chime_firmware: list[str] | None = None,
 ) -> tuple[dict[str, str], list[dict[str, Any]]]:
     aliases: dict[str, str] = {}
     result = []
     raw_targets = target_catalog.get("targets")
     if not isinstance(raw_targets, list):
         return aliases, result
+    runtime_firmware = runtime_firmware or {}
 
     for index, item in enumerate(raw_targets, 1):
         if not isinstance(item, Mapping):
@@ -115,6 +139,13 @@ def _target_aliases(
                 for key, value in sorted(capabilities.items())
                 if isinstance(value, bool)
             }
+        if entry["type"] == "chime":
+            firmware = runtime_firmware.get(raw_name)
+            if isinstance(firmware, str) and 0 < len(firmware) <= 64:
+                entry["firmware"] = firmware
+                entry["firmware_evidence"] = _firmware_evidence(
+                    firmware, tested_chime_firmware
+                )
         if entry["type"] == "camera":
             status = str(item.get("status") or "unavailable")
             entry["status"] = (
@@ -307,9 +338,20 @@ def _warnings(
     if (_number(slots.get("legacy_orphans")) or 0) > 0:
         warnings.append({"code": "legacy_orphans_present", "severity": "warning"})
     for target in targets:
+        alias = str(target.get("target"))
+        if (
+            target.get("type") == "chime"
+            and target.get("firmware_evidence") == "not_physically_tested_exact"
+        ):
+            warnings.append(
+                {
+                    "code": "chime_firmware_not_physically_tested_exact",
+                    "severity": "warning",
+                    "target": alias,
+                }
+            )
         if target.get("type") != "camera":
             continue
-        alias = str(target.get("target"))
         if target.get("status") != "available":
             warnings.append(
                 {
@@ -346,9 +388,15 @@ def build_support_bundle(
     cache_stats: Mapping[str, Any],
     metrics: Mapping[str, Any],
     media_limits: Any | None = None,
+    runtime_firmware: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Build a shareable, pseudonymized support snapshot from allowlisted state."""
-    aliases, targets = _target_aliases(target_catalog)
+    tested_firmware = _safe_tested_firmware(release.get("tested_firmware"))
+    aliases, targets = _target_aliases(
+        target_catalog,
+        runtime_firmware=runtime_firmware,
+        tested_chime_firmware=tested_firmware.get("smart_chime"),
+    )
     groups = _safe_groups(target_catalog, aliases)
     safe_health = _safe_health(health)
     safe_slots = _safe_slot_state(slot_status)
@@ -364,7 +412,6 @@ def build_support_bundle(
             for name, value in sorted(protocols.items())
             if isinstance(name, str) and isinstance(value, str)
         }
-    tested_firmware = _safe_tested_firmware(release.get("tested_firmware"))
     if tested_firmware:
         safe_release["tested_firmware"] = tested_firmware
 
@@ -390,7 +437,7 @@ def build_support_bundle(
             "latency_stages": _safe_histograms(metrics),
         },
         "compatibility": {
-            "basis": "capability_state_and_physical_evidence",
+            "basis": "exact_runtime_state_and_physical_evidence",
             "warnings": _warnings(
                 release=safe_release,
                 health=safe_health,
