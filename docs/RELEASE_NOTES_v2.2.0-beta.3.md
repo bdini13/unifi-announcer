@@ -4,6 +4,8 @@
 
 Published prerelease `v2.2.0-beta.3` provides an explicitly opt-in experimental path for additional Protect camera models whose observed talkback wire profile exactly matches a supported AAC/ADTS transport. Stable `v2.1.8` remains the recommended public release; `v2.2.0-beta.2` is the previous camera prerelease.
 
+For operator setup, read-only camera/profile discovery, configuration, `/targets` verification, first playback, and Home Assistant behavior, see the [Protect camera-speaker setup guide](CAMERAS.md).
+
 ## Default-deny compatibility model
 
 `EXPERIMENTAL_CAMERA_PROFILES` is **empty by default**. Without an explicit exact profile entry, behavior is unchanged: the physically validated UVC G3 Instant model/profile remains available and an unvalidated G4 Instant remains unavailable.
