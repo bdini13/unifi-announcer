@@ -175,7 +175,7 @@ Hardening after beta.1 was released as immutable prerelease `v2.2.0-beta.2` at m
 
 Publication and deployment did not promote beta.2 to stable or expand compatibility beyond the validated G3 Instant profile.
 
-## v2.2.0-beta.3 candidate gate — PHYSICAL VALIDATION PASS
+## v2.2.0-beta.3 release gate — PASS
 
 - [x] Read-only Protect/bootstrap discovery found one connected G4 Instant with a speaker and AAC-LC / `serverudp` / 22,050 Hz / mono / 16-bit metadata.
 - [x] Discovery did not prepare a talkback session, send audio, or change Protect/camera settings.
@@ -193,7 +193,17 @@ Publication and deployment did not promote beta.2 to stable or expand compatibil
 - [x] After explicit approval, the same immutable beta.3 candidate was restored and the Announcer-only restart gate was retried once at confirmed device speaker volume `100`; the phrase was heard clearly once.
 - [x] Sanitized validation evidence is recorded without private identifiers, credentials, signed URLs, or topology.
 
-The representative exact-profile physical gate passed. This does not authorize merge, publication, stable promotion, or broad G4/generic camera compatibility; those remain separate decisions.
+The representative exact-profile physical gate passed. The separately approved merge, publication, and tagged deployment also completed; none promotes beta.3 to stable or establishes broad G4/generic camera compatibility.
+
+### Tagged release publication and deployment
+
+- [x] PR #40 was squash-merged to `main` at `76fca7f25a8f3b43e73ffd0432d97e5ec3995ce4`; trusted post-merge backend, Home Assistant, Docker-build, HACS, and Hassfest checks passed.
+- [x] Tag and GitHub prerelease `v2.2.0-beta.3` target that exact merge SHA; stable/latest guidance remains `v2.1.8`.
+- [x] The tagged source built image `sha256:46b1af0a5a96a9b93d0c08884b7f07a6a669a59ac170cc713ee2173837dc1966`; Compose pins that digest and source, OCI revision, runtime SHA, and tag agree.
+- [x] The installed Home Assistant integration's 20 release files match the tag byte-for-byte; reload required no Home Assistant restart and the version sensor reports the tagged SHA.
+- [x] Silent deployment verification passed: health OK, zero container restarts, zero relevant errors, G3/G4 entities available, all queues zero, Smart Chime slots unchanged/ready, and zero legacy orphans.
+- [x] Direct tree comparison from the physically tested candidate to the tag found no executable/configuration changes, so the approved tagged deployment required no additional audible test.
+- [x] A checksummed rollback backup of the previously healthy beta.3 candidate remains retained.
 
 ## Approval-gated candidate, publish, and deploy sequence
 

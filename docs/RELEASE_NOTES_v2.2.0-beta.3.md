@@ -1,8 +1,8 @@
-# v2.2.0-beta.3 — Opt-in protocol-profile camera compatibility candidate
+# v2.2.0-beta.3 — Opt-in protocol-profile camera compatibility prerelease
 
 ## Purpose
 
-v2.2.0-beta.3 prepares an explicitly opt-in experimental path for additional Protect camera models whose observed talkback wire profile exactly matches a supported AAC/ADTS transport. Stable `v2.1.8` remains the recommended public release, and published prerelease `v2.2.0-beta.2` remains the latest published camera prerelease. The beta.3 representative physical gate has passed, but merge, tagging, publication, and release deployment still require separate owner authorization.
+Published prerelease `v2.2.0-beta.3` provides an explicitly opt-in experimental path for additional Protect camera models whose observed talkback wire profile exactly matches a supported AAC/ADTS transport. Stable `v2.1.8` remains the recommended public release; `v2.2.0-beta.2` is the previous camera prerelease.
 
 ## Default-deny compatibility model
 
@@ -30,7 +30,7 @@ A non-validated model admitted only by the explicit protocol allowlist reports:
 compatibility=experimental_opt_in
 ```
 
-Protocol similarity is not physical validation. The candidate does not add the G4 Instant to the physically validated model table and must not claim support for every UniFi camera.
+Protocol similarity is not physical validation. The published prerelease does not add the G4 Instant to the physically validated model table and must not claim support for every UniFi camera.
 
 ## Read-only G4 Instant discovery
 
@@ -44,8 +44,8 @@ One available UVC G4 Instant was initially inspected through Protect's read-only
 - Smart Chime fixed slots and playback behavior are unchanged.
 - Home Assistant's coordinator translation retains the sanitized compatibility label from `/targets`; unsupported label values are discarded. The current MCP Chime listing does not claim camera compatibility reporting.
 
-## Completed physical gate and remaining approvals
+## Completed physical, publication, and deployment gates
 
 Automated validation proved default-deny parsing, exact matching, labeling, session checks, and regression safety. The exact frozen runtime candidate was also deployed with rollback backups and passed one-device-at-a-time physical validation on the representative G4 Instant.
 
-See `docs/validation/v2.2.0-beta.3-g4-instant-validation.md`. Physical PASS does not itself authorize marking the PR ready, merge, tagging, publication, release deployment, stable promotion, or a compatibility claim beyond the representative exact profile; each remains a separate owner decision.
+The approved PR merge, tag, and GitHub prerelease target `76fca7f25a8f3b43e73ffd0432d97e5ec3995ce4`. The tagged deployment pins image `sha256:46b1af0a5a96a9b93d0c08884b7f07a6a669a59ac170cc713ee2173837dc1966`, with matching source, OCI revision, and runtime SHA. See `docs/validation/v2.2.0-beta.3-g4-instant-validation.md`. These completed prerelease gates do not promote beta.3 to stable or extend compatibility beyond the representative exact profile.

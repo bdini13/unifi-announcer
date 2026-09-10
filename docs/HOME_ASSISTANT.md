@@ -6,7 +6,7 @@ UniFi Announcer includes a HACS-compatible custom integration under `custom_comp
 > The HACS integration is a **client for the UniFi Announcer Docker service**. Run and configure the Docker backend first; installing HACS alone does not provide Smart Chime playback or TTS.
 
 > [!WARNING]
-> Use stable `v2.1.8` for new installations unless you intentionally want to test the experimental camera-speaker prerelease. `v2.2.0-beta.2` is the current published prerelease and its camera path is physically validated only on one UVC G3 Instant with the exact AAC-LC / 22.05 kHz / mono / 16-bit `serverudp` profile. Draft beta.3 protocol-profile opt-ins remain pre-validation experiments, not compatibility claims.
+> Use stable `v2.1.8` for new installations unless you intentionally want to test the experimental camera-speaker prerelease. `v2.2.0-beta.3` is the current published prerelease. Its exact-profile opt-in passed the complete gate on one representative G4 Instant, but remains `experimental_opt_in`; this evidence is not a compatibility claim for other G4 or camera models.
 
 ## Install
 
@@ -106,7 +106,7 @@ They do not get buzzer/default/preset buttons or a preset selector. Camera volum
 
 Explicitly configured camera and mixed-group text entities are created even if a camera is temporarily unavailable during Home Assistant setup. Authenticated `/targets` polling refreshes the camera's current capability state. The same entity therefore transitions unavailable/available as the camera disconnects or reconnects instead of disappearing and requiring entity recreation.
 
-Only an exact compatibility decision can become available for announcement playback. In the published prerelease that means the physically validated UVC G3 Instant with AAC-LC / 22.05 kHz / mono / 16-bit `serverudp`. Draft beta.3 can additionally admit an exact wire profile through the empty-by-default `EXPERIMENTAL_CAMERA_PROFILES` setting; Home Assistant then receives `compatibility=experimental_opt_in`, never `physically_validated`. An unvalidated model/profile without that explicit opt-in remains visible as configured but unavailable.
+Only an exact compatibility decision can become available for announcement playback. Published beta.3 supports the physically validated UVC G3 Instant with AAC-LC / 22.05 kHz / mono / 16-bit `serverudp` and can additionally admit an exact wire profile through the empty-by-default `EXPERIMENTAL_CAMERA_PROFILES` setting. Home Assistant then receives `compatibility=experimental_opt_in`, never `physically_validated`. An unvalidated model/profile without that explicit opt-in remains unavailable.
 
 Changing `CHIMES_CONFIG`, `CAMERAS_CONFIG`, or `GROUPS_CONFIG` still changes topology and therefore requires a Home Assistant reload/restart. A transient camera reconnect does not.
 

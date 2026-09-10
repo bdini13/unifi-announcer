@@ -53,7 +53,7 @@ Typical uses include:
 | MCP server and playback tools | ✅ Stable |
 | MQTT discovery | ✅ Supported |
 | Multiple chimes and named groups | 🧪 Automated coverage; multi-device physical validation pending |
-| Protect camera-speaker TTS | 🧪 `v2.2.0-beta.2`; hardened and physically validated on one UVC G3 Instant using AAC-LC / 22.05 kHz / mono / 16-bit `serverudp` |
+| Protect camera-speaker TTS | 🧪 `v2.2.0-beta.3`; established model path validated on one UVC G3 Instant, plus exact-profile opt-in validated on one representative G4 Instant without broad compatibility claims |
 | Protect event rules | 🧪 Experimental |
 | Native HA `tts.speak` media ingestion | ⏭️ Planned for a later v2.2 prerelease |
 
@@ -392,9 +392,9 @@ Production configuration now validates every group member at startup. Unknown ta
 
 ## Experimental camera-speaker TTS
 
-`v2.2.0-beta.2` is the current **published prerelease**, not part of stable `v2.1.8`. It hardens the integrated path physically validated on one **UVC G3 Instant**. Camera compatibility is evidence-based: the current production gate accepts only the exact validated profile — **AAC-LC, 22.05 kHz, mono, 16-bit, `serverudp`**. Other camera models, sample rates, and Opus/RTP profiles remain configured/discoverable but report unavailable and fail closed until they are physically validated.
+`v2.2.0-beta.2` is the previous published prerelease, not part of stable `v2.1.8`. It hardens the integrated path physically validated on one **UVC G3 Instant**. Camera compatibility is evidence-based: the established production gate accepts only the exact validated profile — **AAC-LC, 22.05 kHz, mono, 16-bit, `serverudp`**. Other camera models, sample rates, and Opus/RTP profiles remain configured/discoverable but report unavailable and fail closed until they are physically validated or explicitly admitted by the exact-profile experimental gate below.
 
-Draft candidate `v2.2.0-beta.3` adds a second, explicitly experimental path through `EXPERIMENTAL_CAMERA_PROFILES`. The setting is empty by default and accepts only complete exact AAC/ADTS wire-profile entries. A camera admitted this way reports `experimental_opt_in`, not `physically_validated`, and must also be explicitly named in `CAMERAS_CONFIG`. The complete integrated gate passed on one representative G4 Instant with the exact observed wire profile; this narrow evidence is not generalized to other G4 or camera models and does not authorize merge or release.
+Published prerelease `v2.2.0-beta.3` adds a second, explicitly experimental path through `EXPERIMENTAL_CAMERA_PROFILES`. The setting is empty by default and accepts only complete exact AAC/ADTS wire-profile entries. A camera admitted this way reports `experimental_opt_in`, not `physically_validated`, and must also be explicitly named in `CAMERAS_CONFIG`. The complete integrated gate passed on one representative G4 Instant with the exact observed wire profile; this narrow evidence is not generalized to other G4 or camera models and does not promote beta.3 to stable.
 
 Compatible Protect cameras are explicit text-announcement targets through the controller's private talkback WebSocket:
 
@@ -601,7 +601,7 @@ See the evidence requirements in [Release checklist](docs/RELEASE_CHECKLIST.md).
 
 Development priorities after stable v2.1.8 are:
 
-1. **Camera-speaker TTS compatibility expansion** — `v2.2.0-beta.2` is published, hardened, and physically validated on one G3 Instant; additional models enter the compatibility table only after exact integrated-path validation.
+1. **Camera-speaker TTS compatibility expansion** — `v2.2.0-beta.3` is the current published prerelease, retaining the validated G3 Instant path and adding an empty-by-default exact-profile opt-in validated on one representative G4 Instant; additional models still require their own integrated evidence.
 2. **Native Home Assistant media ingestion**, including `tts.speak`, `media-source://`, and bounded binary media through the existing dispatcher.
 3. **Diagnostics and compatibility**, including redacted support bundles, stage-level latency reporting, and firmware capability warnings.
 
@@ -626,8 +626,8 @@ See the detailed [project roadmap](ROADMAP.md).
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
 - [v2.2.0-beta.2 release notes](docs/RELEASE_NOTES_v2.2.0-beta.2.md)
 - [v2.2.0-beta.2 camera hardening validation](docs/validation/v2.2.0-beta.2-camera-hardening-validation.md)
-- [v2.2.0-beta.3 candidate notes](docs/RELEASE_NOTES_v2.2.0-beta.3.md)
-- [v2.2.0-beta.3 G4 Instant validation plan](docs/validation/v2.2.0-beta.3-g4-instant-validation.md)
+- [v2.2.0-beta.3 release notes](docs/RELEASE_NOTES_v2.2.0-beta.3.md)
+- [v2.2.0-beta.3 G4 Instant validation evidence](docs/validation/v2.2.0-beta.3-g4-instant-validation.md)
 - [v2.2.0-beta.1 G3 Instant validation](docs/validation/v2.2.0-beta.1-g3-instant-camera-validation.md)
 - [v2.1.8 release notes](docs/RELEASE_NOTES_v2.1.8.md)
 - [v2.1.8 live validation](docs/validation/v2.1.8-live-latency-validation.md)
@@ -674,8 +674,8 @@ This project was developed with assistance from AI coding and research tools for
 ## Release status
 
 - **Stable:** `v2.1.8` — safe same-boot resident TTS reuse with Smart Chime reboot/reconnect invalidation
-- **Prerelease:** `v2.2.0-beta.2` — hardened experimental Protect camera-speaker TTS, physically validated on one UVC G3 Instant profile; other camera profiles remain unsupported until validated
-- **Release candidate:** `v2.2.0-beta.3` — draft exact-profile opt-in; the complete physical gate passed on one representative G4 Instant, without generalizing compatibility to other G4/camera models
+- **Prerelease:** `v2.2.0-beta.3` — published exact-profile opt-in; the complete physical gate passed on one representative G4 Instant, without generalizing compatibility to other G4/camera models
+- **Previous prerelease:** `v2.2.0-beta.2` — hardened experimental Protect camera-speaker TTS, physically validated on one UVC G3 Instant profile
 - **Planned after beta.3:** native Home Assistant media ingestion and expanded diagnostics
 
 See [ROADMAP.md](ROADMAP.md) and the [Releases page](https://github.com/bdini13/unifi-announcer/releases).
