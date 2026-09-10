@@ -33,18 +33,24 @@ def _validated_audio_type(value: str | None) -> str:
 
 
 def _check_size(size: int) -> None:
+    if size < 0:
+        raise MediaSourceFetchError("Resolved media reported an invalid negative size")
     if size > MAX_MEDIA_BYTES:
         raise MediaSourceFetchError(
             f"Resolved media exceeds {MAX_MEDIA_BYTES} byte input limit"
         )
 
 
+def _read_bounded_file(path: Path) -> bytes:
+    """Read at most the configured ceiling plus one byte to detect growth safely."""
+    with path.open("rb") as handle:
+        return handle.read(MAX_MEDIA_BYTES + 1)
+
+
 async def _read_local_media(hass, path: Path) -> bytes:
     try:
-        size = (await hass.async_add_executor_job(path.stat)).st_size
-        _check_size(size)
-        payload = await hass.async_add_executor_job(path.read_bytes)
-    except (OSError, ValueError) as exc:
+        payload = await hass.async_add_executor_job(_read_bounded_file, path)
+    except OSError as exc:
         raise MediaSourceFetchError("Could not read resolved local media") from exc
     _check_size(len(payload))
     if not payload:
@@ -64,11 +70,12 @@ async def _download_media(hass, url: str) -> tuple[bytes, str | None]:
                 declared = response.headers.get("Content-Length")
                 if declared:
                     try:
-                        _check_size(int(declared))
+                        declared_size = int(declared)
                     except ValueError as exc:
                         raise MediaSourceFetchError(
                             "Resolved media returned an invalid Content-Length"
                         ) from exc
+                    _check_size(declared_size)
                 chunks: list[bytes] = []
                 total = 0
                 async for chunk in response.content.iter_chunked(64 * 1024):
