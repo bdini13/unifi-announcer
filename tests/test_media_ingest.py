@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 import pytest
@@ -26,8 +26,10 @@ from app.routes.media import MediaIngress
         {"max_duration_seconds": 0},
         {"max_duration_seconds": float("nan")},
         {"max_duration_seconds": float("inf")},
+        {"max_duration_seconds": "30"},
         {"normalize_timeout_seconds": 0},
         {"normalize_timeout_seconds": float("nan")},
+        {"normalize_timeout_seconds": True},
     ],
 )
 def test_media_limits_fail_closed_on_invalid_configuration(kwargs):
@@ -103,6 +105,45 @@ async def test_media_normalizer_pins_demuxer_and_converts_to_bounded_mp3():
     ]
     assert ("-t", "5") == ffmpeg[ffmpeg.index("-t"):ffmpeg.index("-t") + 2]
     assert "libmp3lame" in ffmpeg
+
+
+class _BlockingProcess:
+    def __init__(self) -> None:
+        self.returncode = None
+        self.killed = False
+        self.communicate_calls = 0
+        self.started = asyncio.Event()
+
+    async def communicate(self):
+        self.communicate_calls += 1
+        if self.killed:
+            return b"", b""
+        self.started.set()
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+    def kill(self) -> None:
+        self.killed = True
+        self.returncode = -9
+
+
+@pytest.mark.asyncio
+async def test_media_decoder_is_killed_and_reaped_when_request_is_cancelled():
+    normalizer = AudioMediaNormalizer(MediaLimits(normalize_timeout_seconds=30))
+    process = _BlockingProcess()
+
+    with patch(
+        "app.audio.media_ingest.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=process),
+    ):
+        task = asyncio.create_task(normalizer._run("ffprobe", "input"))
+        await process.started.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    assert process.killed is True
+    assert process.communicate_calls == 2
 
 
 class _FakeNormalizer:
