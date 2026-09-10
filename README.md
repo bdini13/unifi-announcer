@@ -53,7 +53,7 @@ Typical uses include:
 | MCP server and playback tools | ✅ Stable |
 | MQTT discovery | ✅ Supported |
 | Multiple chimes and named groups | 🧪 Automated coverage; multi-device physical validation pending |
-| Protect camera-speaker TTS | 🧪 `v2.2.0-beta.2`; hardened and physically validated on one UVC G3 Instant using AAC-LC / 22.05 kHz / mono / 16-bit `serverudp` |
+| Protect camera-speaker TTS | 🧪 `v2.2.0-beta.3`; established model path validated on one UVC G3 Instant, plus exact-profile opt-in validated on one representative G4 Instant without broad compatibility claims |
 | Protect event rules | 🧪 Experimental |
 | Native HA `tts.speak` media ingestion | ⏭️ Planned for a later v2.2 prerelease |
 
@@ -601,7 +601,7 @@ See the evidence requirements in [Release checklist](docs/RELEASE_CHECKLIST.md).
 
 Development priorities after stable v2.1.8 are:
 
-1. **Camera-speaker TTS compatibility expansion** — `v2.2.0-beta.2` is published, hardened, and physically validated on one G3 Instant; additional models enter the compatibility table only after exact integrated-path validation.
+1. **Camera-speaker TTS compatibility expansion** — `v2.2.0-beta.3` is the current published prerelease, retaining the validated G3 Instant path and adding an empty-by-default exact-profile opt-in validated on one representative G4 Instant; additional models still require their own integrated evidence.
 2. **Native Home Assistant media ingestion**, including `tts.speak`, `media-source://`, and bounded binary media through the existing dispatcher.
 3. **Diagnostics and compatibility**, including redacted support bundles, stage-level latency reporting, and firmware capability warnings.
 
@@ -626,8 +626,8 @@ See the detailed [project roadmap](ROADMAP.md).
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
 - [v2.2.0-beta.2 release notes](docs/RELEASE_NOTES_v2.2.0-beta.2.md)
 - [v2.2.0-beta.2 camera hardening validation](docs/validation/v2.2.0-beta.2-camera-hardening-validation.md)
-- [v2.2.0-beta.3 candidate notes](docs/RELEASE_NOTES_v2.2.0-beta.3.md)
-- [v2.2.0-beta.3 G4 Instant validation plan](docs/validation/v2.2.0-beta.3-g4-instant-validation.md)
+- [v2.2.0-beta.3 release notes](docs/RELEASE_NOTES_v2.2.0-beta.3.md)
+- [v2.2.0-beta.3 G4 Instant validation evidence](docs/validation/v2.2.0-beta.3-g4-instant-validation.md)
 - [v2.2.0-beta.1 G3 Instant validation](docs/validation/v2.2.0-beta.1-g3-instant-camera-validation.md)
 - [v2.1.8 release notes](docs/RELEASE_NOTES_v2.1.8.md)
 - [v2.1.8 live validation](docs/validation/v2.1.8-live-latency-validation.md)
