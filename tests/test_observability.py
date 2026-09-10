@@ -16,6 +16,24 @@ def test_announcement_timing_uses_perf_counter_ns():
     assert timing.as_dict() == {"tts_ms": 3.5}
 
 
+def test_camera_preparation_timing_is_retained_and_exported():
+    timing = AnnouncementTiming()
+    timing.set("camera_prepare", 41.25)
+    timing.set("camera_play", 510.5)
+
+    assert timing.as_dict() == {
+        "camera_prepare_ms": 41.25,
+        "camera_play_ms": 510.5,
+    }
+
+    metrics = MetricsRegistry()
+    for name, value in timing.as_dict().items():
+        metrics.observe(name, value)
+    snapshot = metrics.snapshot()["histograms"]
+    assert snapshot["camera_prepare_ms"]["avg"] == 41.25
+    assert snapshot["camera_play_ms"]["avg"] == 510.5
+
+
 def test_unmeasured_stages_are_not_reported_as_zero():
     timing = AnnouncementTiming()
     timing.set("announce_total", 1.25)
@@ -29,6 +47,12 @@ def test_metrics_registry_exposes_required_histograms_and_counters():
     snapshot = metrics.snapshot()
     assert snapshot["histograms"]["announce_total_ms"]["count"] == 1
     assert snapshot["histograms"]["announce_total_ms"]["max"] == 12.5
+    for name in (
+        "announce_total_ms",
+        "camera_prepare_ms",
+        "camera_play_ms",
+    ):
+        assert name in snapshot["histograms"]
     for name in ("cache_hits", "cache_misses", "direct_fallback", "direct_401",
                  "rules_fired", "queue_deduped", "queue_dropped"):
         assert name in snapshot["counters"]
