@@ -16,7 +16,6 @@ class AnnouncementTiming:
     play_request_ms: float | None = None
     queue_wait_ms: float | None = None
     camera_prepare_ms: float | None = None
-    camera_play_ms: float | None = None
 
     def __post_init__(self) -> None:
         self._starts: dict[str, int] = {}
@@ -56,7 +55,6 @@ class MetricsRegistry:
         "slot_settle_ms",
         "slot_prepare_ms",
         "camera_prepare_ms",
-        "camera_play_ms",
     )
     COUNTERS = (
         "cache_hits",
