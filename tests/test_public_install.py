@@ -23,8 +23,9 @@ def test_readme_keeps_stable_install_and_identifies_published_beta():
     assert "img.shields.io/github/v/release/bdini13/unifi-announcer" in readme
     assert "releases/latest" in readme
     assert "**Stable:** `v2.1.8`" in readme
-    assert "**Prerelease:** `v2.2.0-beta.2`" in readme
-    assert "**Release candidate:** `v2.2.0-beta.2`" not in readme
+    assert "**Prerelease:** `v2.2.0-beta.3`" in readme
+    assert "**Previous prerelease:** `v2.2.0-beta.2`" in readme
+    assert "**Release candidate:** `v2.2.0-beta.3`" not in readme
     assert "physically validated on one UVC G3 Instant" in readme
     assert 'AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")' in readme
     assert "$UNIFI..." not in readme
@@ -245,17 +246,30 @@ def test_beta3_candidate_docs_preserve_opt_in_and_physical_gate():
         "docs/validation/v2.2.0-beta.3-g4-instant-validation.md"
     ).read_text()
 
-    assert "**Prerelease:** `v2.2.0-beta.2`" in readme
-    assert "**Release candidate:** `v2.2.0-beta.3`" in readme
+    roadmap = Path("ROADMAP.md").read_text()
+    compatibility = Path("docs/COMPATIBILITY.md").read_text()
+    ha_docs = Path("docs/HOME_ASSISTANT.md").read_text()
+
+    assert "**Prerelease:** `v2.2.0-beta.3`" in readme
+    assert "**Previous prerelease:** `v2.2.0-beta.2`" in readme
     assert "EXPERIMENTAL_CAMERA_PROFILES=[]" in env_example
     assert "empty by default" in notes
     assert "experimental_opt_in" in notes
+    assert "Published prerelease `v2.2.0-beta.3`" in notes
+    assert "76fca7f25a8f3b43e73ffd0432d97e5ec3995ce4" in notes
     assert "G4 Instant" in validation
     assert "RESULT: PASS" in validation
     assert "device speaker volume `100`" in validation
     assert "No automatic retry was sent" in validation
     assert "representative G4 Instant only" in validation
-    assert "does not authorize merge" in validation
+    assert "do not promote beta.3 to stable" in validation
+    assert "TAGGED RELEASE DEPLOYMENT: PASS" in validation
+    assert "sha256:46b1af0a5a96a9b93d0c08884b7f07a6a669a59ac170cc713ee2173837dc1966" in validation
+    assert "Tagged release publication and deployment" in checklist
+    assert "Draft candidate `v2.2.0-beta.3`" not in roadmap
+    assert "Draft beta.3" not in compatibility
+    assert "Draft beta.3" not in ha_docs
+    assert "latest published camera prerelease" not in notes
     assert "no G4 audio has been played" not in readme
     assert "Until that gate is completed" not in notes
     assert "PARTIAL PHYSICAL VALIDATION" not in checklist
