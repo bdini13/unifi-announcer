@@ -23,6 +23,16 @@ compatibility: physically_validated
 
 The experimental allowlist is **protocol-level, not model-level**. An entry can admit any camera that is explicitly named in `CAMERAS_CONFIG` and reports the exact same five dimensions. Keep `CAMERAS_CONFIG` narrow and add only devices you intend to test.
 
+## Prerequisites
+
+Before configuring a camera, have:
+
+- a local UniFi console account with the Protect access already required by UniFi Announcer;
+- a configured `APP_API_KEY`;
+- a working text-to-speech engine (`TTS_ENGINE=piper` or `TTS_ENGINE=edge`); `TTS_ENGINE=none` cannot produce a camera text announcement;
+- a connected Protect camera with a speaker;
+- the backend and, when used, Home Assistant integration on the same prerelease version.
+
 ## 1. Use the matching prerelease
 
 Camera support requires the backend and Home Assistant custom integration from the same `v2.2.0-beta.3` release.
@@ -201,6 +211,7 @@ See [Home Assistant integration](HOME_ASSISTANT.md) for entity and action exampl
 | Camera is present but unavailable | Confirm `CONNECTED`, `hasSpeaker=true`, and all five talkback dimensions from the read-only bootstrap inventory. |
 | G4/other model remains unavailable | This is expected without an exact `EXPERIMENTAL_CAMERA_PROFILES` match. Do not broaden the entry beyond observed values. |
 | Service fails during startup | Validate `CAMERAS_CONFIG`, `GROUPS_CONFIG`, and `EXPERIMENTAL_CAMERA_PROFILES` JSON. Experimental entries require exact keys and types. |
+| Text announcement fails before playback | Confirm `TTS_ENGINE` is `piper` or `edge` and that synthesis is healthy. |
 | HA camera entity remains unavailable after reconnect | Wait for the next coordinator `/targets` poll or reload the integration. |
 | Preset/default/buzzer/volume call fails on a camera | Expected. Camera targets currently support text and repeats only. |
 | Announcement request succeeds but sound was not heard | Treat delivery as uncertain; inspect logs/device state and do not assume an automatic retry is safe. |
