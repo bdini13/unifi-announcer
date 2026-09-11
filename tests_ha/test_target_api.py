@@ -115,3 +115,20 @@ async def test_target_catalog_does_not_hide_non_404_failures(status):
         await client.async_get_targets()
 
     assert client._request.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_media_announce_uploads_raw_audio_with_bounded_request_timeout():
+    client = _client_with_requests((200, {"disposition": "played"}))
+
+    result = await client.async_announce_media(
+        b"audio-bytes", "audio/mpeg", target="kitchen", repeat_times=2
+    )
+
+    assert result.disposition == "played"
+    call = client._request.await_args
+    assert call.args == ("POST", "/media/announce")
+    assert call.kwargs["params"] == {"target": "kitchen", "repeat_times": 2}
+    assert call.kwargs["data"] == b"audio-bytes"
+    assert call.kwargs["headers"] == {"Content-Type": "audio/mpeg"}
+    assert call.kwargs["timeout"].total == 60.0

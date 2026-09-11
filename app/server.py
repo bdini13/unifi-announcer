@@ -23,6 +23,7 @@ from app.playback.camera_hardening import (
     load_validated_groups,
 )
 from app.playback.production_slots import DynamicTtsSlotManager
+from app.routes.media import MediaIngress
 from app.version import APP_VERSION
 
 SLOT_BACKED_PRESETS = tuple(
@@ -108,6 +109,7 @@ tts_cache = BoundedTtsSynthesizer(
     max_bytes=int(os.getenv("TTS_CACHE_MAX_BYTES", str(256 * 1024 * 1024))),
     metrics=core.metrics,
 )
+media_ingress = MediaIngress(core)
 
 
 async def _ensure_capacity(snapshot, needed: int):
@@ -167,11 +169,11 @@ async def _invalidate_reconnected_chime(chime_id: str) -> None:
 
 core.events.on_chime_reconnect = _invalidate_reconnected_chime
 
-# Production uses the bounded host cache and the fixed-slot device path. Keep
-# the original synthesizer only inside tts_cache.delegate; every runtime caller,
-# including persistent preset creation, now goes through the bounded wrapper.
+# Production uses the bounded host cache and the fixed-slot device path. Normal
+# text still delegates to the cache; task-local media ingress can substitute a
+# previously bounded/normalized MP3 while preserving the same dispatcher path.
 core.synthesize_tts_cached = tts_cache
-core.dispatcher.synthesize = tts_cache
+core.dispatcher.synthesize = media_ingress.wrap_synthesize(tts_cache)
 core.dispatcher.dynamic_slots = dynamic_slots
 
 
@@ -184,6 +186,7 @@ core.dispatcher.synthesize_preset = _synthesize_preset
 setattr(core.app.state.services, "synthesize", tts_cache)
 setattr(core.app.state.services, "dynamic_slots", dynamic_slots)
 setattr(core.app.state.services, "tts_cache", tts_cache)
+setattr(core.app.state.services, "media_ingress", media_ingress)
 
 
 async def _refresh_camera_capabilities() -> None:
@@ -367,6 +370,7 @@ routes = [
     Route("/presets", filtered_presets, methods=["GET"]),
     Route("/tts/slots/status", slot_status, methods=["GET"]),
     Route("/tts/cache/status", cache_status, methods=["GET"]),
+    Route("/media/announce", media_ingress.endpoint, methods=["POST"]),
 ]
 if _mcp_runtime is not None:
     routes.append(Mount("/mcp", app=_mcp_runtime.app))
