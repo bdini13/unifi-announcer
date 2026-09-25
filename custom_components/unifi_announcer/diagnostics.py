@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from homeassistant.components.diagnostics import async_redact_data
 
+from .api import UniFiAnnouncerError
 from .const import INTEGRATION_VERSION
 
 TO_REDACT = {"api_key", "password", "token", "authorization"}
@@ -12,11 +13,22 @@ async def async_get_config_entry_diagnostics(hass, entry) -> dict:
     runtime = entry.runtime_data
     data = runtime.coordinator.data or {}
     safe_entry = async_redact_data(dict(entry.data), TO_REDACT)
+    try:
+        backend_support = await runtime.client.async_get_support_bundle()
+    except UniFiAnnouncerError as exc:
+        # Do not copy exception text into a shareable diagnostic record. A
+        # transport/server exception may contain private addresses or details.
+        backend_support = {
+            "available": False,
+            "error_type": type(exc).__name__,
+        }
+
     return {
         "config_entry": safe_entry,
         "options": dict(entry.options),
         "integration_version": INTEGRATION_VERSION,
         "announcer_version": runtime.version,
+        "backend_support": backend_support,
         "health": data.get("health", {}),
         "chimes": [
             {

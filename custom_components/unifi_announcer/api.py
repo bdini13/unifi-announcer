@@ -122,6 +122,18 @@ class UniFiAnnouncerClient:
             raise InvalidResponse("Invalid version response")
         return data
 
+    async def async_get_support_bundle(self) -> dict[str, Any]:
+        """Read the backend's pseudonymized diagnostic snapshot."""
+        status, data = await self._request("GET", "/diagnostics/support")
+        if (
+            status != 200
+            or not isinstance(data, dict)
+            or data.get("schema_version") != 1
+            or not isinstance(data.get("redaction"), dict)
+        ):
+            raise InvalidResponse("Invalid support bundle response")
+        return data
+
     async def _async_get_legacy_chimes(self) -> dict[str, Any]:
         status, data = await self._request("GET", "/chimes")
         if status != 200 or not isinstance(data, dict):
