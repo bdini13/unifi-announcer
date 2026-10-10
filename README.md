@@ -18,6 +18,10 @@ For dynamic speech, UniFi Announcer synthesizes audio with Piper or Edge TTS, st
 > [!CAUTION]
 > Arbitrary TTS requires the Smart Chime's unique device password through `CHIME_DIRECT_PASSWORD` or `CHIME_CREDENTIAL_FILE`. On validated UniFi OS `5.1.31` / Protect `7.2.105`, obtain the existing value through **Devices → Smart WiFi Chime → Settings → Manage → Manual Recovery → Reveal**. Use **Reveal**, not **Edit**; Edit changes the credential. The revealed value was physically verified with username `ubnt` against `/api/info` and returned HTTP 200. See [Smart Chime credential setup](CREDENTIALS.md). UniFi Announcer does **not** retrieve the credential automatically.
 
+## CI performance (unreleased)
+
+The CI review reduced the main reliability branch's local backend suite from 87.72 to 6.46 seconds while retaining the 100-message slot regression and both HA compatibility environments. Duplicate workflow runs and obsolete prose/implementation snapshots were removed; dependencies and Docker layers now use caches. See [CI coverage, measurements, and tradeoffs](docs/CI.md).
+
 ## Unreleased compatibility fixes
 
 This working branch restores Home Assistant 2026.3.4 registry compatibility while also supporting 2026.10.0. Separate pinned CI jobs exercise both versions. HA playback commands, including native media uploads, allow 150 seconds; polling remains 15 seconds. Media-source test setup now cleans up its patch if entity lookup fails, preventing cascading failures across the suite. These changes do not alter the previously recorded physical-validation evidence or publish a new candidate. The backend reliability work is maintained separately on `fix/non-security-reliability` and must be integrated and validated before a combined release.

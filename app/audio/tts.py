@@ -157,11 +157,6 @@ class PiperTTS:
             return "audio-stop", None
         return event.type, None
 
-    @staticmethod
-    def mock_connection_benchmark(requests: int) -> dict[str, int]:
-        """Deterministic structural benchmark; no network or sound is produced."""
-        return {"fresh_connections": requests,
-                "persistent_connections": 1 if requests else 0}
 
 
 class EncodedAudio(bytes):

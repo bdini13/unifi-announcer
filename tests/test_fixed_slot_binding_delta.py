@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 from types import SimpleNamespace
 
@@ -99,7 +100,7 @@ def target(world):
 
 
 def manager(tmp_path, world):
-    return DynamicTtsSlotManager(
+    result = DynamicTtsSlotManager(
         data_dir=tmp_path,
         list_ringtones=world.list_ringtones,
         upload_ringtone=world.upload,
@@ -113,6 +114,16 @@ def manager(tmp_path, world):
         provisioning_timeout_s=0.05,
         poll_interval_s=0.005,
     )
+
+    # Exercise the real polling/deadline logic without waiting for hardware.
+    elapsed = 0.0
+    async def poll():
+        nonlocal elapsed
+        elapsed += result.poll_interval_s
+        await asyncio.sleep(0)
+    result._loop_time = lambda: elapsed
+    result._sleep_poll = poll
+    return result
 
 
 async def bootstrap(number):

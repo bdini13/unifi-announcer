@@ -125,8 +125,3 @@ async def test_piper_timeout_also_bounds_a_hung_connect():
 
 def _adapter(event):
     return event.type, event.payload
-
-
-def test_mocked_persistent_benchmark_uses_fewer_connections():
-    assert PiperTTS.mock_connection_benchmark(10) == {"fresh_connections": 10,
-                                                     "persistent_connections": 1}

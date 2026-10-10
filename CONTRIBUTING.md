@@ -32,7 +32,7 @@ Core/runtime checks:
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
-.venv/bin/python -W error -m pytest -q tests
+.venv/bin/python -W error -m pytest -q tests --durations=20
 .venv/bin/ruff check .
 .venv/bin/python -m compileall -q app custom_components
 docker compose config
@@ -43,12 +43,18 @@ Home Assistant checks use a separate environment:
 ```bash
 python3.14 -m venv .venv-ha
 .venv-ha/bin/pip install -r requirements-ha-test.txt
-.venv-ha/bin/python -m pytest -q tests_ha
+.venv-ha/bin/python -m pytest -q tests_ha --durations=10
 ```
 
 Repeat HA tests in a separate Python 3.14 environment using `requirements-ha-current-test.txt` for HA 2026.10.0. The minimum environment remains pinned to 2026.3.4; both CI lanes must pass.
 
 CI additionally builds the Docker image, validates HACS metadata, and runs Hassfest.
+Both workflows run for PRs, `main`, version tags, and manual dispatch; branch pushes
+without a PR do not start duplicate CI. Scheduled HA validation is weekly.
+The [CI review and performance guide](docs/CI.md) records coverage decisions,
+caching, timings, and how to profile regressions. Test fake devices without
+production settle waits; retain focused delay/deadline tests. Prefer behavioral
+assertions over frozen release prose or implementation-identity assertions.
 
 ## Pull requests
 

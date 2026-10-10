@@ -112,6 +112,7 @@ def make_manager(tmp_path, world, metrics=None):
         reuse_margin_ms=0,
         provisioning_timeout_s=0.2,
         poll_interval_s=0.01,
+        device_settle_delay_s=0,  # FakeDirect updates storage synchronously.
     )
 
 
@@ -517,3 +518,20 @@ async def test_dispatcher_with_slot_manager_never_calls_legacy_upload():
     protect.play.assert_awaited_once()
     assert protect.play.await_args.args[0] == "persistent-slot-id"
     assert lease.released is True
+
+
+@pytest.mark.asyncio
+async def test_prepare_observes_configured_device_settle_delay(tmp_path, monkeypatch):
+    world = FakeProtectWorld()
+    target = make_target(world)
+    manager = make_manager(tmp_path, world)
+    manager.device_settle_delay_s = 0.75
+    await manager.startup([target], bootstrap_audio_factory=bootstrap)
+    sleep = AsyncMock()
+    # Scope the stub to this one synchronous-fake preparation. Real deadline and
+    # cancellation tests elsewhere continue to use the event loop's real clock.
+    with monkeypatch.context() as patch:
+        patch.setattr("app.playback.dynamic_slots.asyncio.sleep", sleep)
+        lease = await manager.prepare(b"new-audio", [target])
+    sleep.assert_awaited_once_with(0.75)
+    await lease.release_now()
