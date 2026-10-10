@@ -1,0 +1,9 @@
+# Only runtime build inputs belong in the Docker context.
+**
+!Dockerfile
+!.dockerignore
+!requirements.txt
+!app/
+!app/**
+**/__pycache__/
+**/*.pyc

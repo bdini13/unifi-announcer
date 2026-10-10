@@ -57,6 +57,10 @@ Typical uses include:
 | Protect event rules | 🧪 Experimental |
 | Native HA `tts.speak` media ingestion | ⏭️ Planned for a later v2.2 prerelease |
 
+## CI performance (unreleased)
+
+The CI review reduced the main reliability branch's local backend suite from 87.72 to 6.46 seconds while retaining the 100-message slot regression and both HA compatibility environments. Duplicate workflow runs and obsolete prose/implementation snapshots were removed; dependencies and Docker layers now use caches. See [CI coverage, measurements, and tradeoffs](docs/CI.md).
+
 ## Unreleased reliability fixes
 
 The working branch adds the following changes; these are **not included in the published tags** above:

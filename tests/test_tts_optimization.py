@@ -154,11 +154,6 @@ async def test_cancelled_synthesis_discards_stream_before_next_phrase():
     await tts.stop()
 
 
-def test_mocked_persistent_benchmark_uses_fewer_connections():
-    assert PiperTTS.mock_connection_benchmark(10) == {"fresh_connections": 10,
-                                                     "persistent_connections": 1}
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize("voice,expected", [("default", None), ("en_US-lessac-medium", {"name": "en_US-lessac-medium"})])
 async def test_piper_sends_selected_voice(voice, expected):

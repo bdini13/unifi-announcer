@@ -20,7 +20,7 @@ Back up `.env` and the entire mounted `/data` directory before testing. Retain t
 
 No release tag, running deployment, or published version is changed by this working branch. Security vulnerability remediation is outside this change set.
 
-## Local validation — 2026-10-10
+## Reliability validation before CI cleanup — 2026-10-10
 
 - Main reliability branch: 453 backend tests passed with interpreter warnings treated as errors.
 - HA integration: 23 tests passed on each of HA 2026.3.4 and 2026.10.0.
@@ -28,3 +28,5 @@ No release tag, running deployment, or published version is changed by this work
 - Ruff, Python compilation, JSON metadata, workflow YAML parsing, and whitespace checks passed.
 - FFmpeg 7.1 encoded a synthetic two-second tone at 0.5×, 1×, and 2× into approximately 4.05, 2.06, and 1.07 seconds respectively; no speaker playback was involved.
 - Docker/Compose, HACS/Hassfest CI execution, and physical device validation remain pending. No live deployment or GitHub branch was modified.
+
+The subsequent [CI review](CI.md) removed redundant tests and eliminated fake-device waits; the current main backend suite has 436 tests and runs in approximately 6.5 seconds.
