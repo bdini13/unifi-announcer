@@ -57,6 +57,20 @@ Typical uses include:
 | Protect event rules | 🧪 Experimental |
 | Native HA `tts.speak` media ingestion | ⏭️ Planned for a later v2.2 prerelease |
 
+## Unreleased reliability fixes
+
+The working branch adds the following changes; these are **not included in the published tags** above:
+
+- Cancelled Piper requests discard their connection so the next request cannot receive stale speech. Saved presets play their uploaded audio; only configured virtual presets synthesize their names.
+- Bounded, per-target priority admission and dedupe run before synthesis or slot preparation. Chimes remain reserved through estimated sound duration, repeats, and a guard margin. Camera groups acquire locks consistently and lock waits have a deadline.
+- Commands have a 120-second backend deadline, including queue wait and preparation. HA playback waits up to 150 seconds; status polling keeps its 15-second timeout.
+- Failed slot startup retries every 30 seconds while preserving all ownership checks. `/health` reports degraded readiness until configured Chime slots recover.
+- Each additional Chime can reference its own password environment variable or credential file. Invalid and duplicate Chime definitions fail startup.
+- HA registry handling supports both 2026.3.4 and 2026.10.0, covered by separate CI jobs.
+- Piper voice selection and speech rate now affect generated audio. Slot-state persistence flushes file contents and directory updates before dependent device writes.
+
+See [playback arbitration](docs/ARBITRATION.md), [configuration](.env.example), and [unreleased validation and rollback notes](docs/RELEASE_NOTES_UNRELEASED.md). Playback changes still need physical validation before release.
+
 ## How playback works
 
 ```text
@@ -71,6 +85,7 @@ Dynamic text follows this path:
 
 ```text
 text
+  -> bounded priority admission + per-target dedupe
   -> Piper or Edge TTS
   -> bounded content-addressed MP3 cache on the Announcer host
   -> validate Smart Chime identity + current boot epoch
@@ -380,11 +395,14 @@ The MCP surface deliberately excludes credential retrieval, raw Protect administ
 
 ```env
 CHIMES_CONFIG='[
-  {"name":"kitchen","id":"<kitchen-chime-id>","direct_ip":"<optional-chime-ip>"},
-  {"name":"upstairs","id":"<upstairs-chime-id>"}
+  {"name":"kitchen","id":"<kitchen-chime-id>","direct_ip":"<optional-chime-ip>","password_env":"KITCHEN_CHIME_PASSWORD"},
+  {"name":"upstairs","id":"<upstairs-chime-id>","credential_file":"/data/credentials/upstairs"}
 ]'
+KITCHEN_CHIME_PASSWORD=<kitchen-device-password>
 GROUPS_CONFIG='{"downstairs":["kitchen"],"whole_house":["kitchen","upstairs"]}'
 ```
+
+The per-target credential fields require the unreleased changes above. `password_env` names an environment variable supplied to the container; `credential_file` must be readable inside the container. Omit both to use the existing global credential provider. `CHIME_ID` defines the reserved `default` target; names and physical IDs must be unique.
 
 Then target `whole_house` from REST/HA/MCP. Each physical Chime has its own bounded queue and group members execute concurrently. Content reuse is accepted only when every requested target has matching trusted content; otherwise the required targets are safely rewritten. Multi-Chime behavior has automated coverage but still requires independent physical multi-device validation.
 

@@ -127,6 +127,73 @@ def _adapter(event):
     return event.type, event.payload
 
 
+@pytest.mark.asyncio
+async def test_cancelled_synthesis_discards_stream_before_next_phrase():
+    reading = asyncio.Event()
+
+    class CancelledSession(FakeSession):
+        async def read_event(self):
+            reading.set()
+            await asyncio.Event().wait()
+
+    old = CancelledSession([])
+    fresh = FakeSession([
+        Event("audio-chunk", {"audio": b"new phrase"}), Event("audio-stop"),
+    ])
+    sessions = iter([old, fresh])
+    tts = PiperTTS("piper:10200", client_factory=lambda _: next(sessions),
+                   event_adapter=_adapter)
+    request = asyncio.create_task(tts.synthesize_pcm("cancelled phrase"))
+    await reading.wait()
+    request.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await request
+    assert old.closed == 1
+    assert tts._client is None
+    assert (await tts.synthesize_pcm("new phrase")).pcm == b"new phrase"
+    await tts.stop()
+
+
 def test_mocked_persistent_benchmark_uses_fewer_connections():
     assert PiperTTS.mock_connection_benchmark(10) == {"fresh_connections": 10,
                                                      "persistent_connections": 1}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("voice,expected", [("default", None), ("en_US-lessac-medium", {"name": "en_US-lessac-medium"})])
+async def test_piper_sends_selected_voice(voice, expected):
+    from unittest.mock import AsyncMock
+    session = FakeSession([Event("audio-stop")])
+    session.write_event = AsyncMock()
+    tts = PiperTTS("piper:10200", client_factory=lambda _: session,
+                   event_adapter=_adapter, voice=voice)
+    await tts.synthesize_pcm("hello")
+    event = session.write_event.await_args.args[0]
+    assert event.data.get("voice") == expected
+    await tts.stop()
+
+
+def test_piper_encoder_applies_speed_multiplier(main_module, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    run = Mock(return_value=SimpleNamespace(stdout=b"encoded"))
+    monkeypatch.setattr("subprocess.run", run)
+    monkeypatch.setattr(main_module, "TTS_RATE", "1.25")
+    assert main_module.subprocess_run_ffmpeg(b"wav") == b"encoded"
+    argv = run.call_args.args[0]
+    assert argv[argv.index("-af") + 1] == "atempo=1.25"
+
+
+@pytest.mark.asyncio
+async def test_edge_applies_speed_multiplier(main_module, monkeypatch):
+    from pathlib import Path
+    from unittest.mock import Mock
+    monkeypatch.setattr(main_module, "TTS_ENGINE", "edge")
+    monkeypatch.setattr(main_module, "TTS_RATE", "0.75")
+    communicate = Mock()
+    monkeypatch.setattr("edge_tts.Communicate", communicate)
+    async def save(_, path):
+        Path(path).write_bytes(b"mp3")
+    monkeypatch.setattr(main_module, "_edge_save", save)
+    assert await main_module.synthesize_tts("hello") == b"mp3"
+    assert communicate.call_args.kwargs["rate"] == "-25%"

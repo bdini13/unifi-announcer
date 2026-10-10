@@ -54,6 +54,8 @@ TTS_ENGINE = os.getenv("TTS_ENGINE", "piper")     # "piper" | "edge" | "none"
 PIPER_URL = os.getenv("PIPER_URL", "tcp://piper:10200")
 PIPER_VOICE = os.getenv("PIPER_VOICE", "default")
 TTS_RATE = os.getenv("TTS_RATE", "1.0")
+if not 0.5 <= float(TTS_RATE) <= 2.0:
+    raise RuntimeError("TTS_RATE must be a speed multiplier between 0.5 and 2.0")
 TTS_SAMPLE_RATE = int(os.getenv("TTS_SAMPLE_RATE", "22050"))
 TTS_ENCODER_PROFILE = os.getenv("TTS_ENCODER_PROFILE", "mp3-mono-64k")
 TTS_TRIM_LEADING_SILENCE = os.getenv("TTS_TRIM_LEADING_SILENCE", "false").lower() == "true"
@@ -494,13 +496,14 @@ def _make_credential_provider():
 class DirectChimeClient:
     """Talks straight to the chime hardware, bypassing the NVR relay."""
 
-    def __init__(self, *, chime_id: str = "", direct_ip: str = "") -> None:
+    def __init__(self, *, chime_id: str = "", direct_ip: str = "",
+                 credential_provider: Any = None) -> None:
         self._chime_id = chime_id or CHIME_ID
         self._base = f"https://{direct_ip}:8080" if direct_ip else ""
         self._lock = asyncio.Lock()
         # All Phase 3/4 objects resolve lazily on first use - their classes
         # are defined later in this module (import-time ordering).
-        self._credential_provider = None
+        self._credential_provider = credential_provider
         self._breaker = None
         self.capabilities = None
         self.last_401_at: Optional[str] = None
@@ -921,18 +924,45 @@ def _load_chime_runtimes() -> dict:
     runtimes = {}
     try:
         extra = json.loads(os.getenv("CHIMES_CONFIG", "[]"))
-    except (json.JSONDecodeError, TypeError):
-        extra = []
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise RuntimeError("CHIMES_CONFIG must be a JSON list") from exc
+    if not isinstance(extra, list):
+        raise RuntimeError("CHIMES_CONFIG must be a JSON list")
+    for entry in extra:
+        if not isinstance(entry, dict):
+            raise RuntimeError("CHIMES_CONFIG entries must be objects")
+        for field in ("name", "id"):
+            if not isinstance(entry.get(field), str) or not entry[field].strip():
+                raise RuntimeError(f"CHIMES_CONFIG entries require nonempty {field}")
+        if entry["name"].strip() == "default":
+            raise RuntimeError("CHIMES_CONFIG reserves default for CHIME_ID")
+        for field in ("direct_ip", "credential_file", "password_env"):
+            if field in entry and (
+                not isinstance(entry[field], str) or not entry[field].strip()
+            ):
+                raise RuntimeError(f"CHIMES_CONFIG {field} must be a nonempty string")
+        if entry.get("credential_file") and entry.get("password_env"):
+            raise RuntimeError("CHIMES_CONFIG accepts one credential source per target")
     entries = ([{"name": "default", "id": CHIME_ID,
                  "direct_ip": CHIME_DIRECT_IP}] if CHIME_ID else []) + extra
+    ids = set()
     for e in entries:
-        if e.get("id"):
-            direct_client = DirectChimeClient(
-                chime_id=e["id"], direct_ip=e.get("direct_ip", ""))
-            runtimes[e["name"]] = ChimeRuntime(
-                ChimeDescriptor(e["name"], e.get("id", ""), e.get("direct_ip", "")),
-                direct_client=direct_client, metrics=metrics,
-                max_depth=QUEUE_MAX_DEPTH)
+        name, chime_id = e["name"].strip(), e["id"].strip()
+        if name in runtimes or chime_id in ids:
+            raise RuntimeError("CHIMES_CONFIG has a duplicate target name or device id")
+        ids.add(chime_id)
+        provider = None
+        if e.get("credential_file"):
+            provider = FileCredentialProvider(e["credential_file"])
+        elif e.get("password_env"):
+            provider = StaticEnvCredentialProvider(os.getenv(e["password_env"], ""))
+        direct_client = DirectChimeClient(
+            chime_id=chime_id, direct_ip=e.get("direct_ip", ""),
+            credential_provider=provider)
+        runtimes[name] = ChimeRuntime(
+            ChimeDescriptor(name, chime_id, e.get("direct_ip", "")),
+            direct_client=direct_client, metrics=metrics,
+            max_depth=QUEUE_MAX_DEPTH)
     return runtimes
 
 
@@ -1025,7 +1055,7 @@ camera_talkback = ProtectCameraTalkback(
 track_reconciler.delete_nvr = protect_backends.ringtone.delete_ringtone
 ringtone_index.bind(protect_backends.ringtone.list_ringtones)
 from app.audio.tts import PiperTTS
-piper_tts = PiperTTS(PIPER_URL)
+piper_tts = PiperTTS(PIPER_URL, voice=PIPER_VOICE)
 
 # ---------------------------------------------------------------------------
 # TTS synthesis (latency-optimized)
@@ -1081,7 +1111,9 @@ async def synthesize_tts(text: str) -> bytes:
     if TTS_ENGINE == "edge":
         # edge-tts is a tiny CLI; import lazily so piper-only installs work
         import edge_tts
-        communicate = edge_tts.Communicate(text, EDGE_TTS_VOICE)
+        communicate = edge_tts.Communicate(
+            text, EDGE_TTS_VOICE, rate=f"{round((float(TTS_RATE) - 1) * 100):+d}%"
+        )
         out_tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
         await _edge_save(communicate, out_tmp.name)
         encoded = Path(out_tmp.name).read_bytes()
@@ -1146,9 +1178,10 @@ def subprocess_run_ffmpeg(audio_in: bytes) -> bytes:
     import subprocess
     p = subprocess.run(
         ["ffmpeg", "-hide_banner", "-loglevel", "error",
-         "-i", "pipe:0", "-codec:a", "libmp3lame", "-b:a", "64k",
+         "-i", "pipe:0", "-af", f"atempo={float(TTS_RATE):g}",
+         "-codec:a", "libmp3lame", "-b:a", "64k",
          "-ac", "1", "-ar", "22050", "-f", "mp3", "pipe:1"],
-        input=audio_in, capture_output=True, check=True)
+        input=audio_in, capture_output=True, check=True, timeout=30)
     return p.stdout
 
 
@@ -1205,6 +1238,8 @@ async def create_or_update_preset(
     # stays unknown until the storage-mapping experiment).
     rec = track_registry.get(name.lower()) or TrackRecord(name.lower(), "preset")
     rec.nvr_ringtone_id = created["id"]
+    from app.playback.dynamic_slots import estimate_mp3_duration_ms
+    rec.duration_ms = estimate_mp3_duration_ms(mp3)
     track_registry.put(rec)
     return created["id"]
 

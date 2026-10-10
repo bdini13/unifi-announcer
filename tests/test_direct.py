@@ -10,6 +10,37 @@ import respx
 from app.playback.arbitration import ChimeDescriptor, ChimeRuntime
 
 
+@pytest.mark.asyncio
+async def test_runtime_credentials_are_selected_per_target(main_module, monkeypatch, tmp_path):
+    monkeypatch.setattr(main_module, "CHIME_ID", "")
+    password_file = tmp_path / "two-password"
+    password_file.write_text("second-fixture-password")
+    monkeypatch.setenv("FIRST_CHIME_PASSWORD", "first-fixture-password")
+    monkeypatch.setenv("CHIMES_CONFIG", json.dumps([
+        {"name": "one", "id": "id-one", "password_env": "FIRST_CHIME_PASSWORD"},
+        {"name": "two", "id": "id-two", "credential_file": str(password_file)},
+    ]))
+    runtimes = main_module._load_chime_runtimes()
+    assert await runtimes["one"].direct_client.credential_provider.get() == "first-fixture-password"
+    provider = runtimes["two"].direct_client.credential_provider
+    assert await provider.get() == "second-fixture-password"
+    password_file.write_text("rotated-fixture-password")
+    assert await provider.get(force_refresh=True) == "rotated-fixture-password"
+
+
+@pytest.mark.parametrize("raw", [
+    "not-json", "{}", "[null]", '[{"name":"one"}]',
+    '[{"name":"one","id":"one"},{"name":"one","id":"two"}]',
+    '[{"name":"one","id":"same"},{"name":"two","id":"same"}]',
+    '[{"name":"default","id":"two"}]',
+    '[{"name":"one","id":"one","password_env":"ENV","credential_file":"/fixture"}]',
+])
+def test_chime_config_rejects_ambiguous_or_invalid_entries(main_module, monkeypatch, raw):
+    monkeypatch.setenv("CHIMES_CONFIG", raw)
+    with pytest.raises(RuntimeError, match="CHIMES_CONFIG"):
+        main_module._load_chime_runtimes()
+
+
 def test_runtime_registry_binds_each_direct_client_to_its_chime_id(
     main_module, monkeypatch
 ):
@@ -303,3 +334,13 @@ def test_destructive_endpoint_is_blocked_before_network(main_module):
             main_module.guard_destructive("/api/factoryResetWithoutWiFi")
 
     assert router.calls.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_missing_explicit_target_password_does_not_borrow_global(main_module, monkeypatch):
+    monkeypatch.setattr(main_module, "CHIME_ID", "")
+    monkeypatch.delenv("MISSING_CHIME_PASSWORD", raising=False)
+    monkeypatch.setenv("CHIMES_CONFIG", '[{"name":"one","id":"one","password_env":"MISSING_CHIME_PASSWORD"}]')
+    runtime = main_module._load_chime_runtimes()["one"]
+    with pytest.raises(RuntimeError, match="not configured"):
+        await runtime.direct_client.credential_provider.get()

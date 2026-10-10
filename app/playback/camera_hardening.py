@@ -326,6 +326,19 @@ class HardenedCameraTalkback:
         *,
         repeat_times: int = 1,
     ) -> _LockedPreparedCameraTalkback:
+        try:
+            async with asyncio.timeout(getattr(self.delegate, "session_timeout", 30.0)):
+                return await self._prepare(camera_id, mp3, repeat_times=repeat_times)
+        except TimeoutError:
+            raise CameraTalkbackError("camera talkback preparation timed out") from None
+
+    async def _prepare(
+        self,
+        camera_id: str,
+        mp3: bytes,
+        *,
+        repeat_times: int = 1,
+    ) -> _LockedPreparedCameraTalkback:
         lock = self._locks.setdefault(camera_id, asyncio.Lock())
         await lock.acquire()
         prepared = None

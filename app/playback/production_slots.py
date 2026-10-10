@@ -106,14 +106,10 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
             self._content_state = self._empty_content_state()
 
     def _persist_content_state(self) -> None:
-        self.content_state_path.parent.mkdir(parents=True, exist_ok=True)
+        from app.persistence import atomic_json
         self._content_state["schema_version"] = CONTENT_STATE_SCHEMA_VERSION
         self._content_state["installation_id"] = self.installation_id
-        temp = self.content_state_path.with_suffix(
-            self.content_state_path.suffix + ".tmp"
-        )
-        temp.write_text(json.dumps(self._content_state, indent=2, sort_keys=True))
-        os.replace(temp, self.content_state_path)
+        atomic_json(self.content_state_path, self._content_state)
 
     def _state_entry(self, number: int, chime_id: str) -> dict[str, Any] | None:
         slots = self._content_state.get("bindings") or {}
@@ -371,6 +367,7 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
         if not status.get("ready"):
             return self.status()
 
+        self.ready = False  # Publish readiness only after recovery is complete.
         # The strict parent startup already proved each persisted slot binding.
         # A persisted content assignment is trusted across restart only when the
         # same physical device identity is observed and registry/content records
@@ -414,6 +411,7 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
                     self._metric("tts_slot_content_restart_validations")
                 else:
                     self._metric("tts_slot_content_restart_invalidations")
+        self.ready = True
         return self.status()
 
     async def _acquire_slot_number_for_content(

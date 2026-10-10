@@ -1,0 +1,2 @@
+# Home Assistant 2026.10.0 compatibility gate.
+pytest-homeassistant-custom-component==0.13.371

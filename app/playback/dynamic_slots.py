@@ -11,7 +11,6 @@ import asyncio
 from dataclasses import asdict, dataclass, field
 import hashlib
 import json
-import os
 from pathlib import Path
 import time
 from typing import Any, Awaitable, Callable, Iterable
@@ -673,10 +672,8 @@ def _fingerprint(item: dict[str, Any]) -> tuple[str | None, int | None]:
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_suffix(path.suffix + ".tmp")
-    temp.write_text(json.dumps(payload, indent=2, sort_keys=True))
-    os.replace(temp, path)
+    from app.persistence import atomic_json
+    atomic_json(path, payload)
 
 
 def estimate_mp3_duration_ms(data: bytes) -> int:

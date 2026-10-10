@@ -73,8 +73,11 @@ class AnnouncementDispatcher:
                  ringtone_backend: Any | None = None,
                  upload_lock: asyncio.Lock | None = None,
                  dynamic_slots: Any | None = None,
-                 synthesize_preset: Callable[[str], Awaitable[bytes]] | None = None,
-                 camera_playback: Any | None = None) -> None:
+                 synthesize_preset: Callable[[str], Awaitable[bytes | None]] | None = None,
+                 camera_playback: Any | None = None,
+                 admission: Any | None = None,
+                 command_timeout: float = 120.0,
+                 playback_fallback_seconds: float = 30.0) -> None:
         self.protect = protect
         self.ringtone_backend = ringtone_backend or protect
         self.chime = chime
@@ -95,14 +98,46 @@ class AnnouncementDispatcher:
         self.dynamic_slots = dynamic_slots
         self.synthesize_preset = synthesize_preset
         self.camera_playback = camera_playback
+        self.admission = admission
+        self.command_timeout = command_timeout
+        self._active_dispatches: set[asyncio.Task] = set()
+        self._closing = False
+        self.playback_fallback_seconds = playback_fallback_seconds
         self._creation_locks: dict[str, asyncio.Lock] = {}
         self._creation_lock_users: dict[str, int] = {}
         self._upload_lock = upload_lock or asyncio.Lock()
 
+    def start(self) -> None:
+        self._closing = False
+
+    async def stop(self) -> None:
+        self._closing = True
+        tasks = self._active_dispatches - {asyncio.current_task()}
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
     async def dispatch(self, command: AnnouncementCommand) -> DispatchResult:
+        if self._closing:
+            raise RuntimeError("announcement dispatcher is stopping")
+        task = asyncio.current_task()
+        self._active_dispatches.add(task)
+        deadline = asyncio.timeout(self.command_timeout)
+        try:
+            async with deadline:
+                return await self._dispatch(command)
+        except TimeoutError:
+            if deadline.expired():
+                raise RuntimeError("announcement deadline exceeded") from None
+            raise
+        finally:
+            self._active_dispatches.discard(task)
+
+    async def _dispatch(self, command: AnnouncementCommand) -> DispatchResult:
         total_started = perf_counter_ns()
         timing = AnnouncementTiming()
         dynamic_lease = None
+        reservation = None
         prepared_camera_sessions: dict[str, Any] = {}
         repeat: int | None = None
         try:
@@ -172,6 +207,20 @@ class AnnouncementDispatcher:
             if camera_targets and chime_targets and self.dynamic_slots is None:
                 raise RuntimeError("mixed camera/chime playback requires fixed TTS slots")
 
+            original_targets = targets
+            if self.admission is not None:
+                reservation = await self.admission.acquire(targets, command)
+                targets = reservation.targets
+                chime_targets = [t for t in targets if t.desc.kind == "chime"]
+                camera_targets = [t for t in targets if t.desc.kind == "camera"]
+                if not targets:
+                    dispositions = {job["disposition"] for job in reservation.excluded}
+                    return self._finish(
+                        command, dispositions.pop() if len(dispositions) == 1 else "partial",
+                        {"targets": len(original_targets), "jobs": reservation.excluded},
+                        timing, total_started,
+                    )
+
             ringtone_id: str | None = None
             ringtone_name: str | None = None
             camera_audio: bytes | None = None
@@ -181,11 +230,14 @@ class AnnouncementDispatcher:
                     mp3 = await self._timed(
                         timing, "tts", self.synthesize_preset(ringtone_name)
                     )
-                    self._capture_audio_timings(timing, mp3)
-                    dynamic_lease = await self._timed(
-                        timing, "upload", self.dynamic_slots.prepare(mp3, chime_targets)
-                    )
-                    ringtone_id = dynamic_lease.ringtone_id
+                    if mp3 is None:
+                        ringtone_id = await self.resolve_preset(ringtone_name)
+                    else:
+                        self._capture_audio_timings(timing, mp3)
+                        dynamic_lease = await self._timed(
+                            timing, "upload", self.dynamic_slots.prepare(mp3, chime_targets)
+                        )
+                        ringtone_id = dynamic_lease.ringtone_id
                 else:
                     ringtone_id = await self.resolve_preset(ringtone_name)
             elif command.action == "announce":
@@ -195,7 +247,9 @@ class AnnouncementDispatcher:
                     )
                     self._capture_audio_timings(timing, mp3)
                     camera_audio = mp3
-                    for target in camera_targets:
+                    # Prepared sessions retain physical-camera locks until play.
+                    # All overlapping groups must acquire them in one order.
+                    for target in sorted(camera_targets, key=lambda item: item.desc.camera_id):
                         camera_id = target.desc.camera_id
                         prepared_camera_sessions[camera_id] = await self._timed(
                             timing,
@@ -272,11 +326,34 @@ class AnnouncementDispatcher:
                                 self.track_registry.put(record)
                         return await play_ringtone()
 
-                queued = await target.queue.submit(PlaybackRequest(
-                    factory=play, priority=command.priority,
-                    dedupe_key=command.dedupe_key,
-                    dedupe_window_ms=command.dedupe_window_ms,
-                ))
+                if reservation is None:
+                    queued = await target.queue.submit(PlaybackRequest(
+                        factory=play, priority=command.priority,
+                        dedupe_key=command.dedupe_key,
+                        dedupe_window_ms=command.dedupe_window_ms,
+                    ))
+                else:
+                    guard = 0.0
+                    if target_kind == "chime":
+                        duration = self.playback_fallback_seconds
+                        if dynamic_lease is not None:
+                            duration = dynamic_lease.duration_ms / 1000
+                        elif command.action == "play_preset" and self.track_registry is not None:
+                            record = self.track_registry.records.get((command.preset or "").lower())
+                            if record is not None and record.duration_ms:
+                                duration = record.duration_ms / 1000
+                        # Unspecified default repeat is device-owned (up to six).
+                        guard = max(1.75, duration * (repeat if repeat is not None else 6) + 1.25)
+                        reservation.hold_for(target, guard)
+                    try:
+                        value = await play()
+                        queued = QueueResult(QueueDisposition.PLAYED, value, reservation.wait_ms)
+                    except Exception as exc:
+                        queued = QueueResult(QueueDisposition.FAILED, {"error": str(exc)}, reservation.wait_ms)
+                    finally:
+                        if guard:
+                            # Ambiguous failures may already have started sound.
+                            reservation.hold_for(target, guard)
                 identity = (
                     {"camera_id": camera_id}
                     if target_kind == "camera"
@@ -312,6 +389,10 @@ class AnnouncementDispatcher:
             waits = [j["queue_wait_ms"] for j in jobs if j.get("queue_wait_ms") is not None]
             if waits:
                 timing.set("queue_wait", max(waits))
+            if reservation is not None:
+                jobs.extend(reservation.excluded)
+                by_name = {job["target"]: job for job in jobs}
+                jobs = [by_name[target.desc.name] for target in original_targets]
             dispositions = [j["disposition"] for j in jobs]
             if all(value == QueueDisposition.PLAYED.value for value in dispositions):
                 disposition = "played"
@@ -327,7 +408,7 @@ class AnnouncementDispatcher:
             if dynamic_lease is not None:
                 chime_dispositions = [
                     job["disposition"]
-                    for target, job in zip(targets, jobs, strict=True)
+                    for target, job in zip(original_targets, jobs, strict=True)
                     if getattr(target.desc, "kind", "chime") == "chime"
                 ]
                 possible_chime_playback = any(
@@ -342,7 +423,7 @@ class AnnouncementDispatcher:
                 else:
                     await dynamic_lease.release_now()
 
-            result_payload = {"targets": len(targets), "jobs": jobs}
+            result_payload = {"targets": len(original_targets), "jobs": jobs}
             if dynamic_lease is not None:
                 result_payload["dynamic_tts_slot"] = dynamic_lease.logical_slot
             if self.debug_timings:
@@ -367,6 +448,10 @@ class AnnouncementDispatcher:
                 dynamic_lease.release_after(repeat or self.repeat_default)
             self._record_finish("failed", timing, total_started)
             raise
+
+        finally:
+            if reservation is not None:
+                reservation.release()
 
     @staticmethod
     def _capture_audio_timings(timing: AnnouncementTiming, mp3: bytes) -> None:

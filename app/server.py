@@ -17,6 +17,8 @@ from starlette.routing import Mount, Route
 from app import main as core
 from app.audio.bounded_cache import BoundedTtsSynthesizer
 from app.audio.tts import normalized_cache_key
+from app.playback.admission import DispatchAdmission
+from app.playback.recovery import SlotRecovery
 from app.playback.camera_hardening import (
     HardenedCameraTalkback,
     load_experimental_camera_profiles,
@@ -174,9 +176,19 @@ core.synthesize_tts_cached = tts_cache
 core.dispatcher.synthesize = tts_cache
 core.dispatcher.dynamic_slots = dynamic_slots
 
+admission = DispatchAdmission()
+core.dispatcher.admission = admission
+core.dispatcher.playback_fallback_seconds = max(
+    0.1, float(os.getenv("CHIME_PLAYBACK_FALLBACK_SECONDS", "30"))
+)
 
-async def _synthesize_preset(name: str) -> bytes:
-    """Render a named preset through the fixed TTS slots."""
+
+async def _synthesize_preset(name: str) -> bytes | None:
+    """Saved Protect audio wins; only configured virtual presets use TTS."""
+    if await core.ringtone_index.resolve_or_refresh(name):
+        return None
+    if name.lower() not in {preset.lower() for preset in SLOT_BACKED_PRESETS}:
+        raise KeyError(f"Preset '{name}' not uploaded yet")
     return await tts_cache(name.replace("-", " "))
 
 
@@ -251,6 +263,8 @@ async def health_check(_request) -> JSONResponse:
     payload["dynamic_tts"] = {
         key: slot_state.get(key) for key in ("ready", "mode", "slot_count")
     }
+    if core.chime_runtimes and not slot_state.get("ready"):
+        payload["status"] = "degraded"
     payload["tts_cache"] = {"ready": isinstance(cache_state, dict)}
     return JSONResponse(payload)
 
@@ -330,6 +344,17 @@ if MCP_ENABLED:
     )
 
 
+async def _startup_dynamic_slots() -> dict:
+    # Recovery runs while requests are served. Share the preset-upload lock so
+    # ringtone capacity checks and identity allocation cannot race each other.
+    async with core.ringtone_upload_lock:
+        return await dynamic_slots.startup(
+            core.chime_runtimes.values(),
+            bootstrap_audio_factory=_bootstrap_audio,
+            legacy_registry=core.track_registry,
+        )
+
+
 @asynccontextmanager
 async def lifespan(_app: Starlette):
     """Run core startup, then prove/provision fixed TTS slots before serving traffic."""
@@ -337,26 +362,35 @@ async def lifespan(_app: Starlette):
     # evidence before beta.3 migration can inspect it.
     old_dynamic_limit = core.track_registry.max_dynamic
     core.track_registry.max_dynamic = 1_000_000_000
+    core.dispatcher.start()
     async with AsyncExitStack() as stack:
         await stack.enter_async_context(core.app.router.lifespan_context(core.app))
+        recovery = None
         try:
             await tts_cache.startup()
-            status = await dynamic_slots.startup(
-                core.chime_runtimes.values(),
-                bootstrap_audio_factory=_bootstrap_audio,
-                legacy_registry=core.track_registry,
+            recovery = SlotRecovery(
+                dynamic_slots,
+                _startup_dynamic_slots,
+                interval=max(1.0, float(os.getenv("TTS_SLOT_RECOVERY_INTERVAL", "30"))),
             )
+            status = await recovery.attempt()
             if not status.get("ready"):
                 core.log.warning(
                     "fixed dynamic TTS slots unavailable; arbitrary TTS will fail closed: %s",
                     status.get("last_error"),
                 )
             core.track_registry.max_dynamic = old_dynamic_limit
+            if core.chime_runtimes:
+                recovery.start()
             if _mcp_runtime is not None:
                 await stack.enter_async_context(_mcp_runtime.server.session_manager.run())
             yield
         finally:
             core.track_registry.max_dynamic = old_dynamic_limit
+            if recovery is not None:
+                await recovery.stop()
+            await core.dispatcher.stop()
+            await admission.stop()
             await dynamic_slots.shutdown()
 
 

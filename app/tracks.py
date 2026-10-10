@@ -34,6 +34,7 @@ class TrackRecord:
     updated_at: float = field(default_factory=time.time)
     last_used_at: float = field(default_factory=time.time)
     pinned: bool = False
+    duration_ms: int | None = None
 
     @property
     def last_used(self) -> float:  # compatibility with the pre-Phase-12 model
@@ -110,10 +111,8 @@ class TrackRegistry:
 
     def persist(self) -> None:
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            temp = self.path.with_suffix(self.path.suffix + ".tmp")
-            temp.write_text(json.dumps({key: record.to_dict() for key, record in self.records.items()}, indent=2))
-            os.replace(temp, self.path)
+            from app.persistence import atomic_json
+            atomic_json(self.path, {key: record.to_dict() for key, record in self.records.items()})
         except OSError as exc:
             log.warning("track registry persist failed: %s", exc)
 

@@ -115,3 +115,12 @@ async def test_target_catalog_does_not_hide_non_404_failures(status):
         await client.async_get_targets()
 
     assert client._request.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_commands_have_longer_deadline_than_polling():
+    client = UniFiAnnouncerClient(None, "http://announcer.invalid")
+    client._request = AsyncMock(return_value=(200, {"disposition": "played"}))
+    await client.async_announce("hello")
+    assert client._request.await_args.kwargs["timeout"].total == 150
+    assert client._timeout.total == 15

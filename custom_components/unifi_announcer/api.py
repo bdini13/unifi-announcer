@@ -59,11 +59,13 @@ class UniFiAnnouncerClient:
     """Small typed wrapper around UniFi Announcer's stable REST surface."""
 
     def __init__(self, session: aiohttp.ClientSession, base_url: str,
-                 api_key: str = "", timeout: float = 15.0) -> None:
+                 api_key: str = "", timeout: float = 15.0,
+                 command_timeout: float = 150.0) -> None:
         self._session = session
         self.base_url = normalize_base_url(base_url)
         self._api_key = api_key
         self._timeout = aiohttp.ClientTimeout(total=timeout)
+        self._command_timeout = aiohttp.ClientTimeout(total=command_timeout)
 
     @property
     def headers(self) -> dict[str, str]:
@@ -73,10 +75,11 @@ class UniFiAnnouncerClient:
                        **kwargs: Any) -> tuple[int, Any]:
         headers = dict(kwargs.pop("headers", {}))
         headers.update(self.headers)
+        timeout = kwargs.pop("timeout", self._timeout)
         try:
             async with self._session.request(
                 method, f"{self.base_url}{path}", headers=headers,
-                timeout=self._timeout, **kwargs
+                timeout=timeout, **kwargs
             ) as response:
                 if response.status in {401, 403, 503} and path == "/auth/check":
                     raise AuthenticationError("UniFi Announcer rejected the API key")
@@ -93,6 +96,7 @@ class UniFiAnnouncerClient:
             raise CannotConnect(str(exc)) from exc
 
     async def _command(self, method: str, path: str, **kwargs: Any) -> CommandResult:
+        kwargs.setdefault("timeout", self._command_timeout)
         status, payload = await self._request(method, path, **kwargs)
         if not isinstance(payload, dict) or not isinstance(payload.get("disposition"), str):
             detail = payload.get("detail") if isinstance(payload, dict) else None

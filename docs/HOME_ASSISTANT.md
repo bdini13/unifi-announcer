@@ -8,6 +8,10 @@ UniFi Announcer includes a HACS-compatible custom integration under `custom_comp
 > [!WARNING]
 > Use stable `v2.1.8` for new installations unless you intentionally want to test the experimental camera-speaker prerelease. `v2.2.0-beta.3` is the current published prerelease. Its exact-profile opt-in passed the complete gate on one representative G4 Instant, but remains `experimental_opt_in`; this evidence is not a compatibility claim for other G4 or camera models.
 
+## Unreleased compatibility and timeouts
+
+The working branch tests HA 2026.3.4 and 2026.10.0 separately. Device lookup uses the scoped registry API when available and preserves the older supported API otherwise. Playback commands allow 150 seconds for the backend's 120-second command deadline; health and topology polling retain a 15-second timeout. The command deadline includes queue wait, preparation, and camera streaming. A Chime `played` result means Protect accepted playback, while a duration guard continues to reserve the target; it is not acoustic completion evidence.
+
 ## Install
 
 ### HACS custom repository
