@@ -8,6 +8,10 @@ UniFi Announcer includes a HACS-compatible custom integration under `custom_comp
 > [!WARNING]
 > Use stable `v2.1.8` for new installations unless you intentionally want to test v2.2 prerelease behavior. `v2.2.0-beta.3` remains the current published prerelease. The `v2.2.0-beta.4` native-media work documented below is a candidate until its exact physical validation and publication gate is complete.
 
+## Unreleased compatibility and timeouts
+
+The working branch tests HA 2026.3.4 and 2026.10.0 separately. Device lookup uses the scoped registry API when available and preserves the older supported API otherwise. Playback commands, including media uploads, allow 150 seconds; health and topology polling retain a 15-second timeout. The companion `fix/non-security-reliability` branch adds a 120-second backend deadline and Chime duration guards. Those backend changes must be integrated and validated with this draft before a combined release. A Chime `played` result means Protect accepted playback; it is not acoustic completion evidence.
+
 ## Install
 
 ### HACS custom repository

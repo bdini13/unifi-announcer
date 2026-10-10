@@ -1,5 +1,6 @@
 from unittest.mock import AsyncMock
 
+
 import pytest
 
 from custom_components.unifi_announcer.api import (
@@ -9,7 +10,7 @@ from custom_components.unifi_announcer.api import (
 
 
 def _client_with_requests(*responses):
-    client = object.__new__(UniFiAnnouncerClient)
+    client = UniFiAnnouncerClient(None, "http://announcer.invalid")
     client._request = AsyncMock(side_effect=responses)
     return client
 
@@ -131,4 +132,13 @@ async def test_media_announce_uploads_raw_audio_with_bounded_request_timeout():
     assert call.kwargs["params"] == {"target": "kitchen", "repeat_times": 2}
     assert call.kwargs["data"] == b"audio-bytes"
     assert call.kwargs["headers"] == {"Content-Type": "audio/mpeg"}
-    assert call.kwargs["timeout"].total == 60.0
+    assert call.kwargs["timeout"].total == 150.0
+
+
+@pytest.mark.asyncio
+async def test_commands_have_longer_deadline_than_polling():
+    client = UniFiAnnouncerClient(None, "http://announcer.invalid")
+    client._request = AsyncMock(return_value=(200, {"disposition": "played"}))
+    await client.async_announce("hello")
+    assert client._request.await_args.kwargs["timeout"].total == 150
+    assert client._timeout.total == 15

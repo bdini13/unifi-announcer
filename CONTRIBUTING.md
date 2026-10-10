@@ -46,6 +46,8 @@ python3.14 -m venv .venv-ha
 .venv-ha/bin/python -m pytest -q tests_ha
 ```
 
+Repeat HA tests in a separate Python 3.14 environment using `requirements-ha-current-test.txt` for HA 2026.10.0. The minimum environment remains pinned to 2026.3.4; both CI lanes must pass.
+
 CI additionally builds the Docker image, validates HACS metadata, and runs Hassfest.
 
 ## Pull requests
