@@ -327,6 +327,8 @@ Physical Chimes also expose queue-depth state. Logical groups intentionally do n
 
 See [Home Assistant documentation](docs/HOME_ASSISTANT.md) for the complete entity/action model and troubleshooting.
 
+Failed direct-device capability probes now retry every 30 seconds until recovery, so a transient startup error does not leave health permanently degraded. The [single-Chime reliability test](docs/validation/reliability-single-chime-2026-10-10.md) records listening results and remaining validation.
+
 ## REST examples
 
 ```bash

@@ -30,3 +30,7 @@ No release tag, running deployment, or published version is changed by this work
 - Docker/Compose, HACS/Hassfest CI execution, and physical device validation remain pending. No live deployment or GitHub branch was modified.
 
 The subsequent [CI review](CI.md) removed redundant tests and eliminated fake-device waits; the current main backend suite has 436 tests and runs in approximately 6.5 seconds.
+
+## Single-Chime candidate test — 2026-10-10
+
+[Physical test results](validation/reliability-single-chime-2026-10-10.md) confirm distinct phrases, resident replay, repeats without interruption, and playback after a service restart on one Chime. The session also exposed stale capability health after a failed startup probe; failed probes now retry read-only device information every 30 seconds until success, with shutdown cancellation. Other release gates remain outstanding.

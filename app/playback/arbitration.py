@@ -181,9 +181,10 @@ class ChimeRuntime:
         self.capability_state: Any = capability_state
         self.queue = ArbitrationQueue(desc.name, max_depth=max_depth, metrics=metrics)
         self.probe_task: asyncio.Task | None = None
+        self.capability_retry_interval = 30.0
 
     def start(self) -> None:
-        """Start a read-only capability probe isolated to this target."""
+        """Probe this target, retrying failed reads until capability recovery."""
         if self.desc.kind == "camera":
             return
         if self.probe_task is not None:
@@ -194,18 +195,23 @@ class ChimeRuntime:
         self.probe_task = asyncio.create_task(self._probe_capabilities())
 
     async def _probe_capabilities(self) -> None:
-        try:
-            await self.direct_client.info()
-            capabilities = self.direct_client.capabilities
-            values = capabilities.to_dict() if capabilities is not None else {}
-            self.capability_state = {"status": "available", **values}
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            # Expose only the exception class: device errors can contain URLs or
-            # credential material and capability reporting is a public GET.
-            self.capability_state = {
-                "status": "unavailable", "error_type": type(exc).__name__}
+        while True:
+            try:
+                await self.direct_client.info()
+                capabilities = self.direct_client.capabilities
+                values = capabilities.to_dict() if capabilities is not None else {}
+                self.capability_state = {"status": "available", **values}
+                return
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                # Expose only the exception class: device errors can contain URLs
+                # or credentials, and capability reporting is a public GET.
+                self.capability_state = {
+                    "status": "unavailable", "error_type": type(exc).__name__}
+            # A startup failure must not permanently hide later device recovery.
+            # stop() owns cancellation, including while this delay is pending.
+            await asyncio.sleep(self.capability_retry_interval)
 
     async def stop(self) -> None:
         if self.probe_task is not None and not self.probe_task.done():
