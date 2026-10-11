@@ -316,6 +316,8 @@ Physical Chimes also expose queue-depth state. Logical groups intentionally do n
 
 See [Home Assistant documentation](docs/HOME_ASSISTANT.md) for the complete entity/action model and troubleshooting.
 
+Failed direct-device capability probes retry every 30 seconds until recovery, so a transient startup error does not leave health permanently degraded. This retry does not change the media branch's playback or release-validation scope.
+
 ## REST examples
 
 ```bash

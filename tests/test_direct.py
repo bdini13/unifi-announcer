@@ -74,10 +74,13 @@ async def test_runtime_capability_probes_are_isolated_per_chime():
         capabilities=good_caps,
         info=AsyncMock(return_value={"version": "v1.7.20"}),
     )
-    bad = SimpleNamespace(
-        capabilities=None,
-        info=AsyncMock(side_effect=RuntimeError("credential=must-not-leak")),
-    )
+    bad_started = asyncio.Event()
+
+    async def fail_info():
+        bad_started.set()
+        raise RuntimeError("credential=must-not-leak")
+
+    bad = SimpleNamespace(capabilities=None, info=AsyncMock(side_effect=fail_info))
     one = ChimeRuntime(ChimeDescriptor("one", "id-one", "192.0.2.1"),
                        direct_client=good)
     two = ChimeRuntime(ChimeDescriptor("two", "id-two", "192.0.2.2"),
@@ -85,7 +88,13 @@ async def test_runtime_capability_probes_are_isolated_per_chime():
 
     one.start()
     two.start()
-    await asyncio.gather(one.probe_task, two.probe_task)
+    await one.probe_task
+    await bad_started.wait()
+    pending_probe = two.probe_task
+    await two.stop()
+    assert pending_probe.cancelled()
+    assert two.probe_task is None
+    assert bad.info.await_count == 1
 
     assert one.capability_state == {
         "status": "available", "firmware": "v1.7.20",
@@ -95,6 +104,28 @@ async def test_runtime_capability_probes_are_isolated_per_chime():
         "status": "unavailable", "error_type": "RuntimeError",
     }
     assert "must-not-leak" not in str(two.capability_state)
+
+
+@pytest.mark.asyncio
+async def test_runtime_retries_failed_capability_probe_until_recovery():
+    caps = SimpleNamespace(to_dict=lambda: {"firmware": "v1.7.20"})
+    direct = SimpleNamespace(
+        capabilities=caps,
+        info=AsyncMock(side_effect=[
+            httpx.RemoteProtocolError("private-device-details"),
+            {"version": "v1.7.20"},
+        ]),
+    )
+    runtime = ChimeRuntime(ChimeDescriptor("one", "id-one"), direct_client=direct)
+    runtime.capability_retry_interval = 0
+    runtime.start()
+    try:
+        async with asyncio.timeout(1):
+            await runtime.probe_task
+        assert runtime.capability_state == {"status": "available", "firmware": "v1.7.20"}
+        assert direct.info.await_count == 2
+    finally:
+        await runtime.stop()
 
 
 @pytest.mark.asyncio
