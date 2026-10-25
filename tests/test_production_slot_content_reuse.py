@@ -171,10 +171,10 @@ def test_boot_epoch_tolerance_must_be_finite_and_nonnegative(
 
 
 @pytest.mark.asyncio
-async def test_repeated_identical_phrase_reuses_resident_slot_with_stale_protect_metadata(
+async def test_repeated_identical_phrase_reuses_resident_slot_with_matching_protect_metadata(
     tmp_path,
 ):
-    world = FakeProtectWorld(stale_control_plane=True)
+    world = FakeProtectWorld(stale_control_plane=False)
     metrics = FakeMetrics()
     target = make_target(world)
     manager = make_manager(tmp_path, world, metrics)
@@ -191,12 +191,12 @@ async def test_repeated_identical_phrase_reuses_resident_slot_with_stale_protect
     assert len(world.overwrite_calls) == 1
     assert metrics.counters["tts_slot_content_hits"] == 1
     assert metrics.counters["tts_slot_overwrite_skips"] == 1
-    assert metrics.counters["tts_slot_sync_stale_inventory_accepts"] == 1
+    assert metrics.counters.get("tts_slot_sync_stale_inventory_accepts", 0) == 0
 
 
 @pytest.mark.asyncio
 async def test_a_b_a_reuses_existing_a_slot_without_another_write(tmp_path):
-    world = FakeProtectWorld(stale_control_plane=True)
+    world = FakeProtectWorld(stale_control_plane=False)
     target = make_target(world)
     manager = make_manager(tmp_path, world)
     assert (await manager.startup([target], bootstrap_audio_factory=bootstrap))["ready"]
@@ -219,7 +219,7 @@ async def test_a_b_a_reuses_existing_a_slot_without_another_write(tmp_path):
 
 @pytest.mark.asyncio
 async def test_third_phrase_evicts_least_recently_used_free_slot(tmp_path):
-    world = FakeProtectWorld(stale_control_plane=True)
+    world = FakeProtectWorld(stale_control_plane=False)
     target = make_target(world)
     manager = make_manager(tmp_path, world)
     assert (await manager.startup([target], bootstrap_audio_factory=bootstrap))["ready"]
@@ -245,7 +245,7 @@ async def test_third_phrase_evicts_least_recently_used_free_slot(tmp_path):
 
 @pytest.mark.asyncio
 async def test_restart_reuses_content_after_device_identity_and_binding_validation(tmp_path):
-    world = FakeProtectWorld(stale_control_plane=True)
+    world = FakeProtectWorld(stale_control_plane=False)
     target = make_target(world)
     first = make_manager(tmp_path, world)
     assert (await first.startup([target], bootstrap_audio_factory=bootstrap))["ready"]

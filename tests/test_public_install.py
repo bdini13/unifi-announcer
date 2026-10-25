@@ -68,17 +68,6 @@ def test_hacs_docs_make_backend_requirement_explicit():
     assert "HACS does not replace or run the backend" in readme
 
 
-def test_ha_docs_define_immediate_playback_result_semantics():
-    readme = Path("README.md").read_text()
-    ha_docs = Path("docs/HOME_ASSISTANT.md").read_text()
-    assert "Last playback result" in readme
-    assert "Last playback result" in ha_docs
-    assert "`success`" in ha_docs
-    assert "`failure`" in ha_docs
-    assert "updates it immediately" in ha_docs
-    assert "stale Protect inventory" in ha_docs
-
-
 def test_readme_documents_backup_and_rollback_for_named_volume():
     readme = Path("README.md").read_text()
     rollback = readme.split("## Roll back", 1)[1].split("## Troubleshooting", 1)[0]

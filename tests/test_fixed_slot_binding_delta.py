@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -308,3 +309,203 @@ async def test_persisted_mapping_rejects_reported_slot_without_filename(tmp_path
 
     assert status["ready"] is False
     assert "ownership proof" in status["last_error"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lost_response", ["staging", "inventory"])
+async def test_interrupted_staging_recovers_from_durable_positive_evidence(tmp_path, lost_response):
+    world = DeltaWorld()
+    play = world.play
+
+    async def identified_play(ringtone_id, **kwargs):
+        result = await play(ringtone_id, **kwargs)
+        world.tracks[int(ringtone_id.split("-")[-1]) - 1]["ringtoneId"] = ringtone_id
+        if lost_response == "staging" and len(world.play_calls) == 1:
+            raise OSError("lost staging response after device applied audio")
+        return result
+
+    world.play = identified_play
+    first = manager(tmp_path, world)
+    original_get = first.get_chime
+
+    async def lost_inventory(chime_id):
+        if world.play_calls:
+            raise OSError("lost inventory response after successful staging")
+        return await original_get(chime_id)
+
+    if lost_response == "inventory":
+        first.get_chime = lost_inventory
+    assert not (await first.startup([target(world)], bootstrap_audio_factory=bootstrap))["ready"]
+    journal = json.loads(first.provisioning_path.read_text())
+    assert journal["operations"]["1"]["before"]["chime-1"][0]["md5"] == "base-1"
+    assert world.uploads == 1
+
+    restarted = manager(tmp_path, world)
+    status = await restarted.startup([target(world)], bootstrap_audio_factory=bootstrap)
+    assert status["ready"], status
+    assert world.uploads == 2
+    assert len(world.play_calls) == 2  # No duplicate staging of the first slot.
+    assert restarted.slots[1].bindings["chime-1"].filename == "device-slot-1.mp3"
+    assert json.loads(restarted.provisioning_path.read_text())["operations"] == {}
+
+
+@pytest.mark.asyncio
+async def test_lost_creation_response_recovers_exact_bootstrap_without_duplicate_upload(tmp_path):
+    # Protect can stage on creation, before the first explicit play request.
+    from test_production_slot_content_reuse import FakeProtectWorld, make_target
+
+    world = FakeProtectWorld(stale_control_plane=False)
+    upload = world.upload
+
+    async def lost_upload(name, data):
+        await upload(name, data)
+        raise OSError("creation committed but response was lost")
+
+    first = manager(tmp_path, world)
+    first.upload_ringtone = lost_upload
+    assert not (await first.startup([make_target(world)], bootstrap_audio_factory=bootstrap))["ready"]
+    assert not first.slots
+
+    restarted = manager(tmp_path, world)
+    status = await restarted.startup([make_target(world)], bootstrap_audio_factory=bootstrap)
+    assert status["ready"], status
+    assert world.upload_calls == 2
+    assert len(world.ringtones) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("foreign_changes", [1, 2])
+async def test_interrupted_provisioning_never_claims_unrelated_deltas(tmp_path, foreign_changes):
+    world = DeltaWorld(mode="none")
+    first = manager(tmp_path, world)
+    assert not (await first.startup([target(world)], bootstrap_audio_factory=bootstrap))["ready"]
+    for number in range(foreign_changes):
+        world.tracks[number] = {
+            "md5": f"unrelated-{number}", "size": 321,
+            "fileName": f"unrelated-{number}.mp3",
+        }
+    plays_before = len(world.play_calls)
+
+    restarted = manager(tmp_path, world)
+    status = await restarted.startup([target(world)], bootstrap_audio_factory=bootstrap)
+    assert not status["ready"]
+    assert "positive ringtone identity" in status["last_error"]
+    assert not restarted.slots[1].bindings
+    assert len(world.play_calls) == plays_before
+    assert json.loads(restarted.provisioning_path.read_text())["operations"]["1"]
+
+
+@pytest.mark.asyncio
+async def test_unidentified_transformed_interrupted_delta_remains_unavailable(tmp_path):
+    world = DeltaWorld()
+    first = manager(tmp_path, world)
+    original_get = first.get_chime
+
+    async def lost_inventory(chime_id):
+        if world.play_calls:
+            raise OSError("lost transformed track observation")
+        return await original_get(chime_id)
+
+    first.get_chime = lost_inventory
+    assert not (await first.startup([target(world)], bootstrap_audio_factory=bootstrap))["ready"]
+    restarted = manager(tmp_path, world)
+    status = await restarted.startup([target(world)], bootstrap_audio_factory=bootstrap)
+    assert not status["ready"]
+    assert "positive ringtone identity" in status["last_error"]
+    assert not restarted.slots[1].bindings
+
+
+@pytest.mark.asyncio
+async def test_provisioning_intent_must_be_durable_before_remote_mutation(tmp_path, monkeypatch):
+    world = DeltaWorld()
+    first = manager(tmp_path, world)
+
+    def failed_journal():
+        raise OSError("disk unavailable")
+
+    monkeypatch.setattr(first, "_persist_provisioning", failed_journal)
+    assert not (await first.startup([target(world)], bootstrap_audio_factory=bootstrap))["ready"]
+    assert world.uploads == 0
+    assert world.play_calls == []
+
+
+@pytest.mark.asyncio
+async def test_same_name_replacement_cannot_inherit_old_physical_binding(tmp_path):
+    world = DeltaWorld()
+    first = manager(tmp_path, world)
+    assert (await first.startup([target(world)], bootstrap_audio_factory=bootstrap))["ready"]
+    world.ringtones[0]["id"] = "replacement-with-same-name"
+    restarted = manager(tmp_path, world)
+    status = await restarted.startup([target(world)], bootstrap_audio_factory=bootstrap)
+    assert not status["ready"]
+    assert "same-name replacement" in status["last_error"]
+    assert restarted.slots[1].protect_ringtone_id == "ring-1"
+
+
+def test_delta_uses_reported_physical_number_in_filtered_inventory():
+    before = [{"track_no": 1, "name": "Default", "md5": "builtin", "size": 100}]
+    changed = {"track_no": 7, "name": "owned", "md5": "custom", "size": 200}
+    assert DynamicTtsSlotManager._delta_candidate(before, before + [changed]) == (7, changed)
+
+
+@pytest.mark.asyncio
+async def test_multi_target_interruption_keeps_already_committed_bindings(tmp_path):
+    from test_production_slot_content_reuse import FakeProtectWorld, make_target
+
+    world = FakeProtectWorld(chime_ids=("chime-1", "chime-2"))
+    targets = [make_target(world, chime_id) for chime_id in world.chimes]
+    play_calls = []
+
+    async def lose_second_target_response(ringtone_id, **kwargs):
+        play_calls.append((ringtone_id, kwargs["chime_id"]))
+        if len(play_calls) == 2:
+            raise OSError("second target response lost")
+        return {}
+
+    world.play = lose_second_target_response
+    first = manager(tmp_path, world)
+    assert not (await first.startup(targets, bootstrap_audio_factory=bootstrap))["ready"]
+    assert set(first.slots[1].bindings) == {"chime-1"}
+
+    restarted = manager(tmp_path, world)
+    status = await restarted.startup(targets, bootstrap_audio_factory=bootstrap)
+    assert status["ready"], status
+    assert world.upload_calls == 2
+    assert play_calls.count(("ring-1", "chime-1")) == 1
+    assert play_calls.count(("ring-1", "chime-2")) == 1
+    assert set(restarted.slots[1].bindings) == {"chime-1", "chime-2"}
+
+
+@pytest.mark.asyncio
+async def test_crash_after_binding_commit_before_journal_cleanup_does_not_restage(tmp_path):
+    world = DeltaWorld()
+    first = manager(tmp_path, world)
+    persist = first._persist_provisioning
+
+    def fail_cleanup():
+        if first.slots.get(1) and first.slots[1].bindings:
+            raise OSError("crash before recovery-journal cleanup")
+        persist()
+
+    first._persist_provisioning = fail_cleanup
+    assert not (await first.startup([target(world)], bootstrap_audio_factory=bootstrap))["ready"]
+    restarted = manager(tmp_path, world)
+    status = await restarted.startup([target(world)], bootstrap_audio_factory=bootstrap)
+    assert status["ready"], status
+    assert len(world.play_calls) == 2
+    assert world.uploads == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("journal", [[], {"schema_version": 1, "operations": {}}])
+async def test_corrupt_provisioning_journal_cannot_trigger_reprovisioning(tmp_path, journal):
+    world = DeltaWorld()
+    first = manager(tmp_path, world)
+    assert (await first.startup([target(world)], bootstrap_audio_factory=bootstrap))["ready"]
+    first.provisioning_path.write_text(json.dumps(journal))
+    restarted = manager(tmp_path, world)
+    status = await restarted.startup([target(world)], bootstrap_audio_factory=bootstrap)
+    assert not status["ready"]
+    assert "provisioning journal is invalid" in status["last_error"]
+    assert world.uploads == 2
+    assert len(world.play_calls) == 2

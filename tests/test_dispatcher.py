@@ -1198,7 +1198,7 @@ async def test_stale_classifier_does_not_retry_when_chime_is_missing(main_module
     ).mock(return_value=httpx.Response(404, text="Ringtone playback target chime not found"))
 
     with pytest.raises(RuntimeError, match="play-speaker failed"):
-        await main_module.protect.play("tone", 50, 1, chime_id="chime-fixture")
+        await main_module.protect.stage_ringtone("tone", 50, 1, chime_id="chime-fixture")
 
 
 @pytest.mark.asyncio

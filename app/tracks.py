@@ -89,8 +89,17 @@ class TrackRegistry:
             record.updated_at = record.last_used_at
         return record
 
-    def put(self, record: TrackRecord) -> None:
+    def put(self, record: TrackRecord, *, durable: bool = False) -> None:
         record.updated_at = max(record.updated_at, record.created_at)
+        if durable:
+            # Mutating remote identities depends on this commit succeeding.
+            # Unlike optional cache updates, persistence errors must propagate.
+            from app.persistence import atomic_json
+            records = {key: item.to_dict() for key, item in self.records.items()}
+            records[record.logical_key] = record.to_dict()
+            atomic_json(self.path, records)
+            self.records[record.logical_key] = record
+            return
         self.records[record.logical_key] = record
         self.persist()
 
@@ -173,9 +182,11 @@ class TrackReconciler:
         self.registry.remove(record.logical_key)
         return result
 
-    async def ensure_capacity(self, nvr_snapshot: Iterable[dict], *, needed: int = 1) -> list[dict]:
+    async def ensure_capacity(self, nvr_snapshot: Iterable[dict], *, needed: int = 1,
+                              protected_ids: Iterable[str] = ()) -> list[dict]:
         """Reserve Protect headroom using only deletable service-owned dynamic tracks."""
         snapshot = list(nvr_snapshot)
+        protected_ids = set(protected_ids)
         async with self._gc_lock:
             overflow = max(0, len(snapshot) + needed - self.max_total)
             snapshot_ids = {
@@ -187,7 +198,13 @@ class TrackReconciler:
             candidates = [
                 record for record in self._owned_dynamic_candidates()
                 if record.nvr_ringtone_id in snapshot_ids
+                and record.nvr_ringtone_id not in protected_ids
             ]
+            if len(candidates) < overflow:
+                raise RingtoneCapacityError(
+                    "Protect ringtone capacity is full and no safe owned dynamic "
+                    "tracks can provide the required headroom"
+                )
             for record in candidates:
                 if deleted >= overflow:
                     break

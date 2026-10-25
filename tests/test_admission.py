@@ -151,7 +151,12 @@ async def test_audio_guard_survives_failed_play_request_and_waiter_deadline():
 
 
 @pytest.mark.asyncio
-async def test_later_play_request_waits_for_audio_guard():
+async def test_later_play_request_waits_for_audio_guard(monkeypatch):
+    from app.playback.admission import Reservation
+    hold_for = Reservation.hold_for
+    # Exercise real scheduling with a short injected duration. Duration/repeat
+    # arithmetic is asserted separately without waiting for physical time.
+    monkeypatch.setattr(Reservation, "hold_for", lambda self, target, seconds, **kw: hold_for(self, target, .02, **kw))
     a = target("a")
     dispatcher = _dispatcher(protect=SimpleNamespace(play=AsyncMock(return_value={})), targets=[a])
     scheduler = dispatcher.admission = DispatchAdmission()
@@ -159,7 +164,7 @@ async def test_later_play_request_waits_for_audio_guard():
     preset = AnnouncementCommand(action="play_preset", preset="saved", repeat_times=1)
     await dispatcher.dispatch(preset)
     later = asyncio.create_task(dispatcher.dispatch(preset))
-    await asyncio.sleep(.02)
+    await asyncio.sleep(0)
     dispatcher.protect.play.assert_awaited_once()
     assert (await asyncio.wait_for(later, 2)).disposition == "played"
     assert dispatcher.protect.play.await_count == 2

@@ -128,10 +128,11 @@ async def test_announce_cache_miss_uploads_and_preserves_zero_volume(
 
 
 def test_track_registry_persists_json(main_module, tmp_path):
+    from app.tracks import TrackRecord
     registry = main_module.TrackRegistry()
     path = tmp_path / "track_registry.json"
     registry._path = str(path)
-    registry.put(main_module.TrackRecord("fixture-tone", "preset"))
+    registry.put(TrackRecord("fixture-tone", "preset"))
 
     saved = path.read_text()
     assert '"fixture-tone"' in saved

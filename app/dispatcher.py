@@ -14,7 +14,7 @@ Action = Literal["announce", "buzzer", "play_default", "play_preset"]
 
 
 class StaleRingtoneError(RuntimeError):
-    """Protect explicitly rejected a cached ringtone identity."""
+    """A cached ringtone identity is absent or explicitly rejected by Protect."""
 
 
 @dataclass
@@ -224,6 +224,15 @@ class AnnouncementDispatcher:
             ringtone_id: str | None = None
             ringtone_name: str | None = None
             camera_audio: bytes | None = None
+
+            def guard_slot_write() -> None:
+                # A cancelled direct upload may still finish on the device.
+                # Persist an uncertainty window before any physical write so a
+                # failed preparation/restart cannot immediately reuse its target.
+                if reservation is not None and self.admission.guards is not None:
+                    for target in chime_targets:
+                        reservation.hold_for(target, 0, in_flight_seconds=self.command_timeout)
+
             if command.action == "play_preset":
                 ringtone_name = command.preset or ""
                 if self.dynamic_slots is not None and self.synthesize_preset is not None:
@@ -234,6 +243,7 @@ class AnnouncementDispatcher:
                         ringtone_id = await self.resolve_preset(ringtone_name)
                     else:
                         self._capture_audio_timings(timing, mp3)
+                        guard_slot_write()
                         dynamic_lease = await self._timed(
                             timing, "upload", self.dynamic_slots.prepare(mp3, chime_targets)
                         )
@@ -261,6 +271,7 @@ class AnnouncementDispatcher:
                             ),
                         )
                     if chime_targets:
+                        guard_slot_write()
                         dynamic_lease = await self._timed(
                             timing, "upload", self.dynamic_slots.prepare(mp3, chime_targets)
                         )
@@ -278,9 +289,10 @@ class AnnouncementDispatcher:
                 chime_id = getattr(target.desc, "chime_id", "")
                 camera_id = getattr(target.desc, "camera_id", "")
                 dispatch_at_ns: int | None = None
+                guard = 0.0
 
                 async def play() -> dict[str, Any]:
-                    nonlocal dispatch_at_ns, ringtone_id
+                    nonlocal dispatch_at_ns, ringtone_id, guard
                     dispatch_at_ns = perf_counter_ns()
                     if target_kind == "camera":
                         if camera_audio is None or not camera_id:
@@ -297,6 +309,8 @@ class AnnouncementDispatcher:
                             volume, repeat, **target_kw)
 
                     async def play_ringtone() -> dict[str, Any]:
+                        if dynamic_lease is not None and hasattr(self.dynamic_slots, "validate_prepared"):
+                            self.dynamic_slots.validate_prepared(dynamic_lease, chime_id)
                         if command.source == "rule":
                             return await self.protect.play(
                                 ringtone_id, volume=volume, repeat_times=repeat,
@@ -323,7 +337,11 @@ class AnnouncementDispatcher:
                             if record is not None:
                                 record.nvr_ringtone_id = ringtone_id
                                 record.nvr_ringtone_name = refreshed.get("name", ringtone_name)
+                                record.duration_ms = None
                                 self.track_registry.put(record)
+                        if reservation is not None:
+                            guard = max(guard, self.playback_fallback_seconds * (repeat if repeat is not None else 10) + 1.25)
+                            reservation.hold_for(target, guard, in_flight_seconds=self.command_timeout)
                         return await play_ringtone()
 
                 if reservation is None:
@@ -340,20 +358,22 @@ class AnnouncementDispatcher:
                             duration = dynamic_lease.duration_ms / 1000
                         elif command.action == "play_preset" and self.track_registry is not None:
                             record = self.track_registry.records.get((command.preset or "").lower())
-                            if record is not None and record.duration_ms:
+                            if record is not None and record.duration_ms and record.nvr_ringtone_id == ringtone_id:
                                 duration = record.duration_ms / 1000
-                        # Unspecified default repeat is device-owned (up to six).
-                        guard = max(1.75, duration * (repeat if repeat is not None else 6) + 1.25)
-                        reservation.hold_for(target, guard)
+                        # Protect's device-owned repeat setting accepts 1..10.
+                        guard = max(1.75, duration * (repeat if repeat is not None else 10) + 1.25)
+                        reservation.hold_for(target, guard, in_flight_seconds=self.command_timeout)
+                    play_completed = False
                     try:
                         value = await play()
+                        play_completed = True
                         queued = QueueResult(QueueDisposition.PLAYED, value, reservation.wait_ms)
                     except Exception as exc:
                         queued = QueueResult(QueueDisposition.FAILED, {"error": str(exc)}, reservation.wait_ms)
                     finally:
                         if guard:
                             # Ambiguous failures may already have started sound.
-                            reservation.hold_for(target, guard)
+                            reservation.hold_for(target, guard, in_flight_seconds=0 if play_completed else self.command_timeout)
                 identity = (
                     {"camera_id": camera_id}
                     if target_kind == "camera"

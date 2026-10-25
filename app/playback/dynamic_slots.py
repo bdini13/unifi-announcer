@@ -84,6 +84,7 @@ class PreparedDynamicSlot:
     ringtone_id: str
     duration_ms: int
     content_md5: str
+    content_epochs: dict[str, int] = field(default_factory=dict)
     _released: bool = False
 
     async def refresh_ringtone_id(self) -> str:
@@ -398,21 +399,7 @@ class DynamicTtsSlotManager:
         # persisted mapping. When the physical position is reported, either its
         # exact filename must still match or its exact provisioning fingerprint
         # must prove that Protect renamed the same service-owned slot.
-        numbered = [
-            track
-            for track in tracks
-            if int(track.get("track_no") or track.get("trackNo") or 0)
-            == binding.device_slot
-        ]
-        if len(numbered) > 1:
-            raise DynamicSlotUnavailable(
-                f"chime {binding.chime_id}: physical TTS slot is ambiguous"
-            )
-        track = numbered[0] if numbered else (
-            tracks[binding.device_slot - 1]
-            if binding.device_slot <= len(tracks)
-            else None
-        )
+        track = self._reported_binding_track(tracks, binding)
         if track is not None:
             raw_filename = (
                 track.get("fileName") or track.get("filename") or track.get("name") or ""
@@ -432,6 +419,35 @@ class DynamicTtsSlotManager:
                     )
         binding.verified_at = time.time()
         return track
+
+    @staticmethod
+    def _reported_binding_track(
+        tracks: list[dict[str, Any]], binding: DeviceSlotBinding
+    ) -> dict[str, Any] | None:
+        """Use physical numbers for sparse inventories; never mix index schemes."""
+        has_numbers = any(
+            track.get("track_no") is not None or track.get("trackNo") is not None
+            for track in tracks
+        )
+        if has_numbers:
+            numbered = []
+            for track in tracks:
+                raw = track.get("track_no")
+                if raw is None:
+                    raw = track.get("trackNo")
+                if raw is None:
+                    continue
+                number = _physical_track_number(track, 0)
+                if number == binding.device_slot:
+                    numbered.append(track)
+            if len(numbered) > 1:
+                raise DynamicSlotUnavailable(
+                    f"chime {binding.chime_id}: physical TTS slot is ambiguous"
+                )
+            return numbered[0] if numbered else None
+        if 1 <= binding.device_slot <= len(tracks):
+            return tracks[binding.device_slot - 1]
+        return None
 
     async def _acquire_slot_number(self) -> int:
         async with self._condition:
@@ -542,7 +558,10 @@ class DynamicTtsSlotManager:
             raise DynamicSlotUnavailable(
                 f"slot {number}: persistent Protect identity is missing or ambiguous"
             )
-        slot.protect_ringtone_id = _ringtone_id(exact[0])
+        if slot.protect_ringtone_id != _ringtone_id(exact[0]):
+            raise DynamicSlotUnavailable(
+                f"slot {number}: Protect identity changed; old physical binding cannot be reused"
+            )
         slot.updated_at = time.time()
         self._persist_registry()
         return slot.protect_ringtone_id
@@ -593,7 +612,8 @@ class DynamicTtsSlotManager:
                     chime = await self.get_chime(target.desc.chime_id)
                     tracks = chime.get("speakerTrackList") or []
                     matches = [
-                        index for index, track in enumerate(tracks, 1)
+                        _physical_track_number(track, index, tracks=tracks)
+                        for index, track in enumerate(tracks, 1)
                         if _fingerprint(track) == (tone_md5, tone_size)
                     ]
                     if len(matches) != 1:
@@ -669,6 +689,34 @@ def _fingerprint(item: dict[str, Any]) -> tuple[str | None, int | None]:
     except (TypeError, ValueError):
         size = None
     return (str(md5) if md5 else None, size)
+
+
+def _physical_track_number(
+    track: dict[str, Any], fallback: int, *, tracks: list[dict[str, Any]] | None = None
+) -> int:
+    raw = track.get("track_no")
+    if raw is None:
+        raw = track.get("trackNo")
+    if raw is None:
+        if fallback < 1 or (tracks is not None and any(
+            item.get("track_no") is not None or item.get("trackNo") is not None
+            for item in tracks
+        )):
+            raise DynamicSlotUnavailable("missing physical track number in numbered inventory")
+        return fallback
+    try:
+        number = int(raw)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise DynamicSlotUnavailable("invalid physical track number in inventory") from exc
+    if isinstance(raw, bool) or number < 1 or str(number) != str(raw):
+        raise DynamicSlotUnavailable("invalid physical track number in inventory")
+    if tracks is not None and sum(
+        _physical_track_number(item, 0) == number
+        for item in tracks
+        if item.get("track_no") is not None or item.get("trackNo") is not None
+    ) != 1:
+        raise DynamicSlotUnavailable("physical track number is ambiguous in inventory")
+    return number
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
