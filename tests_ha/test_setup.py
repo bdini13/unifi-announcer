@@ -252,7 +252,7 @@ async def test_default_target_uses_intuitive_device_and_entity_names(hass):
     }
     prefix = f"{entry.entry_id}_chime-1"
     assert names_by_unique_id[f"{prefix}_buzzer"] == "Play buzzer"
-    assert names_by_unique_id[f"{prefix}_default"] == "Play default ringtone"
+    assert names_by_unique_id[f"{prefix}_default"] == "Play built-in default tone"
     assert names_by_unique_id[f"{prefix}_preset"] == "Play selected preset"
     assert names_by_unique_id[f"{prefix}_preset_select"] == "Ringtone preset"
     assert names_by_unique_id[f"{prefix}_queue_depth"] == "Queue depth"

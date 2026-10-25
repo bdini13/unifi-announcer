@@ -612,7 +612,7 @@ async def test_queue_stays_bounded_and_better_priority_displaces_worst():
 
 
 @pytest.mark.asyncio
-async def test_emergency_is_never_dropped_when_queue_is_full():
+async def test_emergency_obeys_capacity_when_no_queued_victim_exists():
     from app.playback.arbitration import ArbitrationQueue, PlaybackRequest, QueueDisposition
 
     release = asyncio.Event()
@@ -626,10 +626,10 @@ async def test_emergency_is_never_dropped_when_queue_is_full():
     await asyncio.sleep(0)
     emergency = asyncio.create_task(queue.submit(PlaybackRequest(blocked, priority=0)))
     await asyncio.sleep(0)
-    assert not emergency.done()
+    assert (await emergency).disposition is QueueDisposition.DROPPED
+    assert queue.depth == 1
     release.set()
     assert (await active).disposition is QueueDisposition.PLAYED
-    assert (await emergency).disposition is QueueDisposition.PLAYED
 
 
 @pytest.mark.asyncio
@@ -1198,7 +1198,7 @@ async def test_stale_classifier_does_not_retry_when_chime_is_missing(main_module
     ).mock(return_value=httpx.Response(404, text="Ringtone playback target chime not found"))
 
     with pytest.raises(RuntimeError, match="play-speaker failed"):
-        await main_module.protect.play("tone", 50, 1, chime_id="chime-fixture")
+        await main_module.protect.stage_ringtone("tone", 50, 1, chime_id="chime-fixture")
 
 
 @pytest.mark.asyncio

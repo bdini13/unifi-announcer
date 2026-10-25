@@ -1,10 +1,8 @@
 """Production fixed-slot synchronization and content-reuse policy.
 
-Protect can lag behind a successful direct Smart Chime slot overwrite and keep
-reporting the previous fingerprint in ``speakerTrackList``. Production playback
-therefore treats the application-owned content record as authoritative only
-after exact slot/filename ownership has been proven and no later Announcer
-overwrite has invalidated that record.
+Protect can lag behind a direct write, but can also restore canonical bytes.
+An old application record cannot distinguish those cases. Resident reuse needs
+both local proof and a matching fingerprint in the current Protect inventory.
 
 The strict provisioning/binding implementation remains in ``fixed_slots``.
 This subclass adds:
@@ -62,6 +60,9 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
         self._device_boot_epochs: dict[str, float] = {}
         self._invalidating_targets: dict[str, int] = {}
         self._busy_targets: dict[int, frozenset[str]] = {}
+        self._external_epochs: dict[str, int] = {}
+        self._pending_writes: dict[tuple[int, str], tuple[str, int]] = {}
+        self._fresh_lease_content: set[tuple[int, str]] = set()
         self.boot_epoch_tolerance_s = float(
             os.getenv("TTS_SLOT_BOOT_EPOCH_TOLERANCE", "5.0")
         )
@@ -78,6 +79,89 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
         if self.metrics is not None and hasattr(self.metrics, "observe"):
             self.metrics.observe(name, value_ms)
 
+    def note_external_change(self, target_ids: Iterable[str]) -> None:
+        """Immediately revoke reuse, including work already preparing a slot.
+
+        Event delivery must not wait for a playback lease: a controller rewrite
+        can happen during that lease. Generations prevent an in-flight prepare
+        from committing trust again after receiving the event.
+        """
+        for chime_id in target_ids:
+            self._external_epochs[chime_id] = self._external_epochs.get(chime_id, 0) + 1
+            for number in self.slots:
+                self._trusted_content.discard((number, chime_id))
+                self._fresh_lease_content.discard((number, chime_id))
+
+    def observe_inventory(self, chime_id: str, tracks: Any) -> None:
+        """Accept expected write feedback without revoking the current lease.
+
+        An inventory event covers the whole Chime. Every owned binding must
+        retain its exact slot and filename. Content must agree for pending or
+        trusted bindings; unknown unused content has already lost its proof.
+        One conflicting or missing binding revokes this target immediately.
+        Matching feedback never grants trust that an earlier event revoked.
+        """
+        if not isinstance(tracks, list) or any(not isinstance(track, dict) for track in tracks):
+            self.note_external_change([chime_id])
+            return
+        for number, slot in self.slots.items():
+            binding = slot.bindings.get(chime_id)
+            if binding is None:
+                continue
+            key = (number, chime_id)
+            check_content = key in self._pending_writes or key in self._trusted_content
+            expected = self._pending_writes.get(
+                key, (binding.current_md5, binding.current_size)
+            )
+            try:
+                track = self._reported_binding_track(tracks, binding)
+                matches = (
+                    track is not None
+                    and self._reported_filename(track) == binding.filename
+                    and (
+                        not check_content
+                        or (
+                            expected[0] is not None
+                            and expected[1] is not None
+                            and _fingerprint(track) == expected
+                        )
+                    )
+                )
+            except (DynamicSlotUnavailable, TypeError, ValueError, OverflowError):
+                matches = False
+            if not matches:
+                self.note_external_change([chime_id])
+                return
+
+    def validate_prepared(self, lease: PreparedDynamicSlot, chime_id: str) -> None:
+        if lease.content_epochs.get(chime_id) != self._external_epochs.get(chime_id, 0):
+            raise DynamicSlotUnavailable("Protect changed ringtone state during announcement preparation; retry after synchronization")
+
+    def verify_owned_play(self, ringtone_id: str, chime_id: str, chime: dict) -> bool:
+        """Validate our direct-write exception to canonical preset preflight."""
+        slots = [slot for slot in self.slots.values() if slot.protect_ringtone_id == ringtone_id]
+        if not slots:
+            return False
+        if len(slots) != 1 or not self.ready:
+            raise DynamicSlotUnavailable("owned ringtone is not ready")
+        slot = slots[0]
+        binding = slot.bindings.get(chime_id)
+        if (
+            binding is None
+            or slot.logical_slot not in self._busy
+            or chime_id not in self._busy_targets.get(slot.logical_slot, frozenset())
+            or (slot.logical_slot, chime_id) not in self._trusted_content
+        ):
+            raise DynamicSlotUnavailable("owned ringtone has no current prepared content proof")
+        track = self._reported_binding_track(chime.get("speakerTrackList") or [], binding)
+        if track is None or self._reported_filename(track) != binding.filename:
+            raise DynamicSlotUnavailable("owned ringtone is absent or changed in Protect inventory")
+        if (slot.logical_slot, chime_id) in self._fresh_lease_content:
+            if _fingerprint(track) != (binding.current_md5, binding.current_size):
+                self.note_external_change([chime_id])
+                raise DynamicSlotUnavailable("owned ringtone content changed after fresh preparation")
+        return True
+
     def _empty_content_state(self) -> dict[str, Any]:
         return {
             "schema_version": CONTENT_STATE_SCHEMA_VERSION,
@@ -91,29 +175,65 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
             return
         try:
             raw = json.loads(self.content_state_path.read_text())
-            if int(raw.get("schema_version", 0)) != CONTENT_STATE_SCHEMA_VERSION:
+            if not isinstance(raw, dict):
+                raise ValueError("content-state must be an object")
+            if type(raw.get("schema_version")) is not int or raw["schema_version"] != CONTENT_STATE_SCHEMA_VERSION:
                 raise ValueError("unsupported content-state schema")
             if raw.get("installation_id") != self.installation_id:
                 raise ValueError("content-state installation identity mismatch")
             bindings = raw.get("bindings")
             if not isinstance(bindings, dict):
                 raise ValueError("content-state bindings must be an object")
+            for number, per_chime in bindings.items():
+                if number not in {"1", "2"} or not isinstance(per_chime, dict):
+                    raise ValueError("invalid content-state slot")
+                for chime_id, entry in per_chime.items():
+                    if not chime_id or not self._valid_content_entry(entry):
+                        raise ValueError("invalid content-state binding")
             self._content_state = raw
-        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        except (OSError, ValueError, TypeError, OverflowError):
             # This file is only an optimization proof. Corruption must never
             # disable playback; discard the fast-path record and rewrite safely.
             self._metric("tts_slot_content_state_resets")
             self._content_state = self._empty_content_state()
 
+    @classmethod
+    def _valid_content_entry(cls, entry: Any) -> bool:
+        """Validate optimization records before they reach the write path."""
+        if not isinstance(entry, dict):
+            return False
+        md5 = entry.get("source_md5")
+        size = entry.get("source_size")
+        device_slot = entry.get("device_slot")
+        generation = entry.get("write_generation")
+        filename = entry.get("filename")
+        if (
+            not isinstance(md5, str)
+            or len(md5) != 32
+            or any(char not in "0123456789abcdef" for char in md5)
+            or type(size) is not int or size < 0
+            or type(device_slot) is not int or device_slot < 1
+            or type(generation) is not int or generation < 0
+            or not isinstance(filename, str) or not filename.endswith(".mp3")
+            or entry.get("content_key") != cls._content_key(md5, size)
+        ):
+            return False
+        identity = entry.get("device_identity")
+        if identity is not None and not isinstance(identity, str):
+            return False
+        for key in ("device_boot_epoch", "written_at", "last_used_at"):
+            value = entry.get(key)
+            if value is None and key == "device_boot_epoch":
+                continue
+            if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+                return False
+        return True
+
     def _persist_content_state(self) -> None:
-        self.content_state_path.parent.mkdir(parents=True, exist_ok=True)
+        from app.persistence import atomic_json
         self._content_state["schema_version"] = CONTENT_STATE_SCHEMA_VERSION
         self._content_state["installation_id"] = self.installation_id
-        temp = self.content_state_path.with_suffix(
-            self.content_state_path.suffix + ".tmp"
-        )
-        temp.write_text(json.dumps(self._content_state, indent=2, sort_keys=True))
-        os.replace(temp, self.content_state_path)
+        atomic_json(self.content_state_path, self._content_state)
 
     def _state_entry(self, number: int, chime_id: str) -> dict[str, Any] | None:
         slots = self._content_state.get("bindings") or {}
@@ -351,31 +471,17 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
                 return False
         return True
 
-    async def startup(
-        self,
-        targets: Iterable[Any],
-        *,
-        bootstrap_audio_factory,
-        legacy_registry: Any | None = None,
-    ) -> dict[str, Any]:
-        target_list = [target for target in targets if target is not None]
-        status = await super().startup(
-            target_list,
-            bootstrap_audio_factory=bootstrap_audio_factory,
-            legacy_registry=legacy_registry,
-        )
+    async def _restore_startup_state(self) -> None:
+        """Restore optional content proof while parent readiness remains false."""
         self._trusted_content.clear()
         self._device_identities.clear()
         self._device_boot_epochs.clear()
         self._load_content_state()
-        if not status.get("ready"):
-            return self.status()
-
         # The strict parent startup already proved each persisted slot binding.
         # A persisted content assignment is trusted across restart only when the
         # same physical device identity is observed and registry/content records
         # agree exactly. Otherwise the next request safely rewrites the slot.
-        for target in target_list:
+        for target in self._targets.values():
             chime_id = target.desc.chime_id
             try:
                 info = await target.direct_client.info()
@@ -414,7 +520,6 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
                     self._metric("tts_slot_content_restart_validations")
                 else:
                     self._metric("tts_slot_content_restart_invalidations")
-        return self.status()
 
     async def _acquire_slot_number_for_content(
         self,
@@ -492,6 +597,10 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
         number, selection_hit = await self._acquire_slot_number_for_content(
             md5=md5, size=size, target_ids=target_ids
         )
+        self._fresh_lease_content.difference_update(
+            key for key in tuple(self._fresh_lease_content) if key[0] == number
+        )
+        content_epochs = {chime_id: self._external_epochs.get(chime_id, 0) for chime_id in target_ids}
         acquire_ms = (perf_counter() - acquire_started) * 1000.0
         self._observe("slot_acquire_ms", acquire_ms)
 
@@ -517,7 +626,9 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
                     )
 
                 preflight_started = perf_counter()
-                await self._preflight_binding(slot, binding)
+                track = await self._preflight_binding(slot, binding)
+                if track is None:
+                    raise DynamicSlotUnavailable("owned ringtone is absent from Protect device inventory; refusing possible default-tone fallback")
                 preflight_ms = (perf_counter() - preflight_started) * 1000.0
                 timings["slot_preflight_ms"] += preflight_ms
                 self._observe("slot_preflight_ms", preflight_ms)
@@ -528,14 +639,17 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
                     and self._entry_matches(
                         entry, md5=md5, size=size, binding=binding
                     )
+                    and _fingerprint(track) == (md5, size)
                 )
                 if trusted_match:
+                    self._fresh_lease_content.add((number, chime_id))
                     skips += 1
                     self._metric("tts_slot_overwrite_skips")
                     continue
 
                 previous_generation = int((entry or {}).get("write_generation") or 0)
                 self._invalidate_content_proof(number, chime_id, binding)
+                self._pending_writes[(number, chime_id)] = (md5, size)
 
                 upload_started = perf_counter()
                 await target.direct_client.overwrite_owned_slot(
@@ -550,9 +664,11 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
                 timings["slot_direct_upload_ms"] += direct_upload_ms
                 self._observe("slot_direct_upload_ms", direct_upload_ms)
 
-                sync_ms, settle_ms = await self._wait_for_device_sync(
+                sync_ms, settle_ms, fresh_content = await self._wait_for_device_sync(
                     binding, expected_md5=md5, expected_size=size
                 )
+                if fresh_content:
+                    self._fresh_lease_content.add((number, chime_id))
                 timings["slot_sync_ms"] += sync_ms
                 timings["slot_settle_ms"] += settle_ms
 
@@ -563,6 +679,8 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
             # Commit application-authoritative content identity only after every
             # requested target completed successfully. A partial failure leaves
             # registry/state conservative and forces a later safe rewrite.
+            if any(content_epochs[chime_id] != self._external_epochs.get(chime_id, 0) for chime_id in target_ids):
+                raise DynamicSlotUnavailable("Protect changed ringtone state during announcement preparation; retry after synchronization")
             now = time.time()
             for target in target_list:
                 chime_id = target.desc.chime_id
@@ -622,6 +740,7 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
                 ringtone_id=slot.protect_ringtone_id,
                 duration_ms=estimate_mp3_duration_ms(mp3),
                 content_md5=md5,
+                content_epochs=content_epochs,
             )
         except asyncio.CancelledError:
             await self.release_now(number)
@@ -629,36 +748,23 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
         except Exception:
             await self.release_now(number)
             raise
+        finally:
+            for chime_id in target_ids:
+                self._pending_writes.pop((number, chime_id), None)
 
     async def shutdown(self) -> None:
         await super().shutdown()
         self._busy_targets.clear()
+        self._fresh_lease_content.clear()
 
     async def release_now(self, number: int) -> None:
         async with self._condition:
             self._busy.discard(number)
             self._busy_targets.pop(number, None)
-            self._condition.notify_all()
-
-    @staticmethod
-    def _reported_binding_track(
-        tracks: list[dict[str, Any]], binding: DeviceSlotBinding
-    ) -> dict[str, Any] | None:
-        numbered = [
-            track
-            for track in tracks
-            if int(track.get("track_no") or track.get("trackNo") or 0)
-            == binding.device_slot
-        ]
-        if len(numbered) > 1:
-            raise DynamicSlotUnavailable(
-                f"chime {binding.chime_id}: physical TTS slot is ambiguous"
+            self._fresh_lease_content.difference_update(
+                key for key in tuple(self._fresh_lease_content) if key[0] == number
             )
-        if len(numbered) == 1:
-            return numbered[0]
-        if binding.device_slot <= len(tracks):
-            return tracks[binding.device_slot - 1]
-        return None
+            self._condition.notify_all()
 
     @staticmethod
     def _reported_filename(track: dict[str, Any]) -> str:
@@ -688,7 +794,7 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
         *,
         expected_md5: str,
         expected_size: int,
-    ) -> tuple[float, float]:
+    ) -> tuple[float, float, bool]:
         """Prefer fresh Protect evidence; tolerate only exact-owned stale metadata."""
         started = perf_counter()
         deadline = asyncio.get_running_loop().time() + self.device_sync_timeout_s
@@ -715,7 +821,7 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
                     self._observe("slot_sync_ms", sync_ms)
                     self._metric("tts_slot_sync_successes")
                     settle_ms = await self._settle()
-                    return sync_ms, settle_ms
+                    return sync_ms, settle_ms, True
                 else:
                     stale_owned_track_seen = True
             else:
@@ -727,7 +833,7 @@ class DynamicTtsSlotManager(_FixedDynamicTtsSlotManager):
                 if stale_owned_track_seen:
                     self._metric("tts_slot_sync_stale_inventory_accepts")
                     settle_ms = await self._settle()
-                    return sync_ms, settle_ms
+                    return sync_ms, settle_ms, False
                 self._metric("tts_slot_sync_timeouts")
                 raise DynamicSlotUnavailable(
                     f"chime {binding.chime_id}: overwritten TTS slot did not synchronize"

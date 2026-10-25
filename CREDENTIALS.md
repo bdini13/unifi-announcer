@@ -103,6 +103,12 @@ curl -fsS "${AUTH[@]}" http://<announcer-host-or-ip>:8095/tts/slots/status
 
 A healthy arbitrary-TTS setup reports `"mode":"two_slot_overwrite"`, `"slot_count":2`, and `"ready":true`.
 
+## Per-Chime credentials (unreleased)
+
+Additional `CHIMES_CONFIG` entries accept either `password_env` (the name of an environment variable in the container) or `credential_file` (a path inside the container). Each target then uses its own provider. A missing or empty explicitly selected credential fails for that target; it does not silently borrow another Chime's password. Omitting both fields preserves the global `CHIME_CREDENTIAL_FILE` / `CHIME_DIRECT_PASSWORD` behavior.
+
+For example, `{"name":"upstairs","id":"<uuid>","credential_file":"/data/credentials/upstairs"}` reads that Chime's credential from the mounted data directory. Credential files support change detection and refresh after HTTP 401. Environment-variable passwords require container recreation after rotation.
+
 ## Credential rotation
 
 If the device password is intentionally changed in Protect, a static `CHIME_DIRECT_PASSWORD` must be updated and the container recreated. UniFi Announcer also supports `CHIME_CREDENTIAL_FILE` for operators who maintain the credential in a mounted local secret file; that provider rereads the file when it changes and after a direct-device HTTP 401.

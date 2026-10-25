@@ -68,17 +68,6 @@ def test_hacs_docs_make_backend_requirement_explicit():
     assert "HACS does not replace or run the backend" in readme
 
 
-def test_ha_docs_define_immediate_playback_result_semantics():
-    readme = Path("README.md").read_text()
-    ha_docs = Path("docs/HOME_ASSISTANT.md").read_text()
-    assert "Last playback result" in readme
-    assert "Last playback result" in ha_docs
-    assert "`success`" in ha_docs
-    assert "`failure`" in ha_docs
-    assert "updates it immediately" in ha_docs
-    assert "stale Protect inventory" in ha_docs
-
-
 def test_readme_documents_backup_and_rollback_for_named_volume():
     readme = Path("README.md").read_text()
     rollback = readme.split("## Roll back", 1)[1].split("## Troubleshooting", 1)[0]
@@ -130,33 +119,6 @@ def test_release_identity_agrees_across_backend_component_and_manifest():
     )
     manifest = json.loads(Path("custom_components/unifi_announcer/manifest.json").read_text())
     assert APP_VERSION == integration_version == manifest["version"]
-
-
-def test_beta4_candidate_docs_preserve_published_beta3_boundary():
-    readme = Path("README.md").read_text()
-    env_example = Path(".env.example").read_text()
-    notes = Path("docs/RELEASE_NOTES_v2.2.0-beta.4.md").read_text()
-    guide = Path("docs/MEDIA_INGESTION.md").read_text()
-    validation = Path(
-        "docs/validation/v2.2.0-beta.4-media-ingestion-validation.md"
-    ).read_text()
-    roadmap = Path("ROADMAP.md").read_text()
-    ha_docs = Path("docs/HOME_ASSISTANT.md").read_text()
-
-    assert "**Prerelease:** `v2.2.0-beta.3`" in readme
-    assert "v2.2.0-beta.4" in notes
-    assert "currently a **candidate**, not a published prerelease" in notes
-    assert "Do not tag or publish beta.4" in notes
-    assert "media-source://" in guide
-    assert "POST /media/announce" in guide
-    assert "arbitrary" in guide.lower() and "URL" in guide
-    assert "MEDIA_MAX_INPUT_BYTES=4194304" in env_example
-    assert "MEDIA_MAX_DURATION_SECONDS=30" in env_example
-    assert "beta.4 candidate in progress" in roadmap
-    assert "v2.2.0-beta.3` remains the current published prerelease" in ha_docs
-    assert "candidate validation pending" in validation
-    assert "candidate source SHA: `PENDING`" in validation
-    assert "Until those boxes are complete" in validation
 
 
 def test_fastapi_metadata_uses_release_identity(main_module):

@@ -127,7 +127,7 @@ class AudioMediaNormalizer:
         os.close(descriptor)
         path = Path(raw_path)
         try:
-            await asyncio.to_thread(path.write_bytes, payload)
+            await self._write_input(path, payload)
             duration = await self._probe_duration(path, demuxer)
             if duration <= 0 or not math.isfinite(duration):
                 raise InvalidMedia("media duration is invalid")
@@ -181,7 +181,38 @@ class AudioMediaNormalizer:
                 )
             return EncodedAudio(normalized, encode_ms=encode_ms)
         finally:
-            await asyncio.to_thread(path.unlink, missing_ok=True)
+            # The writer has finished before this point. Keep final removal
+            # free of cancellation points so a second cancellation cannot skip
+            # cleanup after the first one interrupted preparation.
+            path.unlink(missing_ok=True)
+
+    @staticmethod
+    async def _write_input(path: Path, payload: bytes) -> None:
+        """Join non-interruptible file I/O before propagating cancellation.
+
+        Cancelling a thread await does not stop its write: unlinking first can
+        let that thread recreate the temporary file afterward. A preparation
+        deadline therefore waits for an already-started write to finish cleanup.
+        """
+        writer = asyncio.get_running_loop().run_in_executor(None, path.write_bytes, payload)
+        cancellation = None
+        while True:
+            try:
+                await asyncio.shield(writer)
+                break
+            except asyncio.CancelledError as exc:
+                cancellation = exc
+                if writer.done():
+                    if not writer.cancelled():
+                        writer.exception()
+                    break
+            except Exception:
+                if cancellation is None:
+                    raise
+                # Preserve request cancellation even if disk I/O also failed.
+                break
+        if cancellation is not None:
+            raise cancellation
 
     async def _probe_duration(self, path: Path, demuxer: str) -> float:
         output = await self._run(

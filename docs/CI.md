@@ -38,6 +38,12 @@ The caching/concurrency configuration follows [uv's GitHub Actions guide](https:
 
 ## Maintaining useful tests
 
+The October 25 offline repairs add failure-path coverage for controller content replacement, interrupted provisioning and preset updates, durable restart guards, physical slot numbering, and HA service routing. The admission scheduler test now uses a short hold while separately asserting the production duration calculation, removing another artificial long wait. One exact-wording HA documentation test was removed because playback-result behavior already has executable coverage. Both HA version gates and the 100-message slot regression remain.
+
+On the combined native-media candidate, a short silent WAV-to-MP3 smoke check runs inside the same image already built by CI, with networking disabled. It verifies that the shipped FFmpeg/ffprobe binaries and conversion path work, without another Docker build or a physical speaker.
+
+The combined candidate passed 589 backend tests locally in 4.45 seconds and 33 tests in each HA environment. The merge replaces mocked media admission outcomes with a real HTTP/dispatcher queue regression. It also removes a beta.4 exact-wording documentation snapshot; version consistency remains executable coverage, while candidate publication and physical-validation gates remain explicit in the release documents.
+
 Profile before removing or parallelizing tests:
 
 ```bash

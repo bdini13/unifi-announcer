@@ -10,7 +10,7 @@ UniFi Announcer includes a HACS-compatible custom integration under `custom_comp
 
 ## Unreleased compatibility and timeouts
 
-The working branch tests HA 2026.3.4 and 2026.10.0 separately. Device lookup uses the scoped registry API when available and preserves the older supported API otherwise. Playback commands, including media uploads, allow 150 seconds; health and topology polling retain a 15-second timeout. The companion `fix/non-security-reliability` branch adds a 120-second backend deadline and Chime duration guards. Those backend changes must be integrated and validated with this draft before a combined release. A Chime `played` result means Protect accepted playback; it is not acoustic completion evidence.
+The combined beta.4 candidate tests HA 2026.3.2 and 2026.10.0 separately. Device lookup uses the scoped registry API when available and preserves the older supported API otherwise. Playback commands, including media uploads, allow 150 seconds for the backend's 120-second command deadline; health and topology polling retain a 15-second timeout. The command deadline includes queue wait, preparation, and camera streaming. A Chime `played` result means Protect accepted playback, while a duration guard continues to reserve the target; it is not acoustic completion evidence. These changes remain unreleased.
 
 ## Install
 
@@ -69,7 +69,7 @@ No playback occurs during setup.
 
 If the application API key is rejected while Home Assistant loads the integration, the entry transitions to Home Assistant's reauthentication flow. If the Announcer service is temporarily unreachable, setup is retried instead of treating the outage as invalid configuration.
 
-The integration deliberately supports one UniFi Announcer config entry. This avoids ambiguous routing for the global `unifi_announcer.announce` action.
+The manifest still permits one UniFi Announcer config entry through normal setup. The global `unifi_announcer.announce` action also accepts `config_entry_id` for explicit routing if older/manual configuration contains multiple entries. With multiple entries it requires that selector; an unavailable selected entry produces an error instead of silently routing elsewhere. Unloading one entry retains the global action while another entry remains loaded.
 
 ## Options
 
@@ -91,7 +91,7 @@ For each configured physical Chime the integration creates:
 - `notify` entity for standard text announcements;
 - `media_player` for text, preset, and beta.4 media-source `play_media`;
 - buzzer button;
-- assigned-default button;
+- **Play built-in default tone** button (track 1, independent of camera ringtone assignments);
 - preset selector;
 - play-selected-preset button;
 - queue-depth sensor;
@@ -145,7 +145,7 @@ data:
   dedupe_key: dinner-ready
 ```
 
-Supported fields are `message`, `target`, `volume`, `repeat_times`, `profile`, `priority`, and `dedupe_key`. Camera targets support `message`, `target`, `repeat_times`, `priority`, and `dedupe_key`; explicit `volume` and `profile` are intentionally rejected.
+Supported fields are `message`, `config_entry_id`, `target`, `volume`, `repeat_times`, `profile`, `priority`, and `dedupe_key`. Camera targets support the routing fields plus `message`, `repeat_times`, `priority`, and `dedupe_key`; explicit `volume` and `profile` are intentionally rejected. Explicit repeat counts remain 1–6. The built-in default-tone button leaves repeats to the device, so the backend conservatively reserves up to 10 plays.
 
 ## Media player
 
@@ -188,7 +188,7 @@ data:
   message: "The laundry is finished"
 ```
 
-Home Assistant resolves the media source locally, reads/downloads no more than 4 MiB, and uploads only the resolved audio bytes to authenticated `POST /media/announce`. The backend checks MIME type and input size, then dispatches the request. After quiet-hours and target checks, a bounded preparation stage validates decodability, finite duration, and output size while normalizing to mono 22.05 kHz / 64 kbps MP3. The default duration ceiling is 30 seconds. Fully occupied media-request capacity returns HTTP 429; no decoder starts for quiet-hours suppression or an invalid target. The separate reliability branch's earlier queue admission must be integrated to also skip decoding deduped/full-queue requests.
+Home Assistant resolves the media source locally, reads/downloads no more than 4 MiB, and uploads only the resolved audio bytes to authenticated `POST /media/announce`. The backend checks MIME type and input size, then dispatches the request. After quiet-hours, target, dedupe, and queue-admission checks, a bounded preparation stage validates decodability, finite duration, and output size while normalizing to mono 22.05 kHz / 64 kbps MP3. The default duration ceiling is 30 seconds. Fully occupied media-request capacity returns HTTP 429; no decoder starts for quiet-hours suppression, an invalid target, or a request fully deduplicated or dropped by queue admission.
 
 The media player does **not** accept arbitrary direct HTTP/HTTPS URLs as a generic fetch feature. Existing target rules still apply: camera media-source playback uses the same hardened camera talkback path and remains device-volume-managed, while camera preset/default/buzzer behavior remains unavailable.
 
@@ -212,9 +212,9 @@ Values are intentionally simple at the success/failure boundary while preserving
 
 A successful HTTP request alone does not make HA invent acoustic confirmation. Physical audibility is part of release/device validation, while the sensor reports the dispatcher/client result visible to Home Assistant.
 
-## v2.1.8 resident reuse and stale Protect inventory
+## Unreleased resident reuse and controller synchronization
 
-A Smart Chime slot overwrite can succeed while Protect's `speakerTrackList` continues to report the previous content fingerprint. v2.1.6 introduced a narrow stale Protect inventory fallback; v2.1.8 keeps that safety boundary and adds application-authoritative resident-content reuse.
+A Smart Chime slot overwrite can succeed while Protect's `speakerTrackList` continues to report the previous content fingerprint. Protect can also restore its canonical audio without a Chime reboot. The unreleased candidate therefore treats an old application record as insufficient proof of resident speech.
 
 For **new content**:
 
@@ -224,9 +224,9 @@ For **new content**:
 4. if the fingerprint remains stale, playback may continue only when Protect still identifies the same proven physical slot and exact UniFi Announcer-owned filename;
 5. ambiguity, filename drift, missing ownership evidence, or other positive mismatches fail closed.
 
-For **resident repeated content**, v2.1.8 may skip the write/sync/settle path entirely, but only while all requested targets have matching trusted content and the current Smart Chime boot remains proven. Trusted state is tied to direct-device uptime/boot epoch. A reboot, reconnect, device change, lifecycle invalidation, failed write, or unprovable boot continuity forces a safe rewrite rather than trusting stale bytes.
+For **resident repeated content**, all requested targets must have matching local proof, device identity/boot continuity, ownership, and a matching fingerprint in the current Protect inventory. Otherwise the backend rewrites the owned slot. Observed ringtone/inventory changes and event-stream gaps revoke reuse; a change during preparation invalidates that preparation. An active prepared lease is required to play an internal dynamic-slot identity.
 
-This distinction matters for latency: in live single-Chime validation, 10 same-boot resident HA requests measured roughly 0.54–0.66 seconds request round-trip with zero slot writes. These were request-path measurements, not synchronized acoustic benchmarks.
+Ordinary playback now preflights the catalog identity and target connection; preset playback also reads canonical audio and checks its fingerprint against the target inventory. This adds controller work compared with historical timing measurements. Missing or unconfirmed data fails clearly. Public Protect metadata omits the canonical filename mapping, and an external synchronization can race playback, so these checks do not establish an atomic or audible guarantee. The October 2026 changes have offline regression coverage only.
 
 ## Experimental camera session safety
 
@@ -240,6 +240,8 @@ The integration polls lightweight service state. A temporary Piper outage does n
 
 Fixed-slot readiness is an Announcer runtime concern. If `/tts/slots/status` is not ready, Smart Chime text or media-source announcement actions fail clearly rather than reverting to old per-phrase allocation behavior.
 
+Startup/recovery remains unready until migration and content restoration finish. It also waits for persisted playback guards. Interrupted provisioning resumes only with positive ownership evidence; transformed audio with no identifiable mapping remains unavailable. Preserve the backend's entire `/data` directory, including its playback and provisioning journals, when restarting or moving containers.
+
 Camera entity availability follows the fresh `/targets` capability catalog. An offline camera or unvalidated profile is unavailable; a validated camera that reconnects can become available again on the next poll without entity recreation.
 
 ## Diagnostics
@@ -250,17 +252,17 @@ The Version sensor reports the semantic UniFi Announcer version. Its attributes 
 
 For backend detail, authenticated `/tts/slots/status` exposes sanitized v2.1.8 resident-content/last-prepare state and `/metrics/json` exposes process-local counters/histograms.
 
-## Stable v2.1.8 verification
+## Deployment verification
 
-For a v2.1.8 deployment, verify the backend and matching HA component together:
+Verify the backend and matching HA component together:
 
-1. `/version` reports semantic version `2.1.8` and the expected build SHA rather than `unknown`;
+1. `/version` reports the intended semantic version and exact build SHA rather than `unknown`;
 2. `/tts/slots/status` reports exactly two ready slots when arbitrary TTS is configured;
 3. a normal HA text announcement completes without timeout;
 4. Protect playback succeeds and the expected phrase is audibly heard;
 5. Last playback result becomes `success` immediately;
 6. repeat the same phrase on the same Chime boot and confirm it remains correct;
-7. the repeated request should normally show a resident content hit with zero direct upload when boot continuity is still trusted;
+7. on the unreleased candidate, expect a zero-write resident hit only when current inventory also confirms the requested bytes;
 8. if the Chime has rebooted/reconnected, the first safe request may rewrite once before later same-boot reuse.
 
 The release-specific physical evidence, including discovery and remediation of an earlier reboot-safety defect, is retained in [`validation/v2.1.8-live-latency-validation.md`](validation/v2.1.8-live-latency-validation.md).
@@ -289,13 +291,16 @@ Beta.4 adds media-source ingestion but does not broaden camera compatibility. Co
 | Last playback result is `failure` | Backend/client action failed | Inspect the HA error plus Announcer logs; verify Protect and target status |
 | Text TTS fails but `tts.speak` media works | Announcer-side Piper/Edge is unavailable while HA's TTS provider is healthy | Check the configured Announcer TTS engine separately |
 | Text TTS fails but preset/buzzer works | Fixed slots not ready or direct credential stale | Check `/tts/slots/status` with `X-API-Key` |
-| Repeated text performs a write | Resident proof was missing/invalidated by lifecycle or boot change | Usually safe/expected; inspect `content_reuse` state and lifecycle counters |
+| Repeated text performs a write | Proof was invalidated or current inventory does not confirm the requested bytes | Usually safe/expected; inspect `content_reuse` state and lifecycle counters |
 | First text after Chime reboot rewrites once | v2.1.8 correctly invalidated old resident bytes | Expected; the next same-boot replay can become a zero-write hit |
 | Camera entity is unavailable | Camera is offline or model/profile is outside the validated/explicit experimental policy | Check authenticated `/targets`; reconnect it or keep it unsupported unless running an approved exact-profile candidate test |
 | Camera came back online but entity is unavailable | Coordinator has not completed another `/targets` refresh | Wait for the next poll or reload the integration; entity recreation is not required |
 | Camera has speaker/AAC metadata but remains unavailable | Metadata alone is insufficient evidence | Use the physically validated G3 record, or an explicitly approved beta.3 exact-profile opt-in that remains labeled experimental |
 | Service refuses GROUPS_CONFIG | Unknown/duplicate member, reserved name, empty group, or malformed JSON | Correct the group definition; production intentionally fails closed |
 | Slot status reports ownership drift | Binding no longer matches persisted proof | Stop dynamic TTS and reconcile; never force an unknown slot |
+| Startup waits after a restart | A persisted playback guard may still cover remote audio | Let the hold expire; retain `playback_guards.json` |
+| Interrupted provisioning requests positive identity | The delayed delta cannot be attributed safely | Retain the provisioning journal and slot registry for review; do not delete them to force allocation |
+| Global announce action reports multiple instances | More than one configured entry exists | Supply the intended `config_entry_id`; normal setup remains single-entry |
 | `/version` shows `git_sha: unknown` | Container built without `GIT_SHA` | Rebuild with `export GIT_SHA="$(git rev-parse HEAD)"` |
 | TTS synthesis fails | Piper/Edge TTS unavailable | Check the configured TTS service separately |
 | Group has no queue sensor | Intentional | Inspect member-target queue sensors |

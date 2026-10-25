@@ -17,7 +17,7 @@ UA-TTS-1-<installation-suffix>
 UA-TTS-2-<installation-suffix>
 ```
 
-The installation UUID is generated once in `/data/installation.json`. Slot identities and per-chime physical bindings are persisted in `/data/dynamic_tts_slots.json`.
+The installation UUID is generated once in `/data/installation.json`. Slot identities and per-chime physical bindings are persisted in `/data/dynamic_tts_slots.json`. The unreleased candidate records interrupted provisioning in `/data/dynamic_tts_provisioning.json`; preserve this ownership evidence with the installation and slot registry.
 
 For each configured Smart Chime, a slot binding records the exact physical slot and filename plus the fingerprints used to prove ownership. Before every overwrite, the service rechecks that physical location. If the proof no longer matches, dynamic TTS fails closed; it never guesses another slot.
 
@@ -36,7 +36,7 @@ text
 
 Two slots are used rather than one so a later announcement does not overwrite bytes while an earlier announcement may still be starting or playing. Slot reuse accounts for encoded audio duration, repeat count, and a safety margin.
 
-When the selected slot already contains the same content fingerprint, the device write is skipped.
+The unreleased candidate skips a write only when local proof, device identity/boot continuity, and current Protect inventory all confirm the requested bytes in the owned slot. A stale inventory fingerprint cannot justify a resident hit. Observed controller changes revoke reuse and any affected in-progress preparation.
 
 ## Provisioning
 
@@ -45,18 +45,28 @@ A clean v2.1 installation:
 1. loads or creates the persistent installation UUID;
 2. proves the direct-device write capability for every configured target before allocation;
 3. creates two distinct short silent MP3 bootstrap artifacts;
-4. creates the two Protect ringtone identities once;
+4. persists the original target inventory snapshots before creating the two Protect ringtone identities;
 5. plays each silent bootstrap at volume 1 so a non-zero request forces Protect's real staging/playback path;
-6. maps the resulting single before/after `speakerTrackList` delta to exactly one physical position, allowing for Protect-side audio transformation;
+6. maps the resulting single before/after `speakerTrackList` delta to exactly one physical track number, allowing for Protect-side audio transformation and sparse numbered inventory;
 7. persists the proven mapping.
 
-An exact-looking `UA-TTS-*` name is **not** enough to claim ownership if the local registry is missing. Such a collision fails closed.
+An exact-looking `UA-TTS-*` name is **not** enough to claim ownership without a local registry or matching durable provisioning intent. Such a collision fails closed.
+
+Interrupted creation/staging responses retain the original snapshots. Recovery requires a single delta plus positive ringtone identity, canonical filename, or exact known audio fingerprint; transformed, unidentified deltas remain unavailable. Each target's binding is committed separately. A same-name ringtone with a different Protect ID cannot inherit an old binding. Readiness remains false through provisioning, migration, and content restoration.
+
+`playback_guards.json` preserves target deadlines across restart and blocks provisioning or playback while prior sound may still be active. Keep these journals and the complete data directory for recovery. Malformed `dynamic_tts_content_state.json` is treated as an optional cache miss, without removing ownership records.
 
 ## Presets
 
 Presets remain normal persistent Protect ringtone identities. They are separate from the two dynamic slots and are never selected for dynamic overwrite.
 
 The user-facing `/presets` and MCP `list_presets` responses hide internal `UA-TTS-*` identities.
+
+Saving a preset pins its registry record and explicitly changes any matching legacy dynamic record to `preset`, including when the existing recording is retained with `force=false`. Saving a pre-existing controller recording does not claim service ownership or infer its duration from the unused replacement audio.
+
+Forced replacement requires one spare Protect slot. Announcer uploads and verifies the new identity before deleting the previous recording; a full controller therefore rejects the update while preserving the old preset. The new identity is durably registered before the old ID is retired. Rejected deletion rolls back only the response-verified replacement ID, and failures are reported rather than treated as successful updates.
+
+`/data/preset_update.json` records an interrupted update. The next preset write reconciles this journal before starting another mutation: it either completes the verified replacement or removes its verified new ID while retaining the old one. If an upload response was lost and an unfamiliar same-name ID appeared, Announcer preserves both recordings and requires explicit reconciliation; a name match alone cannot prove ownership. Duplicate names also fail closed during playback lookup. These recovery paths make no Chime playback or direct-device calls.
 
 ## Migration from beta.2 and earlier
 
@@ -92,6 +102,8 @@ Pruning is least-recently-used by file timestamp and occurs at startup and after
 `MAX_TOTAL_RINGTONES` remains a conservative capacity guard for initial fixed-slot provisioning and persistent preset creation.
 
 Routine arbitrary TTS after provisioning creates **zero new Protect ringtone identities**.
+
+This does not imply zero controller reads: ordinary play checks catalog identity and target connection, and preset preflight reads canonical audio for a fingerprint comparison. Protect's public catalog omits canonical filename/track-number mapping, so conservative preflight cannot make external synchronization and playback atomic.
 
 `MAX_DYNAMIC_TRACKS` is deprecated in v2.1. It is retained temporarily only for compatibility with legacy registry/startup behavior; physical dynamic TTS usage is fixed at exactly two slots.
 

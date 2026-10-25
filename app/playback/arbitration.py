@@ -52,12 +52,13 @@ class ArbitrationQueue:
         self._recent: dict[str, int] = {}
         self._worker: asyncio.Task | None = None
         self._active = False
+        self.admission_depth = 0
         self._active_task: asyncio.Task | None = None
         self._active_future: asyncio.Future | None = None
 
     @property
     def depth(self) -> int:
-        return len(self._heap) + int(self._active)
+        return max(self.admission_depth, len(self._heap) + int(self._active))
 
     def _ensure_worker(self) -> None:
         if self._worker is None or self._worker.done():
@@ -88,12 +89,11 @@ class ArbitrationQueue:
                     victim_future.set_result(QueueResult(QueueDisposition.DROPPED))
                 if self.metrics:
                     self.metrics.inc("queue_dropped")
-            elif request.priority != 0:
+            else:
                 if self.metrics:
                     self.metrics.inc("queue_dropped")
                 return QueueResult(QueueDisposition.DROPPED)
-            # Emergency is admitted even if the sole capacity is currently
-            # active; an in-flight playback is never interrupted.
+            # Never interrupt in-flight playback or exceed the hard cap.
         if request.dedupe_key:
             self._recent[request.dedupe_key] = now + request.dedupe_window_ms * 1_000_000
         loop = asyncio.get_running_loop()

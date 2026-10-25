@@ -6,6 +6,7 @@ from typing import Any
 
 import voluptuous as vol
 
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady, HomeAssistantError
@@ -80,7 +81,15 @@ async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unload_ok and hass.services.has_service(DOMAIN, "announce"):
+    other_loaded_entries = [
+        other for other in hass.config_entries.async_loaded_entries(DOMAIN)
+        if other.entry_id != entry.entry_id
+    ]
+    if (
+        unload_ok
+        and not other_loaded_entries
+        and hass.services.has_service(DOMAIN, "announce")
+    ):
         hass.services.async_remove(DOMAIN, "announce")
     return unload_ok
 
@@ -95,6 +104,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
 
     schema = vol.Schema({
         vol.Required("message"): cv.string,
+        vol.Optional("config_entry_id"): cv.string,
         vol.Optional("target"): cv.string,
         vol.Optional("volume"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
         vol.Optional("repeat_times"): vol.All(vol.Coerce(int), vol.Range(min=1, max=6)),
@@ -104,10 +114,25 @@ def _async_register_services(hass: HomeAssistant) -> None:
     })
 
     async def _announce(call: ServiceCall) -> None:
-        entries = hass.config_entries.async_entries(DOMAIN)
+        entries = hass.config_entries.async_entries(
+            DOMAIN, include_ignore=False, include_disabled=False
+        )
         if not entries:
             raise HomeAssistantError("No UniFi Announcer instance is configured")
-        entry = entries[0]
+        entry_id = call.data.get("config_entry_id")
+        if entry_id is not None:
+            entry = next((item for item in entries if item.entry_id == entry_id), None)
+            if entry is None:
+                raise HomeAssistantError("The selected UniFi Announcer instance is not configured")
+        elif len(entries) == 1:
+            entry = entries[0]
+        else:
+            # Do not silently switch destinations when an instance is offline.
+            raise HomeAssistantError(
+                "Multiple UniFi Announcer instances are configured; specify config_entry_id"
+            )
+        if entry.state is not ConfigEntryState.LOADED:
+            raise HomeAssistantError("The selected UniFi Announcer instance is not loaded")
         runtime: UniFiAnnouncerRuntime = entry.runtime_data
         target = call.data.get("target") or entry.options.get(CONF_DEFAULT_TARGET) or None
         default_volume = (

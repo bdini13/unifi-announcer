@@ -173,10 +173,8 @@ async def test_persisted_id_with_foreign_protect_name_fails_closed(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_missing_persisted_id_recovers_unique_expected_name(tmp_path):
-    # A stale ID is recoverable only because exactly one Protect ringtone still
-    # has the installation-specific expected name; this is safe identity repair,
-    # not permission to claim an unregistered name or physical slot.
+async def test_missing_persisted_id_does_not_claim_same_name_replacement(tmp_path):
+    # A replacement Protect record may refer to a different physical file.
     world = FakeProtectWorld()
     first = make_manager(tmp_path, world)
     await first.startup([make_target(world)], bootstrap_audio_factory=bootstrap)
@@ -187,8 +185,9 @@ async def test_missing_persisted_id_recovers_unique_expected_name(tmp_path):
         [make_target(world)], bootstrap_audio_factory=bootstrap
     )
 
-    assert status["ready"] is True, status
-    assert restarted.slots[1].protect_ringtone_id == "replacement-ring-1"
+    assert status["ready"] is False, status
+    assert "original physical binding" in status["last_error"]
+    assert restarted.slots[1].protect_ringtone_id != "replacement-ring-1"
     assert world.upload_calls == 2
 
 
