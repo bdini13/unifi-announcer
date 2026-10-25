@@ -5,10 +5,11 @@
 | Component / capability | Evidence level | Status |
 |---|---|---|
 | UniFi Protect 7.2.105 private session API | Existing implementation + live use + mocked tests | Protect auth, persistent ringtone identity and playback backend |
+| UniFi Protect 7.3.70 Chime controller behavior | Shipped-controller audit + offline reproductions | Canonical ringtone resynchronization and built-in track-1 fallback confirmed in code; new safeguards await physical validation |
 | Smart Chime firmware 1.7.20 `/api/info` | Existing recorded/live evidence | Capability gate, device identity, uptime/boot-epoch evidence |
 | Smart Chime firmware 1.7.20 `/api/support` | Existing recorded evidence | Sensitive diagnostic read; not part of normal playback |
 | Exact owned ringtone-slot overwrite | Controlled local research on fw 1.7.20 + v2.1 ownership gates | Used only for two proven service-owned dynamic TTS slots |
-| Same-boot resident content reuse | Physical single-Chime v2.1.8 validation + automated tests | Supported when content, ownership, device identity, and boot continuity all match |
+| Same-boot resident content reuse | Historical single-Chime v2.1.8 validation; stricter unreleased policy tested offline | Requires local content proof plus matching current inventory, ownership, device identity, and boot continuity |
 | Reboot/reconnect resident invalidation | Physical single-Chime reboot validation + automated lifecycle/concurrency tests | Supported; next request safely rewrites when continuity is broken |
 | Generic arbitrary direct staging | Insufficient safe ownership model | Disabled |
 | Direct HTTP playback | No verified route | Unsupported; playback remains Protect `play-speaker` |
@@ -36,6 +37,10 @@ If any write precondition fails, arbitrary TTS fails closed. The service never f
 
 Buzzer/default/persistent preset operations can remain available independently when their existing Protect paths are healthy.
 
+Manual `/play-default` plays built-in track 1. It does not select a camera's assigned ringtone. Explicit API repeat counts remain 1–6; when this action leaves repeats to the device, the playback reservation covers Protect's device-setting maximum of 10.
+
+Ordinary ringtone playback now checks the current catalog identity and target connection. Presets additionally fetch canonical audio and require its fingerprint in the target inventory. Missing, ambiguous, disconnected, or unconfirmed state fails before play. Protect's public catalog omits canonical filename and physical track number, so these checks cannot fully prove its private filename-to-track lookup or make synchronization and playback atomic. HTTP success remains an acknowledgment, not audible confirmation.
+
 ## v2.1.8 resident-content boundary
 
 v2.1.8 may skip a physical Smart Chime write when requested content is already resident, but application cache state alone is not sufficient. A resident hit requires:
@@ -45,6 +50,7 @@ v2.1.8 may skip a physical Smart Chime write when requested content is already r
 - the same configured physical device identity;
 - a persisted write generation that has not been invalidated by a later write/lifecycle event;
 - an uptime-derived boot epoch that still matches the currently observed Smart Chime boot;
+- in the unreleased candidate, a matching content fingerprint in the current Protect inventory;
 - all requested targets to satisfy the same trust requirements.
 
 Direct-device uptime is deliberately part of the trust model because physical validation showed that static MAC/serial/firmware and slot metadata can remain unchanged across a Smart Chime reboot even when the playable slot bytes do not survive correctly.
@@ -52,6 +58,14 @@ Direct-device uptime is deliberately part of the trust model because physical va
 The first v2.1.8 candidate failed this gate and produced wrong audio after a physical Smart Chime reboot. It was not released. The corrected implementation invalidates resident proof on boot discontinuity, observed reconnect, and guarded lifecycle operations. The fixed candidate was physically retested: the first post-reboot request performed one safe rewrite and the next same-boot request reused resident content correctly.
 
 If boot continuity is missing, malformed, or outside the configured tolerance, resident reuse is rejected and the phrase is rewritten.
+
+The October 2026 audit showed that Protect can restore canonical audio without a reboot. The unreleased candidate therefore also revokes reuse on observed ringtone/inventory changes or event-stream gaps and rejects preparation invalidated by a concurrent event. Stale inventory may still be tolerated immediately after an acknowledged owned-slot write; it no longer proves a later resident-content hit. Unobserved or delayed controller writes remain a hardware-validation boundary.
+
+## Unreleased recovery and persistence
+
+Readiness remains false throughout provisioning, legacy migration, and content restoration. Interrupted provisioning retains its original inventory snapshots in `dynamic_tts_provisioning.json`. Recovery requires an unambiguous delta with positive ringtone identity, canonical filename, or exact known audio fingerprint. Transformed audio without such evidence remains unavailable; a same-name replacement cannot inherit an old physical binding.
+
+Keep the entire `/data` directory. `installation.json`, `dynamic_tts_slots.json`, `dynamic_tts_provisioning.json`, `playback_guards.json`, and `preset_update.json` contain identity, recovery, or playback-safety evidence. Malformed optional `dynamic_tts_content_state.json` becomes a cache miss; ownership journals and playback deadlines are not disposable caches. These changes have offline regression coverage and no new physical validation.
 
 ## Experimental camera-speaker compatibility boundary
 
