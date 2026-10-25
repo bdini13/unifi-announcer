@@ -26,6 +26,8 @@ The CI review reduced the main reliability branch's local backend suite from 87.
 
 This working branch restores Home Assistant 2026.3.4 registry compatibility while also supporting 2026.10.0. Separate pinned CI jobs exercise both versions. HA playback commands, including native media uploads, allow 150 seconds; polling remains 15 seconds. Media-source test setup now cleans up its patch if entity lookup fails, preventing cascading failures across the suite. These changes do not alter the previously recorded physical-validation evidence or publish a new candidate. The backend reliability work is maintained separately on `fix/non-security-reliability` and must be integrated and validated before a combined release.
 
+The October 25 offline audit repair moves media decoding behind dispatcher quiet-hours and target checks, limits concurrent decoder workflows to two and pending uploads to eight by default, and cancels/reaps decoders when requests end. CI checks real WAV-to-MP3 conversion in the same image it already builds. Avoiding decoding for deduped/full-queue requests still requires integrating the reliability branch's earlier admission gate; the media branch's legacy playback queue decides those outcomes after preparation. See [media bounds and integration requirements](docs/MEDIA_INGESTION.md#concurrency-and-isolation).
+
 ## Why this exists
 
 Home Assistant's native UniFi Protect integration is the right place for normal Protect device state and configuration, but a Smart Chime is not exposed as a general announcement speaker. UniFi Announcer fills that gap without pretending the device is a normal streaming media player.

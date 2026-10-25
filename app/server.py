@@ -170,8 +170,8 @@ async def _invalidate_reconnected_chime(chime_id: str) -> None:
 core.events.on_chime_reconnect = _invalidate_reconnected_chime
 
 # Production uses the bounded host cache and the fixed-slot device path. Normal
-# text still delegates to the cache; task-local media ingress can substitute a
-# previously bounded/normalized MP3 while preserving the same dispatcher path.
+# text still delegates to the cache; task-local media ingress normalizes its
+# bounded upload only after dispatcher policy/target checks request the audio.
 core.synthesize_tts_cached = tts_cache
 core.dispatcher.synthesize = media_ingress.wrap_synthesize(tts_cache)
 core.dispatcher.dynamic_slots = dynamic_slots

@@ -54,9 +54,13 @@ jobs:
         with:
           context: .
           push: false
+          load: true
+          tags: unifi-announcer:ci
           build-args: GIT_SHA=${{ github.sha }}
           cache-from: type=gha,scope=announcer-ci
           cache-to: type=gha,scope=announcer-ci,mode=max
+      - name: Smoke-test runtime media codecs (silent, offline)
+        run: docker run --rm -i --network none --entrypoint python unifi-announcer:ci - < scripts/smoke_media_codec.py
 
   home-assistant:
     runs-on: ubuntu-latest

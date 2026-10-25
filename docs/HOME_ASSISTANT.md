@@ -188,7 +188,7 @@ data:
   message: "The laundry is finished"
 ```
 
-Home Assistant resolves the media source locally, reads/downloads no more than 4 MiB, and uploads only the resolved audio bytes to authenticated `POST /media/announce`. The backend validates MIME type, input size, decodability, finite duration, and normalized output size; the default duration ceiling is 30 seconds. Accepted audio is normalized to mono 22.05 kHz / 64 kbps MP3 before entering the existing dispatcher.
+Home Assistant resolves the media source locally, reads/downloads no more than 4 MiB, and uploads only the resolved audio bytes to authenticated `POST /media/announce`. The backend checks MIME type and input size, then dispatches the request. After quiet-hours and target checks, a bounded preparation stage validates decodability, finite duration, and output size while normalizing to mono 22.05 kHz / 64 kbps MP3. The default duration ceiling is 30 seconds. Fully occupied media-request capacity returns HTTP 429; no decoder starts for quiet-hours suppression or an invalid target. The separate reliability branch's earlier queue admission must be integrated to also skip decoding deduped/full-queue requests.
 
 The media player does **not** accept arbitrary direct HTTP/HTTPS URLs as a generic fetch feature. Existing target rules still apply: camera media-source playback uses the same hardened camera talkback path and remains device-volume-managed, while camera preset/default/buzzer behavior remains unavailable.
 

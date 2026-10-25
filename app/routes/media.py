@@ -1,8 +1,11 @@
 """Bounded binary-media route that reuses the canonical announcement dispatcher."""
 from __future__ import annotations
 
+import asyncio
 import hmac
+from contextlib import asynccontextmanager
 from contextvars import ContextVar
+from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
 from starlette.requests import Request
@@ -12,7 +15,9 @@ from app.audio.media_ingest import (
     AudioMediaNormalizer,
     InvalidMedia,
     MediaIngestError,
+    MediaPreparationBusy,
     MediaTooLarge,
+    SUPPORTED_MEDIA_TYPES,
     UnsupportedMediaType,
     canonical_media_type,
 )
@@ -20,28 +25,68 @@ from app.routes.commands import announce_command
 
 
 _MEDIA_SENTINEL = "\x00unifi-announcer-media-ingress\x00"
-_media_payload: ContextVar[bytes | None] = ContextVar("unifi_announcer_media_payload", default=None)
+
+
+@dataclass
+class _PendingMedia:
+    raw: bytes
+    content_type: str
+    normalized: bytes | None = None
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+
+_media_payload: ContextVar[_PendingMedia | None] = ContextVar(
+    "unifi_announcer_media_payload", default=None
+)
 
 
 class MediaIngress:
-    """Authorize, bound, normalize, then dispatch uploaded audio as an announcement."""
+    """Bound requests and prepare audio lazily after dispatcher policy checks."""
 
     def __init__(self, core: Any, normalizer: AudioMediaNormalizer | None = None) -> None:
         self.core = core
         self.normalizer = normalizer or AudioMediaNormalizer()
+        self._normalizations = asyncio.Semaphore(self.normalizer.limits.normalize_concurrency)
+        self._pending_requests = 0
 
     def wrap_synthesize(
         self, delegate: Callable[[str], Awaitable[bytes]]
     ) -> Callable[[str], Awaitable[bytes]]:
-        """Return a task-local media passthrough while preserving normal TTS calls."""
+        """Decode once, only when the dispatcher requests this upload's audio."""
 
         async def synthesize(text: str) -> bytes:
             payload = _media_payload.get()
             if text == _MEDIA_SENTINEL and payload is not None:
-                return payload
+                async with payload.lock:
+                    if payload.normalized is None:
+                        try:
+                            # One deadline includes waiting for a decoder and
+                            # both probe/encode processes. Cancellation reaches
+                            # the normalizer, which kills and reaps its process.
+                            async with asyncio.timeout(
+                                self.normalizer.limits.normalize_timeout_seconds
+                            ):
+                                async with self._normalizations:
+                                    payload.normalized = await self.normalizer.normalize(
+                                        payload.raw, payload.content_type
+                                    )
+                        except TimeoutError as exc:
+                            raise InvalidMedia("media preparation timed out") from exc
+                    return payload.normalized
             return await delegate(text)
 
         return synthesize
+
+    @asynccontextmanager
+    async def _request_slot(self):
+        """Bound buffered uploads and waiting work before reading request bodies."""
+        if self._pending_requests >= self.normalizer.limits.max_pending_requests:
+            raise MediaPreparationBusy("media request capacity is full; retry later")
+        self._pending_requests += 1
+        try:
+            yield
+        finally:
+            self._pending_requests -= 1
 
     async def endpoint(self, request: Request) -> JSONResponse:
         """POST raw audio to the same dispatcher used by text announcements."""
@@ -59,6 +104,8 @@ class MediaIngress:
             content_type = canonical_media_type(request.headers.get("content-type", ""))
             if not content_type:
                 return JSONResponse({"detail": "Content-Type is required"}, status_code=415)
+            if content_type not in SUPPORTED_MEDIA_TYPES:
+                raise UnsupportedMediaType(f"unsupported audio content type: {content_type}")
 
             volume = self._optional_int(request, "volume", 0, 100)
             repeat_times = self._optional_int(request, "repeat_times", 1, 6)
@@ -67,31 +114,32 @@ class MediaIngress:
             profile = self._optional_text(request, "profile", 128)
             dedupe_key = self._optional_text(request, "dedupe_key", 256)
 
-            raw = await self._read_body(request)
-            normalized = await self.normalizer.normalize(raw, content_type)
-            token = _media_payload.set(normalized)
-            try:
-                result = await self.core.dispatcher.dispatch(
-                    announce_command(
-                        _MEDIA_SENTINEL,
-                        volume=volume,
-                        repeat_times=repeat_times,
-                        profile=profile,
-                        target=target,
-                        priority=priority if priority is not None else 50,
-                        dedupe_key=dedupe_key,
-                        source="media_api",
+            async with self._request_slot():
+                raw = await self._read_body(request)
+                payload = _PendingMedia(raw, content_type)
+                token = _media_payload.set(payload)
+                try:
+                    result = await self.core.dispatcher.dispatch(
+                        announce_command(
+                            _MEDIA_SENTINEL,
+                            volume=volume,
+                            repeat_times=repeat_times,
+                            profile=profile,
+                            target=target,
+                            priority=priority if priority is not None else 50,
+                            dedupe_key=dedupe_key,
+                            source="media_api",
+                        )
                     )
-                )
-            finally:
-                _media_payload.reset(token)
+                finally:
+                    _media_payload.reset(token)
 
             response = result.response()
             response["media"] = {
                 "input_content_type": content_type,
-                "normalized_content_type": "audio/mpeg",
+                "normalized_content_type": "audio/mpeg" if payload.normalized is not None else None,
                 "input_bytes": len(raw),
-                "normalized_bytes": len(normalized),
+                "normalized_bytes": len(payload.normalized) if payload.normalized is not None else 0,
             }
             status = {
                 "suppressed": 202,
@@ -103,6 +151,8 @@ class MediaIngress:
             return JSONResponse({"detail": str(exc)}, status_code=413)
         except UnsupportedMediaType as exc:
             return JSONResponse({"detail": str(exc)}, status_code=415)
+        except MediaPreparationBusy as exc:
+            return JSONResponse({"detail": str(exc)}, status_code=429)
         except (InvalidMedia, MediaIngestError, ValueError) as exc:
             return JSONResponse({"detail": str(exc)}, status_code=400)
         except Exception as exc:

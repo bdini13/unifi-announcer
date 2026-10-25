@@ -47,6 +47,10 @@ class InvalidMedia(MediaIngestError):
     """The payload is not decodable bounded audio."""
 
 
+class MediaPreparationBusy(MediaIngestError):
+    """All bounded media-request slots are occupied."""
+
+
 @dataclass(frozen=True)
 class MediaLimits:
     """Limits applied before media reaches a Protect playback backend."""
@@ -55,12 +59,20 @@ class MediaLimits:
     max_output_bytes: int = 1024 * 1024
     max_duration_seconds: float = 30.0
     normalize_timeout_seconds: float = 15.0
+    normalize_concurrency: int = 2
+    max_pending_requests: int = 8
 
     def __post_init__(self) -> None:
         if type(self.max_input_bytes) is not int or self.max_input_bytes <= 0:
             raise ValueError("MEDIA_MAX_INPUT_BYTES must be a positive integer")
         if type(self.max_output_bytes) is not int or self.max_output_bytes <= 0:
             raise ValueError("MAX_MP3_BYTES must be a positive integer")
+        for name, value in (
+            ("MEDIA_NORMALIZE_CONCURRENCY", self.normalize_concurrency),
+            ("MEDIA_MAX_PENDING_REQUESTS", self.max_pending_requests),
+        ):
+            if type(value) is not int or value <= 0:
+                raise ValueError(f"{name} must be a positive integer")
         for name, value in (
             ("MEDIA_MAX_DURATION_SECONDS", self.max_duration_seconds),
             ("MEDIA_NORMALIZE_TIMEOUT_SECONDS", self.normalize_timeout_seconds),
@@ -80,6 +92,8 @@ class MediaLimits:
             normalize_timeout_seconds=float(
                 os.getenv("MEDIA_NORMALIZE_TIMEOUT_SECONDS", "15")
             ),
+            normalize_concurrency=int(os.getenv("MEDIA_NORMALIZE_CONCURRENCY", "2")),
+            max_pending_requests=int(os.getenv("MEDIA_MAX_PENDING_REQUESTS", "8")),
         )
 
 
