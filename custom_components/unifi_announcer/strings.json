@@ -54,7 +54,7 @@
     "notify": {"announce": {"name": "Announcements"}},
     "button": {
       "play_buzzer": {"name": "Play buzzer"},
-      "play_default": {"name": "Play default ringtone"},
+      "play_default": {"name": "Play built-in default tone"},
       "play_preset": {"name": "Play selected preset"}
     },
     "select": {"preset": {"name": "Ringtone preset"}},
