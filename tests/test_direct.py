@@ -10,6 +10,37 @@ import respx
 from app.playback.arbitration import ChimeDescriptor, ChimeRuntime
 
 
+@pytest.mark.asyncio
+async def test_runtime_credentials_are_selected_per_target(main_module, monkeypatch, tmp_path):
+    monkeypatch.setattr(main_module, "CHIME_ID", "")
+    password_file = tmp_path / "two-password"
+    password_file.write_text("second-fixture-password")
+    monkeypatch.setenv("FIRST_CHIME_PASSWORD", "first-fixture-password")
+    monkeypatch.setenv("CHIMES_CONFIG", json.dumps([
+        {"name": "one", "id": "id-one", "password_env": "FIRST_CHIME_PASSWORD"},
+        {"name": "two", "id": "id-two", "credential_file": str(password_file)},
+    ]))
+    runtimes = main_module._load_chime_runtimes()
+    assert await runtimes["one"].direct_client.credential_provider.get() == "first-fixture-password"
+    provider = runtimes["two"].direct_client.credential_provider
+    assert await provider.get() == "second-fixture-password"
+    password_file.write_text("rotated-fixture-password")
+    assert await provider.get(force_refresh=True) == "rotated-fixture-password"
+
+
+@pytest.mark.parametrize("raw", [
+    "not-json", "{}", "[null]", '[{"name":"one"}]',
+    '[{"name":"one","id":"one"},{"name":"one","id":"two"}]',
+    '[{"name":"one","id":"same"},{"name":"two","id":"same"}]',
+    '[{"name":"default","id":"two"}]',
+    '[{"name":"one","id":"one","password_env":"ENV","credential_file":"/fixture"}]',
+])
+def test_chime_config_rejects_ambiguous_or_invalid_entries(main_module, monkeypatch, raw):
+    monkeypatch.setenv("CHIMES_CONFIG", raw)
+    with pytest.raises(RuntimeError, match="CHIMES_CONFIG"):
+        main_module._load_chime_runtimes()
+
+
 def test_runtime_registry_binds_each_direct_client_to_its_chime_id(
     main_module, monkeypatch
 ):
@@ -74,10 +105,13 @@ async def test_runtime_capability_probes_are_isolated_per_chime():
         capabilities=good_caps,
         info=AsyncMock(return_value={"version": "v1.7.20"}),
     )
-    bad = SimpleNamespace(
-        capabilities=None,
-        info=AsyncMock(side_effect=RuntimeError("credential=must-not-leak")),
-    )
+    bad_started = asyncio.Event()
+
+    async def fail_info():
+        bad_started.set()
+        raise RuntimeError("credential=must-not-leak")
+
+    bad = SimpleNamespace(capabilities=None, info=AsyncMock(side_effect=fail_info))
     one = ChimeRuntime(ChimeDescriptor("one", "id-one", "192.0.2.1"),
                        direct_client=good)
     two = ChimeRuntime(ChimeDescriptor("two", "id-two", "192.0.2.2"),
@@ -85,7 +119,13 @@ async def test_runtime_capability_probes_are_isolated_per_chime():
 
     one.start()
     two.start()
-    await asyncio.gather(one.probe_task, two.probe_task)
+    await one.probe_task
+    await bad_started.wait()
+    pending_probe = two.probe_task
+    await two.stop()
+    assert pending_probe.cancelled()
+    assert two.probe_task is None
+    assert bad.info.await_count == 1
 
     assert one.capability_state == {
         "status": "available", "firmware": "v1.7.20",
@@ -95,6 +135,28 @@ async def test_runtime_capability_probes_are_isolated_per_chime():
         "status": "unavailable", "error_type": "RuntimeError",
     }
     assert "must-not-leak" not in str(two.capability_state)
+
+
+@pytest.mark.asyncio
+async def test_runtime_retries_failed_capability_probe_until_recovery():
+    caps = SimpleNamespace(to_dict=lambda: {"firmware": "v1.7.20"})
+    direct = SimpleNamespace(
+        capabilities=caps,
+        info=AsyncMock(side_effect=[
+            httpx.RemoteProtocolError("private-device-details"),
+            {"version": "v1.7.20"},
+        ]),
+    )
+    runtime = ChimeRuntime(ChimeDescriptor("one", "id-one"), direct_client=direct)
+    runtime.capability_retry_interval = 0
+    runtime.start()
+    try:
+        async with asyncio.timeout(1):
+            await runtime.probe_task
+        assert runtime.capability_state == {"status": "available", "firmware": "v1.7.20"}
+        assert direct.info.await_count == 2
+    finally:
+        await runtime.stop()
 
 
 @pytest.mark.asyncio
@@ -303,3 +365,13 @@ def test_destructive_endpoint_is_blocked_before_network(main_module):
             main_module.guard_destructive("/api/factoryResetWithoutWiFi")
 
     assert router.calls.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_missing_explicit_target_password_does_not_borrow_global(main_module, monkeypatch):
+    monkeypatch.setattr(main_module, "CHIME_ID", "")
+    monkeypatch.delenv("MISSING_CHIME_PASSWORD", raising=False)
+    monkeypatch.setenv("CHIMES_CONFIG", '[{"name":"one","id":"one","password_env":"MISSING_CHIME_PASSWORD"}]')
+    runtime = main_module._load_chime_runtimes()["one"]
+    with pytest.raises(RuntimeError, match="not configured"):
+        await runtime.direct_client.credential_provider.get()

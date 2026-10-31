@@ -112,6 +112,7 @@ def make_manager(tmp_path, world, metrics=None):
         reuse_margin_ms=0,
         provisioning_timeout_s=0.2,
         poll_interval_s=0.01,
+        device_settle_delay_s=0,  # FakeDirect updates storage synchronously.
     )
 
 
@@ -172,10 +173,8 @@ async def test_persisted_id_with_foreign_protect_name_fails_closed(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_missing_persisted_id_recovers_unique_expected_name(tmp_path):
-    # A stale ID is recoverable only because exactly one Protect ringtone still
-    # has the installation-specific expected name; this is safe identity repair,
-    # not permission to claim an unregistered name or physical slot.
+async def test_missing_persisted_id_does_not_claim_same_name_replacement(tmp_path):
+    # A replacement Protect record may refer to a different physical file.
     world = FakeProtectWorld()
     first = make_manager(tmp_path, world)
     await first.startup([make_target(world)], bootstrap_audio_factory=bootstrap)
@@ -186,8 +185,9 @@ async def test_missing_persisted_id_recovers_unique_expected_name(tmp_path):
         [make_target(world)], bootstrap_audio_factory=bootstrap
     )
 
-    assert status["ready"] is True, status
-    assert restarted.slots[1].protect_ringtone_id == "replacement-ring-1"
+    assert status["ready"] is False, status
+    assert "original physical binding" in status["last_error"]
+    assert restarted.slots[1].protect_ringtone_id != "replacement-ring-1"
     assert world.upload_calls == 2
 
 
@@ -517,3 +517,20 @@ async def test_dispatcher_with_slot_manager_never_calls_legacy_upload():
     protect.play.assert_awaited_once()
     assert protect.play.await_args.args[0] == "persistent-slot-id"
     assert lease.released is True
+
+
+@pytest.mark.asyncio
+async def test_prepare_observes_configured_device_settle_delay(tmp_path, monkeypatch):
+    world = FakeProtectWorld()
+    target = make_target(world)
+    manager = make_manager(tmp_path, world)
+    manager.device_settle_delay_s = 0.75
+    await manager.startup([target], bootstrap_audio_factory=bootstrap)
+    sleep = AsyncMock()
+    # Scope the stub to this one synchronous-fake preparation. Real deadline and
+    # cancellation tests elsewhere continue to use the event loop's real clock.
+    with monkeypatch.context() as patch:
+        patch.setattr("app.playback.dynamic_slots.asyncio.sleep", sleep)
+        lease = await manager.prepare(b"new-audio", [target])
+    sleep.assert_awaited_once_with(0.75)
+    await lease.release_now()

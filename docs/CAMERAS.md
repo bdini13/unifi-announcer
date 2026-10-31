@@ -197,7 +197,7 @@ With the matching prerelease installed, an available camera exposes only capabil
 - queue-depth sensor;
 - Last playback result sensor.
 
-Camera targets do not expose buzzer, assigned-default, preset selector, play-preset, or volume controls. A configured camera remains represented while temporarily offline and becomes available again after a later `/targets` refresh; entity recreation is not required.
+Camera targets do not expose buzzer, built-in default-tone, preset selector, play-preset, or volume controls. A configured camera remains represented while temporarily offline and becomes available again after a later `/targets` refresh; entity recreation is not required.
 
 Changing `CAMERAS_CONFIG`, `CHIMES_CONFIG`, or `GROUPS_CONFIG` changes topology and requires the backend plus Home Assistant integration to be reloaded/restarted as appropriate.
 

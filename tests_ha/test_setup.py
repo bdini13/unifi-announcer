@@ -5,6 +5,7 @@ import pytest
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from custom_components.unifi_announcer.entity import get_entry_device
 
 from custom_components.unifi_announcer import async_setup_entry
 from custom_components.unifi_announcer.api import (
@@ -123,15 +124,9 @@ async def test_full_setup_entity_topology_and_service(hass):
         await hass.async_block_till_done()
 
         device_registry = dr.async_get(hass)
-        service_device = device_registry.async_get_device(
-            identifiers={(DOMAIN, BASE_DATA["url"])}
-        )
-        chime_device = device_registry.async_get_device(
-            identifiers={(DOMAIN, "chime-1")}
-        )
-        camera_device = device_registry.async_get_device(
-            identifiers={(DOMAIN, "camera-1")}
-        )
+        service_device = get_entry_device(device_registry, (DOMAIN, BASE_DATA["url"]), entry.entry_id)
+        chime_device = get_entry_device(device_registry, (DOMAIN, "chime-1"), entry.entry_id)
+        camera_device = get_entry_device(device_registry, (DOMAIN, "camera-1"), entry.entry_id)
         assert service_device is not None
         assert chime_device is not None
         assert camera_device is not None
@@ -244,12 +239,8 @@ async def test_default_target_uses_intuitive_device_and_entity_names(hass):
         await hass.async_block_till_done()
 
     device_registry = dr.async_get(hass)
-    service_device = device_registry.async_get_device(
-        identifiers={(DOMAIN, BASE_DATA["url"])}
-    )
-    chime_device = device_registry.async_get_device(
-        identifiers={(DOMAIN, "chime-1")}
-    )
+    service_device = get_entry_device(device_registry, (DOMAIN, BASE_DATA["url"]), entry.entry_id)
+    chime_device = get_entry_device(device_registry, (DOMAIN, "chime-1"), entry.entry_id)
     assert service_device.name == "UniFi Announcer Service"
     assert chime_device.name == "Protect Smart Chime"
 
@@ -261,7 +252,7 @@ async def test_default_target_uses_intuitive_device_and_entity_names(hass):
     }
     prefix = f"{entry.entry_id}_chime-1"
     assert names_by_unique_id[f"{prefix}_buzzer"] == "Play buzzer"
-    assert names_by_unique_id[f"{prefix}_default"] == "Play default ringtone"
+    assert names_by_unique_id[f"{prefix}_default"] == "Play built-in default tone"
     assert names_by_unique_id[f"{prefix}_preset"] == "Play selected preset"
     assert names_by_unique_id[f"{prefix}_preset_select"] == "Ringtone preset"
     assert names_by_unique_id[f"{prefix}_queue_depth"] == "Queue depth"
@@ -317,9 +308,5 @@ async def test_existing_generated_device_names_are_migrated(hass):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
-    assert registry.async_get_device(
-        identifiers={(DOMAIN, BASE_DATA["url"])}
-    ).name == "UniFi Announcer Service"
-    assert registry.async_get_device(
-        identifiers={(DOMAIN, "chime-1")}
-    ).name == "Protect Smart Chime"
+    assert get_entry_device(registry, (DOMAIN, BASE_DATA["url"]), entry.entry_id).name == "UniFi Announcer Service"
+    assert get_entry_device(registry, (DOMAIN, "chime-1"), entry.entry_id).name == "Protect Smart Chime"

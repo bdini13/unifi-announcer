@@ -16,6 +16,9 @@ from app.audio.media_ingest import (
     UnsupportedMediaType,
 )
 from app.routes.media import MediaIngress
+from app.dispatcher import AnnouncementDispatcher
+from app.playback.admission import DispatchAdmission
+from app.playback.arbitration import ChimeDescriptor, ChimeRuntime
 
 
 @pytest.mark.parametrize(
@@ -30,6 +33,10 @@ from app.routes.media import MediaIngress
         {"normalize_timeout_seconds": 0},
         {"normalize_timeout_seconds": float("nan")},
         {"normalize_timeout_seconds": True},
+        {"normalize_concurrency": 0},
+        {"normalize_concurrency": True},
+        {"max_pending_requests": 0},
+        {"max_pending_requests": 1.5},
     ],
 )
 def test_media_limits_fail_closed_on_invalid_configuration(kwargs):
@@ -148,7 +155,7 @@ async def test_media_decoder_is_killed_and_reaped_when_request_is_cancelled():
 
 class _FakeNormalizer:
     def __init__(self, *, limit: int = 64) -> None:
-        self.limits = SimpleNamespace(max_input_bytes=limit)
+        self.limits = MediaLimits(max_input_bytes=limit)
         self.calls: list[tuple[bytes, str]] = []
 
     async def normalize(self, payload: bytes, media_type: str) -> bytes:
@@ -178,11 +185,11 @@ class _FakeDispatcher:
         )
 
 
-def _media_app(normalizer: _FakeNormalizer, *, configured: bool = True):
+def _media_app(normalizer: _FakeNormalizer, *, configured: bool = True, dispatcher=None):
     from starlette.applications import Starlette
     from starlette.routing import Route
 
-    dispatcher = _FakeDispatcher()
+    dispatcher = dispatcher or _FakeDispatcher()
     core = SimpleNamespace(
         APP_API_KEY="test-key",
         _api_key_is_configured=lambda: configured,
@@ -195,9 +202,11 @@ def _media_app(normalizer: _FakeNormalizer, *, configured: bool = True):
         raise AssertionError("binary media dispatch must not invoke TTS")
 
     dispatcher.synthesize = ingress.wrap_synthesize(delegate)
-    return Starlette(
+    app = Starlette(
         routes=[Route("/media/announce", ingress.endpoint, methods=["POST"])]
-    ), dispatcher
+    )
+    app.state.media_ingress = ingress
+    return app, dispatcher
 
 
 @pytest.mark.asyncio
@@ -292,3 +301,220 @@ async def test_media_route_rejects_oversized_body_while_streaming():
 
     assert response.status_code == 413
     assert dispatcher.commands == []
+
+
+@pytest.mark.parametrize("quiet, expected_status", [(True, 202), (False, 400)])
+@pytest.mark.asyncio
+async def test_media_policy_or_unknown_target_stops_before_decoding(quiet, expected_status):
+    normalizer = _FakeNormalizer()
+    dispatcher = AnnouncementDispatcher(
+        protect=SimpleNamespace(), chime=SimpleNamespace(), ringtone_index=SimpleNamespace(),
+        synthesize=AsyncMock(), slug=lambda text: text, resolve_preset=AsyncMock(),
+        resolve_targets=lambda target: [], profile=lambda values: values, quiet=lambda: quiet,
+        metrics=Mock(), volume_default=50, repeat_default=1,
+    )
+    app, _ = _media_app(normalizer, dispatcher=dispatcher)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/media/announce?target=unknown", content=b"source",
+            headers={"X-API-Key": "test-key", "Content-Type": "audio/wav"},
+        )
+    assert response.status_code == expected_status
+    assert normalizer.calls == []
+    if quiet:
+        assert response.json()["media"]["normalized_bytes"] == 0
+        assert response.json()["media"]["normalized_content_type"] is None
+
+
+@pytest.mark.asyncio
+async def test_real_media_admission_skips_duplicate_full_and_cancelled_waiting_work():
+    class BlockingNormalizer(_FakeNormalizer):
+        def __init__(self):
+            super().__init__()
+            self.started = asyncio.Event()
+            self.release = asyncio.Event()
+
+        async def normalize(self, payload, media_type):
+            self.calls.append((payload, media_type))
+            self.started.set()
+            await self.release.wait()
+            return b"normalized:" + payload
+
+    normalizer = BlockingNormalizer()
+    target = ChimeRuntime(ChimeDescriptor("kitchen", "chime-1"), max_depth=2)
+    admission = DispatchAdmission()
+    lease = SimpleNamespace(ringtone_id="owned-ring", duration_ms=10, logical_slot=1,
+                            release_after=Mock(), release_now=AsyncMock())
+    slots = SimpleNamespace(prepare=AsyncMock(return_value=lease))
+    protect = SimpleNamespace(play=AsyncMock(return_value={"played": True}))
+    dispatcher = AnnouncementDispatcher(
+        protect=protect, chime=SimpleNamespace(), ringtone_index=SimpleNamespace(),
+        synthesize=AsyncMock(), slug=lambda text: text, resolve_preset=AsyncMock(),
+        resolve_targets=lambda selected: [target], profile=lambda values: values,
+        quiet=lambda: False, metrics=Mock(), volume_default=50, repeat_default=1,
+        dynamic_slots=slots, admission=admission,
+    )
+    app, _ = _media_app(normalizer, dispatcher=dispatcher)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        async def post(key, payload):
+            return await client.post(
+                "/media/announce?target=kitchen", params={"dedupe_key": key},
+                content=payload,
+                headers={"X-API-Key": "test-key", "Content-Type": "audio/wav"},
+            )
+
+        first = asyncio.create_task(post("event", b"first"))
+        queued = None
+        try:
+            await asyncio.wait_for(normalizer.started.wait(), 1)
+            queued = asyncio.create_task(post("waiting", b"cancelled"))
+
+            async def wait_for_queued_request():
+                while not admission.pending:
+                    await asyncio.sleep(0)
+
+            await asyncio.wait_for(wait_for_queued_request(), 1)
+            duplicate = await post("event", b"duplicate")
+            full = await post("new-event", b"dropped")
+            for response, disposition in ((duplicate, "deduped"), (full, "dropped")):
+                assert response.status_code == 200
+                assert response.json()["disposition"] == disposition
+                assert response.json()["media"]["normalized_bytes"] == 0
+                assert response.json()["media"]["normalized_content_type"] is None
+            assert normalizer.calls == [(b"first", "audio/wav")]
+            slots.prepare.assert_not_awaited()
+            queued.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await queued
+            assert target.queue.depth == 1
+            assert app.state.media_ingress._pending_requests == 1
+            normalizer.release.set()
+            assert (await first).json()["disposition"] == "played"
+            slots.prepare.assert_awaited_once_with(b"normalized:first", [target])
+            protect.play.assert_awaited_once()
+            assert normalizer.calls == [(b"first", "audio/wav")]
+            assert app.state.media_ingress._pending_requests == 0
+        finally:
+            for task in (first, queued):
+                if task is not None and not task.done():
+                    task.cancel()
+            await asyncio.gather(*(task for task in (first, queued) if task is not None),
+                                 return_exceptions=True)
+            await dispatcher.stop()
+            await admission.stop()
+    assert target.queue.depth == 0
+
+
+@pytest.mark.asyncio
+async def test_media_decoder_and_pending_requests_are_bounded_and_cancelled_slots_reused():
+    class BlockingNormalizer(_FakeNormalizer):
+        def __init__(self):
+            super().__init__()
+            self.limits = MediaLimits(normalize_concurrency=1, max_pending_requests=2)
+            self.started = asyncio.Event()
+            self.release = asyncio.Event()
+            self.active = 0
+            self.peak = 0
+
+        async def normalize(self, payload, media_type):
+            self.active += 1
+            self.peak = max(self.peak, self.active)
+            self.started.set()
+            try:
+                await self.release.wait()
+                return await super().normalize(payload, media_type)
+            finally:
+                self.active -= 1
+
+    normalizer = BlockingNormalizer()
+    app, _ = _media_app(normalizer)
+    ingress = app.state.media_ingress
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        async def post():
+            return await client.post(
+                "/media/announce", content=b"source",
+                headers={"X-API-Key": "test-key", "Content-Type": "audio/wav"},
+            )
+
+        first = asyncio.create_task(post())
+        await asyncio.wait_for(normalizer.started.wait(), 1)
+        second = asyncio.create_task(post())
+
+        async def wait_for_second_request():
+            while ingress._pending_requests < 2:
+                await asyncio.sleep(0)
+
+        await asyncio.wait_for(wait_for_second_request(), 1)
+        full = await post()
+        assert full.status_code == 429
+        assert normalizer.active == normalizer.peak == 1
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        normalizer.release.set()
+        assert (await second).status_code == 200
+        assert (await post()).status_code == 200
+    assert ingress._pending_requests == 0
+    assert normalizer.active == 0
+    assert normalizer.peak == 1
+
+
+@pytest.mark.asyncio
+async def test_media_request_cancellation_kills_decoder_and_releases_capacity():
+    normalizer = AudioMediaNormalizer()
+    process = _BlockingProcess()
+    app, _ = _media_app(normalizer)
+    with patch(
+        "app.audio.media_ingest.asyncio.create_subprocess_exec",
+        AsyncMock(return_value=process),
+    ):
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            request_task = asyncio.create_task(client.post(
+                "/media/announce", content=b"source",
+                headers={"X-API-Key": "test-key", "Content-Type": "audio/wav"},
+            ))
+            await asyncio.wait_for(process.started.wait(), 1)
+            request_task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await request_task
+    assert process.killed
+    assert process.communicate_calls == 2
+    assert app.state.media_ingress._pending_requests == 0
+
+
+@pytest.mark.asyncio
+async def test_media_preparation_deadline_cancels_work_and_releases_capacity():
+    class SlowNormalizer(_FakeNormalizer):
+        def __init__(self):
+            super().__init__()
+            self.limits = MediaLimits(normalize_timeout_seconds=0.01)
+            self.cancelled = False
+
+        async def normalize(self, payload, media_type):
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                self.cancelled = True
+                raise
+
+    normalizer = SlowNormalizer()
+    app, _ = _media_app(normalizer)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/media/announce", content=b"source",
+            headers={"X-API-Key": "test-key", "Content-Type": "audio/wav"},
+        )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "media preparation timed out"
+    assert normalizer.cancelled
+    assert app.state.media_ingress._pending_requests == 0

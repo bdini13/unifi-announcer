@@ -145,7 +145,7 @@ def build_mcp_runtime(
     @server.tool()
     async def play_default(target: str | None = None, volume: int | None = None,
                            repeat_times: int | None = None, priority: int = 50) -> dict[str, Any]:
-        """Play each target's assigned default ringtone."""
+        """Play built-in track 1 on each target, independent of camera assignments."""
         result = await services().dispatcher.dispatch(default_command(
             target=target, volume=volume, repeat_times=repeat_times,
             priority=priority, source="mcp"))

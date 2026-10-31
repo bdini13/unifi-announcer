@@ -54,6 +54,8 @@ TTS_ENGINE = os.getenv("TTS_ENGINE", "piper")     # "piper" | "edge" | "none"
 PIPER_URL = os.getenv("PIPER_URL", "tcp://piper:10200")
 PIPER_VOICE = os.getenv("PIPER_VOICE", "default")
 TTS_RATE = os.getenv("TTS_RATE", "1.0")
+if not 0.5 <= float(TTS_RATE) <= 2.0:
+    raise RuntimeError("TTS_RATE must be a speed multiplier between 0.5 and 2.0")
 TTS_SAMPLE_RATE = int(os.getenv("TTS_SAMPLE_RATE", "22050"))
 TTS_ENCODER_PROFILE = os.getenv("TTS_ENCODER_PROFILE", "mp3-mono-64k")
 TTS_TRIM_LEADING_SILENCE = os.getenv("TTS_TRIM_LEADING_SILENCE", "false").lower() == "true"
@@ -351,7 +353,46 @@ class ProtectClient:
                    volume: int = VOLUME_DEFAULT,
                    repeat_times: int = REPEAT_DEFAULT, *,
                    chime_id: Optional[str] = None) -> dict:
-        """Trigger playback on the configured chime (optionally a specific tone)."""
+        """Reject known default-tone fallback conditions before ordinary play."""
+        if ringtone_id:
+            tones = await self.list_ringtones()
+            if sum(str(tone.get("id") or tone.get("_id")) == ringtone_id for tone in tones) != 1:
+                raise StaleRingtoneError("requested ringtone is missing or ambiguous in Protect")
+        chime = await self._connected_chime(chime_id)
+        if ringtone_id:
+            owned_check = getattr(self, "owned_ringtone_check", None)
+            owned = owned_check(ringtone_id, chime_id or CHIME_ID, chime) if owned_check else False
+            if not owned:
+                # Public ringtone metadata omits canonical filename/trackNo.
+                # Read canonical bytes instead of guessing ID->filename mapping.
+                response = await self._do("GET", f"/proxy/protect/api/ringtones/{ringtone_id}")
+                if response.status_code in (400, 404):
+                    raise StaleRingtoneError("requested ringtone disappeared during preflight")
+                response.raise_for_status()
+                if not response.content:
+                    raise RuntimeError("requested ringtone has no canonical audio")
+                digest = hashlib.md5(response.content).hexdigest()
+                if not any(track.get("md5") == digest for track in chime.get("speakerTrackList", [])):
+                    raise RuntimeError("requested ringtone is not confirmed in the Chime inventory; refusing default-tone fallback")
+        return await self.stage_ringtone(ringtone_id, volume, repeat_times, chime_id=chime_id)
+
+    async def _connected_chime(self, chime_id: Optional[str]) -> dict:
+        chime = await self.get_chime(chime_id=chime_id)
+        if chime.get("isConnected") is False or str(chime.get("state", "")).upper() == "DISCONNECTED":
+            raise RuntimeError("Chime is disconnected")
+        if chime.get("isConnected") is not True and str(chime.get("state", "")).upper() != "CONNECTED":
+            raise RuntimeError("Chime connection state is unconfirmed")
+        return chime
+
+    async def stage_ringtone(self, ringtone_id: Optional[str] = None,
+                            volume: int = VOLUME_DEFAULT,
+                            repeat_times: int = REPEAT_DEFAULT, *,
+                            chime_id: Optional[str] = None) -> dict:
+        """Low-level request, also used for journaled silent slot provisioning.
+
+        Ordinary callers use play(), which performs identity/content preflight.
+        Provisioning intentionally precedes resident-track evidence.
+        """
         payload: dict = {"volume": volume, "repeatTimes": repeat_times}
         if ringtone_id:
             payload["ringtoneId"] = ringtone_id
@@ -378,9 +419,10 @@ class ProtectClient:
 
         The buzzer is a hardware tone distinct from any ringtone - it needs no
         upload, no TTS, and no request body at all. Fastest possible "someone's
-        at the door" ping (~1 API call, zero prep).
+        at the door" ping (connection preflight plus one playback request).
         Endpoint: POST /proxy/protect/api/chimes/{id}/play-buzzer
         """
+        await self._connected_chime(chime_id)
         r = await self._do("POST", f"/proxy/protect/api/chimes/{chime_id or CHIME_ID}/play-buzzer")
         if r.status_code not in (200, 204):
             raise RuntimeError(f"play-buzzer failed: HTTP {r.status_code}: {r.text[:200]}")
@@ -404,13 +446,13 @@ class ProtectClient:
     async def play_default(self, volume: Optional[int] = None,
                            repeat_times: Optional[int] = None, *,
                            chime_id: Optional[str] = None) -> dict:
-        """Play the ringtone currently assigned as this chime's default track.
+        """Play built-in track 1, independently of camera ringtone assignments.
 
-        Per uiprotect/hjdhjd docs, play-speaker with NO ringtoneId plays the
-        assigned default track. Volume/repeatTimes overrides are only included
+        Volume/repeatTimes overrides are only included
         in the payload when explicitly given; otherwise the device uses its own
         saved settings.
         """
+        await self._connected_chime(chime_id)
         payload: dict = {}
         if volume is not None or repeat_times is not None:
             # Protect quirk (found live): play-speaker returns 400 when
@@ -494,13 +536,14 @@ def _make_credential_provider():
 class DirectChimeClient:
     """Talks straight to the chime hardware, bypassing the NVR relay."""
 
-    def __init__(self, *, chime_id: str = "", direct_ip: str = "") -> None:
+    def __init__(self, *, chime_id: str = "", direct_ip: str = "",
+                 credential_provider: Any = None) -> None:
         self._chime_id = chime_id or CHIME_ID
         self._base = f"https://{direct_ip}:8080" if direct_ip else ""
         self._lock = asyncio.Lock()
         # All Phase 3/4 objects resolve lazily on first use - their classes
         # are defined later in this module (import-time ordering).
-        self._credential_provider = None
+        self._credential_provider = credential_provider
         self._breaker = None
         self.capabilities = None
         self.last_401_at: Optional[str] = None
@@ -863,7 +906,7 @@ ringtone_index = ModularRingtoneIndex()
 # persisted to /data so restarts don't lose the mapping.
 # ---------------------------------------------------------------------------
 
-from app.tracks import RingtoneCapacityError, TrackRecord, TrackRegistry, TrackReconciler
+from app.tracks import RingtoneCapacityError, TrackRegistry, TrackReconciler
 
 MAX_DYNAMIC_TRACKS = int(os.getenv("MAX_DYNAMIC_TRACKS", "32"))
 track_registry = TrackRegistry(max_dynamic=MAX_DYNAMIC_TRACKS)
@@ -921,18 +964,45 @@ def _load_chime_runtimes() -> dict:
     runtimes = {}
     try:
         extra = json.loads(os.getenv("CHIMES_CONFIG", "[]"))
-    except (json.JSONDecodeError, TypeError):
-        extra = []
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise RuntimeError("CHIMES_CONFIG must be a JSON list") from exc
+    if not isinstance(extra, list):
+        raise RuntimeError("CHIMES_CONFIG must be a JSON list")
+    for entry in extra:
+        if not isinstance(entry, dict):
+            raise RuntimeError("CHIMES_CONFIG entries must be objects")
+        for field in ("name", "id"):
+            if not isinstance(entry.get(field), str) or not entry[field].strip():
+                raise RuntimeError(f"CHIMES_CONFIG entries require nonempty {field}")
+        if entry["name"].strip() == "default":
+            raise RuntimeError("CHIMES_CONFIG reserves default for CHIME_ID")
+        for field in ("direct_ip", "credential_file", "password_env"):
+            if field in entry and (
+                not isinstance(entry[field], str) or not entry[field].strip()
+            ):
+                raise RuntimeError(f"CHIMES_CONFIG {field} must be a nonempty string")
+        if entry.get("credential_file") and entry.get("password_env"):
+            raise RuntimeError("CHIMES_CONFIG accepts one credential source per target")
     entries = ([{"name": "default", "id": CHIME_ID,
                  "direct_ip": CHIME_DIRECT_IP}] if CHIME_ID else []) + extra
+    ids = set()
     for e in entries:
-        if e.get("id"):
-            direct_client = DirectChimeClient(
-                chime_id=e["id"], direct_ip=e.get("direct_ip", ""))
-            runtimes[e["name"]] = ChimeRuntime(
-                ChimeDescriptor(e["name"], e.get("id", ""), e.get("direct_ip", "")),
-                direct_client=direct_client, metrics=metrics,
-                max_depth=QUEUE_MAX_DEPTH)
+        name, chime_id = e["name"].strip(), e["id"].strip()
+        if name in runtimes or chime_id in ids:
+            raise RuntimeError("CHIMES_CONFIG has a duplicate target name or device id")
+        ids.add(chime_id)
+        provider = None
+        if e.get("credential_file"):
+            provider = FileCredentialProvider(e["credential_file"])
+        elif e.get("password_env"):
+            provider = StaticEnvCredentialProvider(os.getenv(e["password_env"], ""))
+        direct_client = DirectChimeClient(
+            chime_id=chime_id, direct_ip=e.get("direct_ip", ""),
+            credential_provider=provider)
+        runtimes[name] = ChimeRuntime(
+            ChimeDescriptor(name, chime_id, e.get("direct_ip", "")),
+            direct_client=direct_client, metrics=metrics,
+            max_depth=QUEUE_MAX_DEPTH)
     return runtimes
 
 
@@ -1025,7 +1095,7 @@ camera_talkback = ProtectCameraTalkback(
 track_reconciler.delete_nvr = protect_backends.ringtone.delete_ringtone
 ringtone_index.bind(protect_backends.ringtone.list_ringtones)
 from app.audio.tts import PiperTTS
-piper_tts = PiperTTS(PIPER_URL)
+piper_tts = PiperTTS(PIPER_URL, voice=PIPER_VOICE)
 
 # ---------------------------------------------------------------------------
 # TTS synthesis (latency-optimized)
@@ -1081,7 +1151,9 @@ async def synthesize_tts(text: str) -> bytes:
     if TTS_ENGINE == "edge":
         # edge-tts is a tiny CLI; import lazily so piper-only installs work
         import edge_tts
-        communicate = edge_tts.Communicate(text, EDGE_TTS_VOICE)
+        communicate = edge_tts.Communicate(
+            text, EDGE_TTS_VOICE, rate=f"{round((float(TTS_RATE) - 1) * 100):+d}%"
+        )
         out_tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
         await _edge_save(communicate, out_tmp.name)
         encoded = Path(out_tmp.name).read_bytes()
@@ -1146,9 +1218,10 @@ def subprocess_run_ffmpeg(audio_in: bytes) -> bytes:
     import subprocess
     p = subprocess.run(
         ["ffmpeg", "-hide_banner", "-loglevel", "error",
-         "-i", "pipe:0", "-codec:a", "libmp3lame", "-b:a", "64k",
+         "-i", "pipe:0", "-af", f"atempo={float(TTS_RATE):g}",
+         "-codec:a", "libmp3lame", "-b:a", "64k",
          "-ac", "1", "-ar", "22050", "-f", "mp3", "pipe:1"],
-        input=audio_in, capture_output=True, check=True)
+        input=audio_in, capture_output=True, check=True, timeout=30)
     return p.stdout
 
 
@@ -1169,44 +1242,23 @@ async def resolve_preset_id(name: str) -> str:
 async def create_or_update_preset(
         name: str, mp3: bytes, force: bool = False
 ) -> str:
-    """Upload a preset tone if missing (or force=True to replace); returns its ID."""
-    async with ringtone_upload_lock:
-        existing = ringtone_index.get(name)
-        if not existing:
-            existing = await ringtone_index.resolve_or_refresh(name)
-        if existing and not force:
-            return existing["id"]
-        if existing and force:
-            await protect.delete_ringtone(existing["id"])
-            ringtone_index.invalidate(name)
-        snapshot = await protect_backends.ringtone.list_ringtones()
-        evicted = await track_reconciler.ensure_capacity(snapshot, needed=1)
-        if any(item.get("nvr_delete") == "deleted" for item in evicted):
-            await ringtone_index.force_refresh()
-        # Upload via facade: direct-to-device primary, NVR relay as standby.
-        try:
-            await chime_client.upload_ringtone(name, mp3)
-        except RingtoneCapacityError:
-            snapshot = await protect_backends.ringtone.list_ringtones()
-            if len(snapshot) < track_reconciler.max_total:
-                raise
-            metrics.inc("ringtone_capacity_retries")
-            await track_reconciler.ensure_capacity(snapshot, needed=1)
-            await ringtone_index.force_refresh()
-            await chime_client.upload_ringtone(name, mp3)
-    # Resolve the NVR ringtone ID via the RAM index (one refresh fallback).
-    # Playback itself remains NVR-relay: the device only accepts play commands
-    # from its paired controller over ucp4 wss.
-    created = await ringtone_index.resolve_or_refresh(name)
-    if not created:
-        raise RuntimeError(f"upload ok but tone '{name}' not found on NVR")
+    """Create or recoverably replace a persistent preset; returns its exact ID."""
+    from app.presets import PresetWriter
 
-    # Phase 5: register the identity mapping (NVR id known; device filename
-    # stays unknown until the storage-mapping experiment).
-    rec = track_registry.get(name.lower()) or TrackRecord(name.lower(), "preset")
-    rec.nvr_ringtone_id = created["id"]
-    track_registry.put(rec)
-    return created["id"]
+    from contextlib import AsyncExitStack
+    async with ringtone_upload_lock, AsyncExitStack() as stack:
+        mutation_guard = globals().get("ringtone_mutation_guard")
+        if mutation_guard is not None:
+            await stack.enter_async_context(mutation_guard())
+        if events.on_chime_content_change is not None:
+            events.on_chime_content_change(None, None)
+        writer = PresetWriter(
+            registry=track_registry, index=ringtone_index, reconciler=track_reconciler,
+            list_ringtones=protect_backends.ringtone.list_ringtones,
+            upload=chime_client.upload_ringtone, delete=protect.delete_ringtone,
+            max_bytes=MAX_MP3_BYTES,
+        )
+        return await writer.write(name, mp3, force=force)
 
 
 # ---------------------------------------------------------------------------
@@ -1237,7 +1289,7 @@ class ProtectEventStream:
 
     # modelKey values we surface to consumers. Chime state transitions are
     # retained only to revoke unsafe content proof after a device reconnect.
-    INTERESTING_MODELS = ("event", "camera", "chime")
+    INTERESTING_MODELS = ("event", "camera", "chime", "ringtone")
 
     def __init__(self) -> None:
         self.recent: deque = deque(maxlen=EVENTS_BUFFER_MAX)
@@ -1246,6 +1298,7 @@ class ProtectEventStream:
         self.last_event_at: float = 0.0
         self._last_ring_by_camera: dict[str, int] = {}
         self._chime_states: dict[str, str] = {}
+        self.on_chime_content_change: Callable[[str | None, Any], None] | None = None
         self.on_chime_reconnect: Callable[
             [str], Coroutine[Any, Any, None]
         ] | None = None
@@ -1339,6 +1392,8 @@ class ProtectEventStream:
             except Exception as e:
                 log.warning("event stream error: %s; retrying in %ss", e, backoff)
             finally:
+                if self.connected and self.on_chime_content_change is not None:
+                    self.on_chime_content_change(None, None)
                 self.connected = False
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 60)
@@ -1366,11 +1421,28 @@ class ProtectEventStream:
         merged = dict(data) if isinstance(data, dict) else {}
         merged.update({k: v for k, v in action.items()
                        if k not in merged} if isinstance(action, dict) else {})
+        if model == "ringtone" and self.on_chime_content_change is not None:
+            self.on_chime_content_change(None, None)
         if model == "chime":
             chime_id = merged.get("id")
             state = str(merged.get("state") or "").upper()
+            if not state and "isConnected" in merged:
+                state = (
+                    "CONNECTED" if merged["isConnected"] is True
+                    else "DISCONNECTED" if merged["isConnected"] is False else ""
+                )
+            if merged.get("isConnected") is False:
+                state = "DISCONNECTED"
+            previous_state = self._chime_states.get(chime_id)
+            connection_reported = "state" in merged or "isConnected" in merged
+            if self.on_chime_content_change is not None:
+                if connection_reported and (state != "CONNECTED" or state != previous_state):
+                    # First/changed state and disconnection revoke immediately;
+                    # repeated CONNECTED heartbeats do not invalidate our writes.
+                    self.on_chime_content_change(chime_id, None)
+                elif "speakerTrackList" in merged:
+                    self.on_chime_content_change(chime_id, merged["speakerTrackList"])
             if chime_id and state:
-                previous_state = self._chime_states.get(chime_id)
                 self._chime_states[chime_id] = state
                 if (
                     previous_state
@@ -1738,7 +1810,7 @@ async def play_default(request: Request,
                        profile: Optional[str] = Query(None),
                        priority: int = Query(PRIORITY_NORMAL, ge=0, le=100),
                        target: Optional[str] = Query(None)):
-    """Play the assigned default ringtone on the optional chime/group target."""
+    """Play built-in track 1 on the optional chime/group target."""
     try:
         result = await request_services(request).dispatcher.dispatch(default_command(
             volume=volume, repeat_times=repeat_times, profile=profile,

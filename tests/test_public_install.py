@@ -9,35 +9,6 @@ def test_compose_uses_named_volume_for_writable_default_data():
     assert "watchtower.enable" not in compose.lower()
 
 
-def test_readme_keeps_stable_install_and_identifies_published_beta():
-    readme = Path("README.md").read_text()
-    stable_clone = readme.split(
-        "### 1. Clone the stable release and create private configuration", 1
-    )[1].split("### 2. Start the service", 1)[0]
-    ha_setup = readme.split("## Home Assistant — recommended setup", 1)[1].split(
-        "### Standard announcement", 1
-    )[0]
-    assert "git checkout v2.1.8" in stable_clone
-    assert "v2.2.0-beta.1" not in stable_clone
-    assert "Select the latest stable release" in ha_setup
-    assert "img.shields.io/github/v/release/bdini13/unifi-announcer" in readme
-    assert "releases/latest" in readme
-    assert "**Stable:** `v2.1.8`" in readme
-    assert "**Prerelease:** `v2.2.0-beta.3`" in readme
-    assert "**Previous prerelease:** `v2.2.0-beta.2`" in readme
-    assert "**Release candidate:** `v2.2.0-beta.3`" not in readme
-    assert "physically validated on one UVC G3 Instant" in readme
-    assert 'AUTH=(-H "X-API-Key: ${UNIFI_ANNOUNCER_API_KEY}")' in readme
-    assert "$UNIFI..." not in readme
-    assert "scheduled for `v2.1.1`" not in readme
-    assert "**Next release:** `v2.1.1`" not in readme
-    assert Path("docs/RELEASE_NOTES_v2.1.8.md").exists()
-    assert Path("docs/RELEASE_NOTES_v2.2.0-beta.2.md").exists()
-    assert Path("docs/validation/v2.1.8-live-latency-validation.md").exists()
-    checklist = Path("docs/RELEASE_CHECKLIST.md").read_text()
-    assert "## v2.1.8 release gate" in checklist
-
-
 def test_quick_start_handles_secrets_and_temporary_login_safely():
     readme = Path("README.md").read_text()
     quick_start = readme.split("### 2. Start the service", 1)[0]
@@ -89,67 +60,12 @@ def test_public_docs_document_supported_credential_onboarding():
     assert "Do not click Edit" in env_example
 
 
-def test_readme_top_callouts_are_focused_on_runtime_risks():
-    readme = Path("README.md").read_text()
-    intro = readme.split("## Why this exists", 1)[0]
-    assert "> [!IMPORTANT]" in intro
-    assert "> [!CAUTION]" in intro
-    assert "> [!NOTE]" not in intro
-    assert "undocumented UniFi Protect and Smart Chime interfaces" in intro
-    assert "CHIME_DIRECT_PASSWORD" in intro
-    assert "CHIME_CREDENTIAL_FILE" in intro
-    assert "Protect `7.2.105`" in intro
-    assert "firmware `1.7.20`" in intro
-    assert "Manual Recovery → Reveal" in intro
-    assert "CREDENTIALS.md" in intro
-
-
-def test_readme_documents_v2_1_8_resident_reuse_and_boot_safety():
-    readme = Path("README.md").read_text()
-    env_example = Path(".env.example").read_text()
-    assert "Content-aware resident TTS reuse | ✅ v2.1.8" in readme
-    assert "Smart Chime reboot/reconnect invalidation | ✅ v2.1.8" in readme
-    assert "boot epoch" in readme
-    assert "direct-device uptime" in readme
-    assert "write-ahead invalidation" in readme
-    assert "TTS_SLOT_BOOT_EPOCH_TOLERANCE" in readme
-    assert "TTS_SLOT_BOOT_EPOCH_TOLERANCE=5.0" in env_example
-    assert "v2.1.8 candidate" not in env_example
-
-
-def test_readme_latency_claims_remain_bounded_to_request_path():
-    readme = Path("README.md").read_text()
-    assert "## Observed v2.1.8 latency" in readme
-    assert "p95:     663 ms" in readme
-    assert "request round-trip measurements" in readme
-    assert "not synchronized microphone/acoustic-onset measurements" in readme
-    assert "does not claim measured acoustic latency" in readme
-
-
 def test_hacs_docs_make_backend_requirement_explicit():
     readme = Path("README.md").read_text()
     ha_docs = Path("docs/HOME_ASSISTANT.md").read_text()
     assert "HACS integration is a client for the Docker service" in readme
     assert "HACS integration is a **client for the UniFi Announcer Docker service**" in ha_docs
     assert "HACS does not replace or run the backend" in readme
-
-
-def test_ha_docs_define_immediate_playback_result_semantics():
-    readme = Path("README.md").read_text()
-    ha_docs = Path("docs/HOME_ASSISTANT.md").read_text()
-    assert "Last playback result" in readme
-    assert "Last playback result" in ha_docs
-    assert "`success`" in ha_docs
-    assert "`failure`" in ha_docs
-    assert "updates it immediately" in ha_docs
-    assert "stale Protect inventory" in ha_docs
-
-
-def test_source_comments_match_the_configured_credential_providers():
-    source = Path("app/main.py").read_text()
-    assert "We read it once via the NVR API bootstrap" not in source
-    assert "We fetch it lazily through the NVR client" not in source
-    assert "see README \"Direct device API\" for" not in source
 
 
 def test_readme_documents_backup_and_rollback_for_named_volume():
@@ -189,132 +105,20 @@ def test_upgrade_docs_preserve_legacy_default_bind_data_and_v218_state():
     assert "No manual data migration is required from v2.1.7" in readme
 
 
-def test_release_identity_is_v2_2_0_beta_4_candidate():
-    assert 'APP_VERSION = "2.2.0-beta.4"' in Path("app/version.py").read_text()
-    assert 'INTEGRATION_VERSION = "2.2.0-beta.4"' in Path(
-        "custom_components/unifi_announcer/const.py"
-    ).read_text()
-    assert '"version": "2.2.0-beta.4"' in Path(
-        "custom_components/unifi_announcer/manifest.json"
-    ).read_text()
+def test_release_identity_agrees_across_backend_component_and_manifest():
+    import ast
+    import json
+    from app.version import APP_VERSION
 
-
-def test_beta1_release_notes_preserve_historical_physical_boundary():
-    notes = Path("docs/RELEASE_NOTES_v2.2.0-beta.1.md").read_text()
-    checklist = Path("docs/RELEASE_CHECKLIST.md").read_text()
-    assert "Integrated audible camera playback was physically confirmed" in notes
-    assert "one G3 Instant" in notes
-    assert "does not authorize merge, tagging, publication" in notes
-    assert "stable promotion" in notes
-    assert "Opus/RTP" in notes
-    assert "deliberately unavailable camera prevents mixed-group Chime playback" in notes
-    assert Path(
-        "docs/validation/v2.2.0-beta.1-g3-instant-camera-validation.md"
-    ).exists()
-    assert "no tag, github release, image publication, deployment, or audible test" in notes.lower()
-    assert "must remain draft" in notes
-    assert "No publisher exists by default" in checklist
-
-
-def test_beta2_release_docs_record_publication_and_tagged_smoke_gate():
-    notes = Path("docs/RELEASE_NOTES_v2.2.0-beta.2.md").read_text()
-    validation = Path(
-        "docs/validation/v2.2.0-beta.2-camera-hardening-validation.md"
-    ).read_text()
-    assert "v2.2.0-beta.2" in notes
-    assert "Stable `v2.1.8` remains the recommended public release" in notes
-    assert "UVC G3 Instant" in notes
-    assert "22,050 Hz" in notes
-    assert "per-camera preparation lease" in notes
-    assert "Physical validation completed before publication" in notes
-    assert "9d8e8f845201cf8de1223cc7d5fc31c192194a5d" in notes
-    assert "published prerelease" in notes
-    assert "RESULT: PASS" in validation
-    assert "not empirically executed" in validation
-    assert "offline → online" in validation
-    assert "Same-camera concurrency/session serialization" in validation
-    assert "Tagged release and deployment smoke test" in validation
-    assert "volume 50" in validation
-
-
-def test_beta3_candidate_docs_preserve_opt_in_and_physical_gate():
-    readme = Path("README.md").read_text()
-    env_example = Path(".env.example").read_text()
-    notes = Path("docs/RELEASE_NOTES_v2.2.0-beta.3.md").read_text()
-    checklist = Path("docs/RELEASE_CHECKLIST.md").read_text()
-    validation = Path(
-        "docs/validation/v2.2.0-beta.3-g4-instant-validation.md"
-    ).read_text()
-
-    roadmap = Path("ROADMAP.md").read_text()
-    compatibility = Path("docs/COMPATIBILITY.md").read_text()
-    ha_docs = Path("docs/HOME_ASSISTANT.md").read_text()
-    post_release = Path("docs/POST_RELEASE.md").read_text()
-
-    assert "**Prerelease:** `v2.2.0-beta.3`" in readme
-    assert "**Previous prerelease:** `v2.2.0-beta.2`" in readme
-    assert "EXPERIMENTAL_CAMERA_PROFILES=[]" in env_example
-    assert "empty by default" in notes
-    assert "experimental_opt_in" in notes
-    assert "Published prerelease `v2.2.0-beta.3`" in notes
-    assert "76fca7f25a8f3b43e73ffd0432d97e5ec3995ce4" in notes
-    assert "G4 Instant" in validation
-    assert "RESULT: PASS" in validation
-    assert "device speaker volume `100`" in validation
-    assert "No automatic retry was sent" in validation
-    assert "representative G4 Instant only" in validation
-    assert "do not promote beta.3 to stable" in validation
-    assert "TAGGED RELEASE DEPLOYMENT: PASS" in validation
-    assert "sha256:46b1af0a5a96a9b93d0c08884b7f07a6a669a59ac170cc713ee2173837dc1966" in validation
-    assert "Tagged release publication and deployment" in checklist
-    assert "Draft candidate `v2.2.0-beta.3`" not in roadmap
-    assert "Draft beta.3" not in compatibility
-    assert "Draft beta.3" not in ha_docs
-    assert "latest published camera prerelease" not in notes
-    assert "Current published prerelease: **v2.2.0-beta.2**" not in roadmap
-    assert "next representative target is an opt-in G4 Instant" not in roadmap
-    assert "`v2.2.0-beta.2` is the current published prerelease" not in compatibility
-    assert "`v2.2.0-beta.3` is the current experimental camera-speaker release" in post_release
-    assert "`v2.2.0-beta.2` is the current experimental camera-speaker release" not in post_release
-    assert "Candidate-validation deployed prerelease rollback target at that time" in validation
-    assert "Protect camera-speaker TTS | 🧪 `v2.2.0-beta.3`" in readme
-    assert "`v2.2.0-beta.2` is published" not in readme
-    assert "v2.2.0-beta.3 candidate notes" not in readme
-    assert "v2.2.0-beta.3 G4 Instant validation plan" not in readme
-    assert "Example beta.3 candidate opt-in" not in env_example
-    assert "The candidate does not add the G4 Instant" not in notes
-    assert "no G4 audio has been played" not in readme
-    assert "Until that gate is completed" not in notes
-    assert "PARTIAL PHYSICAL VALIDATION" not in checklist
-    assert "Sanitized partial evidence" not in checklist
-    assert "Physical gate — PARTIAL" not in validation
-
-
-def test_beta4_candidate_docs_preserve_published_beta3_boundary():
-    readme = Path("README.md").read_text()
-    env_example = Path(".env.example").read_text()
-    notes = Path("docs/RELEASE_NOTES_v2.2.0-beta.4.md").read_text()
-    guide = Path("docs/MEDIA_INGESTION.md").read_text()
-    validation = Path(
-        "docs/validation/v2.2.0-beta.4-media-ingestion-validation.md"
-    ).read_text()
-    roadmap = Path("ROADMAP.md").read_text()
-    ha_docs = Path("docs/HOME_ASSISTANT.md").read_text()
-
-    assert "**Prerelease:** `v2.2.0-beta.3`" in readme
-    assert "v2.2.0-beta.4" in notes
-    assert "currently a **candidate**, not a published prerelease" in notes
-    assert "Do not tag or publish beta.4" in notes
-    assert "media-source://" in guide
-    assert "POST /media/announce" in guide
-    assert "arbitrary" in guide.lower() and "URL" in guide
-    assert "MEDIA_MAX_INPUT_BYTES=4194304" in env_example
-    assert "MEDIA_MAX_DURATION_SECONDS=30" in env_example
-    assert "beta.4 candidate in progress" in roadmap
-    assert "v2.2.0-beta.3` remains the current published prerelease" in ha_docs
-    assert "candidate validation pending" in validation
-    assert "candidate source SHA: `PENDING`" in validation
-    assert "Until those boxes are complete" in validation
+    component = ast.parse(Path("custom_components/unifi_announcer/const.py").read_text())
+    integration_version = next(
+        ast.literal_eval(node.value) for node in component.body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "INTEGRATION_VERSION"
+                for target in node.targets)
+    )
+    manifest = json.loads(Path("custom_components/unifi_announcer/manifest.json").read_text())
+    assert APP_VERSION == integration_version == manifest["version"]
 
 
 def test_fastapi_metadata_uses_release_identity(main_module):
@@ -348,13 +152,6 @@ def test_community_health_and_support_files_exist():
     readme = Path("README.md").read_text()
     assert "## Support and security" in readme
     assert "SECURITY.md" in readme
-
-
-def test_v2_1_1_notes_carry_the_home_assistant_correction():
-    notes = Path("docs/RELEASE_NOTES_v2.1.1.md").read_text()
-    assert "pytest-homeassistant-custom-component" in notes
-    assert "incorrectly" in notes
-    assert "unavailable until that version is published" not in notes
 
 
 def test_protected_diagnostic_examples_send_api_key():

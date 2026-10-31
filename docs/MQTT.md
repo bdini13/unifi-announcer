@@ -37,7 +37,7 @@ used only when the JSON has no explicit `target`.
 
 For every configured chime name, retained discovery is published for:
 
-- buttons: buzzer and assigned default ringtone;
+- buttons: buzzer and built-in default tone (track 1, independent of camera assignments);
 - sensors: direct health, queue depth, firmware, and last ring.
 
 Discovery topics follow:

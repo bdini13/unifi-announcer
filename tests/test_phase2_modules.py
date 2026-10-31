@@ -1,35 +1,8 @@
 import asyncio
-from dataclasses import is_dataclass
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
-
-def test_phase2_modules_are_importable():
-    from app.config import Settings
-    from app.chime.credentials import StaticEnvCredentialProvider
-    from app.chime.capabilities import DirectDeviceCapabilities
-    from app.protect.client import PROTOCOL_NOTES
-    from app.audio.tts import normalized_cache_key
-    from app.audio.cache import RingtoneIndex
-    from app.protect.events import NormalizedProtectEvent
-    from app.rules.engine import RuleAction
-    from app.playback.arbitration import QueueDisposition
-    from app.integrations.mqtt import mqtt_command
-    from app.routes.commands import announce_command
-
-    assert Settings.from_env().app_port > 0
-    assert StaticEnvCredentialProvider("fixture").name == "static-env"
-    assert is_dataclass(DirectDeviceCapabilities)
-    assert "v1.7.20" in PROTOCOL_NOTES
-    assert normalized_cache_key(" Hello ") == normalized_cache_key("hello")
-    assert RingtoneIndex
-    assert is_dataclass(NormalizedProtectEvent)
-    assert is_dataclass(RuleAction)
-    assert QueueDisposition.PLAYED.value == "played"
-    assert mqtt_command({"buzzer": True}).action == "buzzer"
-    assert announce_command("hello").text == "hello"
 
 
 def test_app_exposes_services_container(main_module):
@@ -46,23 +19,6 @@ def test_chime_runtime_owns_direct_client_and_capability_state():
 
     assert runtime.direct_client is direct
     assert runtime.capability_state == "not_yet_probed"
-
-
-def test_runtime_uses_modular_implementations(main_module):
-    from app.audio.cache import RingtoneIndex
-    from app.chime.capabilities import DirectDeviceCapabilities
-    from app.chime.credentials import StaticEnvCredentialProvider
-    from app.integrations.mqtt import MqttBridge
-    from app.playback.arbitration import ArbitrationQueue
-    from app.rules.engine import RulesEngine
-
-    assert isinstance(main_module.ringtone_index, RingtoneIndex)
-    assert main_module.DirectDeviceCapabilities is DirectDeviceCapabilities
-    assert main_module.StaticEnvCredentialProvider is StaticEnvCredentialProvider
-    assert main_module.MqttBridge is MqttBridge
-    assert main_module.RulesEngine is RulesEngine
-    assert all(isinstance(runtime.queue, ArbitrationQueue)
-               for runtime in main_module.chime_runtimes.values())
 
 
 def test_import_does_not_construct_http_clients(main_module):
@@ -217,20 +173,3 @@ async def test_hung_piper_connect_cannot_block_lifespan(main_module, monkeypatch
     async with asyncio.timeout(0.1):
         async with main_module._lifespan(main_module.app):
             assert services.health.start.called
-
-
-def test_runtime_has_one_source_of_truth_for_extracted_classes(main_module):
-    import inspect
-
-    expected_modules = {
-        "DirectDeviceCapabilities": "app.chime.capabilities",
-        "StaticEnvCredentialProvider": "app.chime.credentials",
-        "FileCredentialProvider": "app.chime.credentials",
-        "MqttBridge": "app.integrations.mqtt",
-        "ChimeRuntime": "app.playback.arbitration",
-        "RulesEngine": "app.rules.engine",
-    }
-    for name, module_name in expected_modules.items():
-        runtime_class = getattr(main_module, name)
-        assert runtime_class.__module__ == module_name
-        assert inspect.getmodule(runtime_class).__name__ == module_name

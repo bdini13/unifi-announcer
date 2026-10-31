@@ -32,7 +32,7 @@ so defaults apply.
 
 ## Camera target limits
 
-Camera speakers are explicit experimental targets and never participate in implicit `default` resolution. They currently accept `announce` only. Repeats reuse the same validated AAC stream; per-request `volume` and `profile` are rejected because talkback volume remains device-managed. Buzzer, assigned-default, and ringtone-preset actions targeting a camera or a mixed group fail before any member plays.
+Camera speakers are explicit experimental targets and never participate in implicit `default` resolution. They currently accept `announce` only. Repeats reuse the same validated AAC stream; per-request `volume` and `profile` are rejected because talkback volume remains device-managed. Buzzer, built-in default-tone, and ringtone-preset actions targeting a camera or a mixed group fail before any member plays.
 
 ## Quiet hours
 

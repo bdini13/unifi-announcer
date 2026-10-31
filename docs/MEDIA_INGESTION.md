@@ -9,7 +9,7 @@ UniFi Announcer `v2.2.0-beta.4` candidate adds bounded binary-audio ingestion fo
 
 The Home Assistant integration can now accept a `media-source://` ID on a UniFi Announcer `media_player`. Home Assistant resolves that ID locally, reads or downloads the resolved audio under a strict byte limit, and uploads only the bounded audio bytes to the Announcer backend.
 
-The backend then validates and normalizes the payload before handing it to the same `AnnouncementDispatcher` used by ordinary text announcements. There is no separate media playback engine.
+The backend checks MIME type and bounds the payload before handing a lazy audio request to the same `AnnouncementDispatcher` used by ordinary text announcements. It decodes only when that dispatcher requests the audio after policy, target, and queue-admission checks. There is no separate media playback engine.
 
 The resulting path is:
 
@@ -24,13 +24,16 @@ HA media-source resolver
 POST /media/announce
         |
         v
-MIME / size / decode / duration validation
+MIME / input-size validation
         |
         v
-mono 22.05 kHz 64 kbps MP3 normalization
+AnnouncementDispatcher: quiet hours / target checks
         |
         v
-AnnouncementDispatcher
+bounded target admission / priority / dedupe
+        |
+        v
+bounded decode / duration / MP3 normalization
         |
         +--> Smart Chime fixed TTS slots
         |
@@ -93,6 +96,12 @@ Default backend limits are deliberately conservative:
 | Duration | 30 s | `MEDIA_MAX_DURATION_SECONDS` |
 | Normalize/probe operation | 15 s | `MEDIA_NORMALIZE_TIMEOUT_SECONDS` |
 | Normalized MP3 | 1 MiB | existing `MAX_MP3_BYTES` |
+| Concurrent decoder workflows | 2 | `MEDIA_NORMALIZE_CONCURRENCY` |
+| Pending media requests, including active uploads/playback | 8 | `MEDIA_MAX_PENDING_REQUESTS` |
+
+The 15-second preparation deadline covers waiting for a decoder plus both probing and encoding. It does not include receiving the request body or device playback. The pending-request limit applies before reading a body, bounding simultaneous buffered uploads as well as decoder waiters; excess media requests return HTTP 429 and can be retried later.
+
+Cancellation and timeout wait for any already-started temporary-file write to finish before removing the file. Asyncio cannot interrupt an operating-system disk write, so that cleanup can extend response time past the preparation deadline while still preventing an orphaned upload file.
 
 The Home Assistant client independently applies the same 4 MiB input ceiling while reading a resolved local file or streaming a resolved media URL. It does not buffer an unbounded response first.
 
@@ -148,6 +157,7 @@ The endpoint fails before Protect playback when input is outside the contract:
 | `403` | missing or incorrect application API key |
 | `413` | input or normalized output exceeds the configured byte limit |
 | `415` | unsupported/missing content type or compressed request body |
+| `429` | bounded media-request capacity is full; retry later |
 | `502` | canonical dispatcher/playback failure |
 
 Canonical non-error queue dispositions remain unchanged, including `suppressed`, `deduped`, `dropped`, and `partial` where applicable.
@@ -156,7 +166,11 @@ Canonical non-error queue dispositions remain unchanged, including `suppressed`,
 
 Binary media is injected into the existing announce operation with a task-local context value. It is visible only to the one dispatcher task associated with that upload. Concurrent normal text announcements continue to call the configured TTS synthesizer, and concurrent media requests receive independent payloads.
 
-The task-local value is cleared in a `finally` block even if dispatch fails or is cancelled.
+Normalization is lazy and shared by all targets in one request. Quiet-hours suppression, invalid targets, and requests fully deduplicated or dropped by queue admission do not start `ffprobe` or `ffmpeg`. Requests waiting for a target reservation have not started normalization. At most the configured number of normalization workflows can run at once; cancellation or timeout kills and reaps the active subprocess and frees request/decoder capacity. The task-local value is cleared in a `finally` block even if dispatch fails or is cancelled. A response that did not prepare audio reports `normalized_bytes: 0` and `normalized_content_type: null`.
+
+The beta.4 candidate includes the reliability dispatcher's admission and playback-duration guards. HTTP integration tests exercise the real admission gate, including duplicate/full-queue rejection before normalization and cancellation of queued media. This combined code remains an unpublished candidate; physical validation is still required.
+
+CI reuses its one built runtime image for `scripts/smoke_media_codec.py`. The smoke check converts a quarter-second of generated silence from stereo 44.1 kHz WAV and verifies actual mono 22.05 kHz MP3 output with the installed codecs. It runs with Docker networking disabled, performs no playback, and complements the fast mocked policy/cancellation tests.
 
 ## Candidate physical validation
 

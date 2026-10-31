@@ -72,17 +72,19 @@ async def _setup(hass, announce_media: AsyncMock):
     try:
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
+        registry = er.async_get(hass)
+        player = next(
+            entity.entity_id
+            for entity in registry.entities.values()
+            if entity.config_entry_id == entry.entry_id
+            and entity.unique_id == f"{entry.entry_id}_chime-1_media_player"
+        )
+    except BaseException:
+        patches[-1].stop()
+        raise
     finally:
         for item in reversed(patches[:-1]):
             item.stop()
-
-    registry = er.async_get(hass)
-    player = next(
-        entity.entity_id
-        for entity in registry.entities.values()
-        if entity.config_entry_id == entry.entry_id
-        and entity.unique_id == f"{entry.entry_id}_chime-1_media_player"
-    )
     return entry, player, patches[-1]
 
 

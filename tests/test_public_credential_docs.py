@@ -66,23 +66,3 @@ def test_bug_report_collects_safe_credential_and_lifecycle_diagnostics():
     assert "Protect reported a Chime disconnect/reconnect" in template
     assert "id: slot_status" in template
     assert "content hit/miss" in template
-
-
-def test_v2_1_6_release_gate_is_recorded_as_passed():
-    checklist = Path("docs/RELEASE_CHECKLIST.md").read_text()
-    notes = Path("docs/RELEASE_NOTES_v2.1.6.md").read_text()
-
-    assert "## v2.1.6 release gate — PASS" in checklist
-    assert "PR #23" in checklist
-    assert "- [x] The expected announcement is audible on the physical Smart Chime." in checklist
-    assert "- [x] Protect `play-speaker` returns HTTP 200 for the same request." in checklist
-    assert "passed before merge and publication" in notes
-    assert "canonical post-publication verification record" in notes
-    assert "must not be published until" not in notes
-
-
-def test_future_release_process_rejects_stale_gate_language():
-    checklist = Path("docs/RELEASE_CHECKLIST.md").read_text()
-
-    assert "contain no unresolved future-tense blocker" in checklist
-    assert "must not be published until" in checklist

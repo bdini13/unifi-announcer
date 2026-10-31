@@ -47,6 +47,10 @@ class InvalidMedia(MediaIngestError):
     """The payload is not decodable bounded audio."""
 
 
+class MediaPreparationBusy(MediaIngestError):
+    """All bounded media-request slots are occupied."""
+
+
 @dataclass(frozen=True)
 class MediaLimits:
     """Limits applied before media reaches a Protect playback backend."""
@@ -55,12 +59,20 @@ class MediaLimits:
     max_output_bytes: int = 1024 * 1024
     max_duration_seconds: float = 30.0
     normalize_timeout_seconds: float = 15.0
+    normalize_concurrency: int = 2
+    max_pending_requests: int = 8
 
     def __post_init__(self) -> None:
         if type(self.max_input_bytes) is not int or self.max_input_bytes <= 0:
             raise ValueError("MEDIA_MAX_INPUT_BYTES must be a positive integer")
         if type(self.max_output_bytes) is not int or self.max_output_bytes <= 0:
             raise ValueError("MAX_MP3_BYTES must be a positive integer")
+        for name, value in (
+            ("MEDIA_NORMALIZE_CONCURRENCY", self.normalize_concurrency),
+            ("MEDIA_MAX_PENDING_REQUESTS", self.max_pending_requests),
+        ):
+            if type(value) is not int or value <= 0:
+                raise ValueError(f"{name} must be a positive integer")
         for name, value in (
             ("MEDIA_MAX_DURATION_SECONDS", self.max_duration_seconds),
             ("MEDIA_NORMALIZE_TIMEOUT_SECONDS", self.normalize_timeout_seconds),
@@ -80,6 +92,8 @@ class MediaLimits:
             normalize_timeout_seconds=float(
                 os.getenv("MEDIA_NORMALIZE_TIMEOUT_SECONDS", "15")
             ),
+            normalize_concurrency=int(os.getenv("MEDIA_NORMALIZE_CONCURRENCY", "2")),
+            max_pending_requests=int(os.getenv("MEDIA_MAX_PENDING_REQUESTS", "8")),
         )
 
 
@@ -113,7 +127,7 @@ class AudioMediaNormalizer:
         os.close(descriptor)
         path = Path(raw_path)
         try:
-            await asyncio.to_thread(path.write_bytes, payload)
+            await self._write_input(path, payload)
             duration = await self._probe_duration(path, demuxer)
             if duration <= 0 or not math.isfinite(duration):
                 raise InvalidMedia("media duration is invalid")
@@ -167,7 +181,38 @@ class AudioMediaNormalizer:
                 )
             return EncodedAudio(normalized, encode_ms=encode_ms)
         finally:
-            await asyncio.to_thread(path.unlink, missing_ok=True)
+            # The writer has finished before this point. Keep final removal
+            # free of cancellation points so a second cancellation cannot skip
+            # cleanup after the first one interrupted preparation.
+            path.unlink(missing_ok=True)
+
+    @staticmethod
+    async def _write_input(path: Path, payload: bytes) -> None:
+        """Join non-interruptible file I/O before propagating cancellation.
+
+        Cancelling a thread await does not stop its write: unlinking first can
+        let that thread recreate the temporary file afterward. A preparation
+        deadline therefore waits for an already-started write to finish cleanup.
+        """
+        writer = asyncio.get_running_loop().run_in_executor(None, path.write_bytes, payload)
+        cancellation = None
+        while True:
+            try:
+                await asyncio.shield(writer)
+                break
+            except asyncio.CancelledError as exc:
+                cancellation = exc
+                if writer.done():
+                    if not writer.cancelled():
+                        writer.exception()
+                    break
+            except Exception:
+                if cancellation is None:
+                    raise
+                # Preserve request cancellation even if disk I/O also failed.
+                break
+        if cancellation is not None:
+            raise cancellation
 
     async def _probe_duration(self, path: Path, demuxer: str) -> float:
         output = await self._run(

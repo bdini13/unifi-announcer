@@ -10,7 +10,9 @@ Do not tag or publish beta.4 from an implementation-only SHA. Freeze one exact c
 
 Beta.4 adds native Home Assistant media-source ingestion, including the media-source handoff used by `tts.speak`, without creating a second playback path.
 
-Home Assistant resolves `media-source://` locally and uploads bounded audio bytes to authenticated `POST /media/announce`. The backend validates and normalizes that audio to the existing MP3 contract, then dispatches it through the same `AnnouncementDispatcher` used by ordinary text announcements.
+Home Assistant resolves `media-source://` locally and uploads bounded audio bytes to authenticated `POST /media/announce`. The backend validates MIME type and input size, then passes a lazy audio request to the same `AnnouncementDispatcher` used by ordinary text announcements. Decoding and normalization to the existing MP3 contract happen after policy, target, and queue-admission checks.
+
+The candidate also includes the [unreleased reliability repairs](RELEASE_NOTES_UNRELEASED.md), including durable playback reservations, resident-content invalidation, provisioning recovery, preset replacement journaling, and HA instance routing. This integration does not change the physical-validation gate.
 
 See [Native Home Assistant media ingestion](MEDIA_INGESTION.md) for the operator and architecture details.
 
@@ -81,10 +83,14 @@ The candidate adds regression coverage for:
 - deterministic normalization contract;
 - authenticated media-route dispatch into the existing announcement command;
 - task-local audio substitution rather than TTS invocation;
+- real admission rejection of duplicate/full-queue uploads before decoding;
+- bounded decoder/request concurrency, preparation deadlines, and cancellation cleanup;
 - Home Assistant media-source forwarding to the media API;
 - arbitrary direct-URL rejection;
 - raw-audio client transport parameters and extended media request timeout;
 - all existing backend, camera, fixed-slot, Home Assistant, lint, compile, metadata, Compose, and Docker tests.
+
+CI runs a silent real-codec smoke check inside the existing built image with networking disabled; it does not add a second container build.
 
 ## Publication gate
 

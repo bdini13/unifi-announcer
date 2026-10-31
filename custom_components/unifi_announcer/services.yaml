@@ -2,6 +2,12 @@ announce:
   name: Announce
   description: Speak a message through UniFi Announcer with optional playback controls.
   fields:
+    config_entry_id:
+      name: Announcer instance
+      description: Select the service instance. Required when multiple instances are configured.
+      selector:
+        config_entry:
+          integration: unifi_announcer
     message:
       name: Message
       description: Text to announce.
