@@ -22,6 +22,14 @@ Forced preset replacement now needs spare capacity, verifies and durably records
 
 All October 25 changes were developed with the Chime offline. Their automated regressions are not new acoustic, firmware, deployment, or physical-restart validation.
 
+## Follow-up recovery and hardware checks — 2026-10-30–31
+
+Requests arriving while dynamic slots are unready now fail before renewing an uncertain-write guard. Previously, an announcement or TTS preset could postpone startup recovery even though no write began. Two regressions verify unchanged persisted deadlines and immediate maintenance admission; interrupted real writes still retain their guard. The primary branch passed 557 backend tests in 4.51 seconds and Ruff.
+
+The combined native-media candidate `998eb0926c1a20b5a90462795978a12353ad54a2` in [PR #47](https://github.com/bdini13/unifi-announcer/pull/47) was temporarily tested on one Smart Chime with firmware `1.7.20` and Protect `7.3.70`. A listener confirmed ordered phrases, WAV conversion, native HA TTS, queued text/media, and repeated speech across a backend restart. A fresh request immediately after a physical reboot received Protect HTTP 500, surfaced as Announcer HTTP 502/failed. After the uncertainty guard expired, another request played clearly once. Immediate reconnect readiness remains an unresolved release gate; the delayed success does not establish a reliable boot delay.
+
+The original backend image and configuration were restored with the current data and the same two owned slot identities. The existing HA component was not replaced. These results do not physically validate the subsequent unready-request correction, camera or multi-device paths, saved Protect audio, or destructive recovery scenarios. The detailed report is maintained with PR #47.
+
 ## Validation required before release
 
 Automated regressions cover cancellation, preset transactions and identity, reversed camera groups, bounded urgent overload, per-target dedupe before preparation, durable acoustic guards, interrupted provisioning, controller-event races, malformed optional state, sparse slot numbering, credential isolation/rotation, persistence failure, and minimum/current HA compatibility. These are synthetic tests, not new device-validation claims.

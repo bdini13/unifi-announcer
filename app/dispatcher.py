@@ -8,6 +8,7 @@ from typing import Any, Awaitable, Callable, Literal
 
 from app.observability import AnnouncementTiming
 from app.playback.arbitration import PlaybackRequest, QueueDisposition, QueueResult
+from app.playback.dynamic_slots import DynamicSlotUnavailable
 from app.tracks import RingtoneCapacityError, TrackRecord
 
 Action = Literal["announce", "buzzer", "play_default", "play_preset"]
@@ -226,6 +227,13 @@ class AnnouncementDispatcher:
             camera_audio: bytes | None = None
 
             def guard_slot_write() -> None:
+                # Startup recovery may still be pending after an acoustic hold
+                # expires. Reject known-unready slots before creating another
+                # uncertainty hold for a write that prepare() cannot attempt.
+                if not getattr(self.dynamic_slots, "ready", True):
+                    raise DynamicSlotUnavailable(
+                        self.dynamic_slots.last_error or "dynamic TTS slots are not ready"
+                    )
                 # A cancelled direct upload may still finish on the device.
                 # Persist an uncertainty window before any physical write so a
                 # failed preparation/restart cannot immediately reuse its target.
