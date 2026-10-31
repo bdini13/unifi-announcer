@@ -12,6 +12,8 @@ from app.playback import guards as guard_module
 from app.playback.admission import DispatchAdmission
 from app.playback.arbitration import ChimeDescriptor, ChimeRuntime
 from app.playback.guards import PlaybackGuards
+from app.playback.dynamic_slots import DynamicSlotUnavailable
+from app.playback.production_slots import DynamicTtsSlotManager
 
 
 @pytest.fixture
@@ -188,6 +190,49 @@ async def test_acknowledged_play_shortens_only_the_network_interval(tmp_path, cl
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("action", ["announce", "play_preset"])
+async def test_unready_slots_do_not_renew_expired_guard_or_block_recovery(tmp_path, clock, action):
+    guards = PlaybackGuards(tmp_path / "guards.json")
+    admission = DispatchAdmission(guards=guards)
+    physical = target()
+    guards.hold(physical, 5)
+    clock.wall += 6
+    clock.monotonic += 6
+    previous_state = guards.path.read_bytes()
+
+    # A restarted manager remains unready until its next recovery attempt,
+    # even after the acoustic deadline has elapsed.
+    backend = AsyncMock()
+    slots = DynamicTtsSlotManager(
+        data_dir=tmp_path, list_ringtones=backend, upload_ringtone=backend,
+        delete_ringtone=backend, resolve_ringtone=backend,
+        refresh_index=backend, get_chime=backend, play_ringtone=backend,
+    )
+    slots.last_error = "waiting for active playback or persisted playback guards"
+    play = AsyncMock()
+    runner = dispatcher(admission, physical, play)
+    runner.dynamic_slots = slots
+    runner.synthesize = AsyncMock(return_value=b"audio")
+    runner.synthesize_preset = AsyncMock(return_value=b"audio")
+    try:
+        with pytest.raises(DynamicSlotUnavailable, match="persisted playback guards"):
+            await runner.dispatch(AnnouncementCommand(
+                action=action, text="hello" if action == "announce" else None,
+                preset="alert" if action == "play_preset" else None,
+                repeat_times=1,
+            ))
+        backend.assert_not_awaited()
+        play.assert_not_awaited()
+        assert guards.path.read_bytes() == previous_state
+        assert PlaybackGuards(guards.path).remaining(physical) == 0
+        maintenance = admission.try_acquire([physical])
+        assert maintenance is not None
+        maintenance.release()
+    finally:
+        await admission.stop()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["announce", "play_preset"])
 async def test_cancelled_slot_write_keeps_durable_uncertainty_window(tmp_path, clock, action):
     guards = PlaybackGuards(tmp_path / "guards.json")
     admission = DispatchAdmission(guards=guards)
@@ -201,7 +246,7 @@ async def test_cancelled_slot_write_keeps_durable_uncertainty_window(tmp_path, c
         assert PlaybackGuards(guards.path).remaining(physical) == 30
         raise asyncio.CancelledError()
 
-    runner.dynamic_slots = SimpleNamespace(prepare=prepare)
+    runner.dynamic_slots = SimpleNamespace(ready=True, prepare=prepare)
     try:
         with pytest.raises(asyncio.CancelledError):
             await runner.dispatch(AnnouncementCommand(

@@ -20,7 +20,9 @@ For dynamic speech, UniFi Announcer synthesizes audio with Piper or Edge TTS, st
 
 ## Unreleased media candidate
 
-This beta.4 candidate combines native Home Assistant media uploads with the reliability repairs below. HA 2026.3.2 and 2026.10.0 have separate compatibility gates. Playback commands, including media uploads, allow 150 seconds for the backend's 120-second deadline; polling remains 15 seconds. The candidate has not been published, deployed, or physically validated.
+This beta.4 candidate combines native Home Assistant media uploads with the reliability repairs below. HA 2026.3.2 and 2026.10.0 have separate compatibility gates. Playback commands, including media uploads, allow 150 seconds for the backend's 120-second deadline; polling remains 15 seconds. A temporary candidate passed single-Chime listening checks for REST speech, WAV uploads, native HA `tts.speak`, and a backend restart during repeated speech on October 30. See the [exact build, results, and remaining gates](docs/validation/reliability-single-chime-2026-10-30.md). It remains unreleased; the installed HA integration was not replaced with the exact candidate component.
+
+**Immediate playback after a physical Chime reboot remains an open release gate:** on the October 31 repeat, Protect returned HTTP 500 for the first announcement after reconnect, and Announcer returned a failed result. A delayed retry passed audibly after the uncertainty guard expired; the earlier failure's cause remains unproven. The original service was restored and verified. The listener corrected a separate earlier “no audio” response, which is not evidence of a silent-success defect.
 
 Media decoding follows target/policy checks and bounded queue admission, so suppressed, deduplicated, and fully dropped requests start no decoder. By default, at most two decoder workflows and eight buffered/waiting uploads are admitted; cancellation kills and reaps the subprocess. CI checks real WAV-to-MP3 conversion in its existing container build. See [media bounds and isolation](docs/MEDIA_INGESTION.md#concurrency-and-isolation).
 
@@ -61,7 +63,7 @@ Typical uses include:
 | Multiple chimes and named groups | 🧪 Automated coverage; multi-device physical validation pending |
 | Protect camera-speaker TTS | 🧪 `v2.2.0-beta.3`; established model path validated on one UVC G3 Instant, plus exact-profile opt-in validated on one representative G4 Instant without broad compatibility claims |
 | Protect event rules | 🧪 Experimental |
-| Native HA `tts.speak` media ingestion | ⏭️ Planned for a later v2.2 prerelease |
+| Native HA `tts.speak` media ingestion | 🧪 Unreleased beta.4 candidate; heard successfully on one Smart Chime with the existing beta.4 HA integration |
 
 ## CI performance (unreleased)
 
@@ -82,13 +84,13 @@ The working branch adds the following changes; these are **not included in the p
 - Preset replacement uploads and verifies the replacement before retiring the previous recording, with a durable recovery journal and explicit spare-capacity requirement. Duration metadata is tied to the selected ringtone identity.
 - Playback rejects missing catalog identities, disconnected Chimes, and missing resident content before sending a command. HA's shared announcement service supports explicit instance selection and survives another instance unloading.
 
-See [playback arbitration](docs/ARBITRATION.md), [configuration](.env.example), and [unreleased validation and rollback notes](docs/RELEASE_NOTES_UNRELEASED.md). Playback changes still need physical validation before release.
+See [playback arbitration](docs/ARBITRATION.md), [configuration](.env.example), and [unreleased validation and rollback notes](docs/RELEASE_NOTES_UNRELEASED.md). The [October 30 single-Chime tests](docs/validation/reliability-single-chime-2026-10-30.md) cover several playback paths; other physical release gates remain outstanding.
 
 ## Additional reliability findings — October 2026
 
 The [REA audit](docs/validation/rea-audit-2026-10-24.md) inspected shipped Protect `7.2.105` and `7.3.70` code and reproduced additional failures offline. Protect can restore canonical audio over a dynamic speech slot without a Chime reboot. Protect can also return success after falling back to built-in track 1 when a requested ringtone is missing.
 
-The October 25 offline repairs address stale resident proof, interrupted provisioning, restart guards, preset replacement/identity, malformed optional cache data, readiness ordering, and HA service routing. [Repair validation and remaining limits](docs/validation/offline-repairs-2026-10-25.md) distinguish these implemented changes from outstanding device checks. Ordinary-preset content preflight cannot yet prove the controller's exact filename-to-slot routing, and no preflight makes a concurrent controller write atomic with playback. These changes have not been deployed or acoustically validated. Native Xtensa upload-completion analysis remains incomplete.
+The October 25 offline repairs address stale resident proof, interrupted provisioning, restart guards, preset replacement/identity, malformed optional cache data, readiness ordering, and HA service routing. [Repair validation and remaining limits](docs/validation/offline-repairs-2026-10-25.md) describe their automated coverage; the [October 30 temporary deployment](docs/validation/reliability-single-chime-2026-10-30.md) adds audible text/media and active-play restart evidence on one Chime. No zero-write resident hit was observed in the initial October 30 checks. Ordinary-preset content preflight cannot yet prove the controller's exact filename-to-slot routing, and no preflight makes a concurrent controller write atomic with playback. Native Xtensa upload-completion analysis remains incomplete.
 
 ## How playback works
 

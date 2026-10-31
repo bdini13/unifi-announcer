@@ -20,19 +20,31 @@ Playback deadlines are durably written to `playback_guards.json` before a potent
 
 Forced preset replacement now needs spare capacity, verifies and durably records the replacement before retiring the old ID, and reconciles interrupted writes through `preset_update.json`. Unknown upload outcomes and unverified deletion remain errors; they never authorize deleting an unfamiliar same-name object. Duration metadata follows exact identity, saved presets cannot remain eligible for legacy dynamic eviction, and duplicate names fail lookup. HA's global announcement action supports explicit `config_entry_id` routing and remains registered while another entry is loaded; normal setup retains its existing single-entry restriction.
 
-All October 25 changes were developed with the Chime offline. Their automated regressions are not new acoustic, firmware, deployment, or physical-restart validation.
+All October 25 changes were developed with the Chime offline. The later [October 30 single-Chime session](validation/reliability-single-chime-2026-10-30.md) adds temporary-deployment and audible evidence for the exact backend revision recorded there; it does not physically validate every repair.
+
+## Single-Chime candidate test — 2026-10-30–31
+
+Backend `998eb0926c1a20b5a90462795978a12353ad54a2` was temporarily tested on one Smart Chime running firmware `1.7.20`, with Protect `7.3.70` and UniFi OS `5.1.34`. Image provenance and the running version matched. The listener confirmed distinct REST phrases in order, a normalized WAV upload, native HA `tts.speak`, and two complete repetitions across a backend restart followed by a recovery phrase. The durable playback guard survived the restart, and readiness remained false until recovery. The same two owned identities were retained. Nine invalid media/parameter requests returned the expected errors without changing slot state.
+
+No zero-write resident hit was observed in the initial October 30 checks; replay uploaded fresh audio and used the existing bounded stale-inventory fallback. Concurrent text/media requests also completed audibly in order without overlap. HA ran its existing beta.4 component on HA `2026.9.1`, so this is not an exact-source physical test of the candidate integration.
+
+**Immediate post-reconnect playback remains an open release gate:** on the October 31 repeat with the same candidate, device uptime reset and Protect reported `CONNECTED`, but the first fresh announcement received Protect HTTP 500 from `play-speaker`. Announcer returned HTTP 502/disposition `failed`; this was not a false success. After the uncertainty guard expired, an explicit delayed retry returned HTTP 200/played, and the listener confirmed clear speech exactly once. That recovery does not erase the immediate failure; its cause remains unproven. The listener corrected the earlier “no audio” response from the original check; that response is superseded and does not establish a silent-success defect. The [session record](validation/reliability-single-chime-2026-10-30.md) preserves both results. The virtual preset's API result was not acoustically validated.
+
+The candidate stopped cleanly, and the original service was restored with its unchanged image and environment. Health was `ok`, both original slot identities were ready, and current shared data was retained rather than replaced with an obsolete content-state backup.
+
+A follow-up fix prevents unready announcement and preset requests from renewing an uncertain-write hold when no write began. The combined media branch passed 591 backend tests in 4.54 seconds and Ruff; the primary branch passed 557 backend tests in 4.51 seconds. This correction postdates the live image, was not deployed, and still needs validation on a rebuilt candidate. It is separate from the unresolved Protect HTTP 500 after reconnect and is not presented as a fix for that failure.
 
 ## Validation required before release
 
 Automated regressions cover cancellation, preset transactions and identity, reversed camera groups, bounded urgent overload, per-target dedupe before preparation, durable acoustic guards, interrupted provisioning, controller-event races, malformed optional state, sparse slot numbering, credential isolation/rotation, persistence failure, and minimum/current HA compatibility. These are synthetic tests, not new device-validation claims.
 
-Before deployment or release, build the image and validate Compose, HACS, and Hassfest. On hardware, verify consecutive different phrases, interrupted synthesis, saved audio whose content differs from its name, long audio with repeats, active-play restart recovery, controller ringtone synchronization, two Chimes with distinct credentials, mixed/reversed camera groups, and startup with a temporarily unreachable device followed by recovery. Test through HA as well as REST. Record the exact candidate revision, device count, and observed audible result.
+Before release, validate the final image, Compose, HACS, and Hassfest against the final source revision. The October 30 session covers consecutive phrases, WAV and HA TTS playback, and long audio with repeats across an active-play backend restart for its recorded build. Outstanding hardware gates include interrupted synthesis, saved audio whose content differs from its name, controller ringtone synchronization, two Chimes with distinct credentials, mixed/reversed camera groups, and startup with a temporarily unreachable device followed by recovery. Recheck changed paths on the rebuilt candidate, including its exact HA component. Record the exact revision, device count, and observed audible result.
 
 ## Rollback
 
 Back up `.env` and the entire mounted `/data` directory before testing. Preserve the installation, slot registry, provisioning journal, `preset_update.json`, and `playback_guards.json`; they contain ownership, transaction, or playback-safety evidence. Retain the currently deployed backend image and matching HA component. Let active playback holds expire before reverting to code that ignores the new durable deadlines. Stop the candidate before restoring the prior backend/component and, if necessary, its matching data backup. Added preset duration metadata is optional and older track-registry readers ignore it; fixed slot ownership/schema remains unchanged. Reverting code removes the new safeguards and retries.
 
-No release tag, running deployment, or published version is changed by this working branch. Security vulnerability remediation is outside this change set.
+No release tag or published version has changed. The October 30–31 candidate deployment was temporary; [restoration of the original service was verified](validation/reliability-single-chime-2026-10-30.md#candidate-and-scope). Security vulnerability remediation is outside this change set.
 
 ## Reliability validation before CI cleanup — 2026-10-10
 
@@ -41,7 +53,7 @@ No release tag, running deployment, or published version is changed by this work
 - The separate PR43 compatibility worktree: 436 backend tests and 28 HA tests on each supported test version passed.
 - Ruff, Python compilation, JSON metadata, workflow YAML parsing, and whitespace checks passed.
 - FFmpeg 7.1 encoded a synthetic two-second tone at 0.5×, 1×, and 2× into approximately 4.05, 2.06, and 1.07 seconds respectively; no speaker playback was involved.
-- Docker/Compose, HACS/Hassfest CI execution, and physical device validation remain pending. No live deployment or GitHub branch was modified.
+- At this checkpoint, Docker/Compose, HACS/Hassfest CI execution, and physical device validation were pending. No live deployment or GitHub branch had been modified.
 
 The subsequent [CI review](CI.md) removed redundant tests and eliminated fake-device waits; that October 10 baseline had 436 tests and ran in approximately 6.5 seconds. The offline audit adds focused failure-path regressions rather than reinstating historical prose snapshots or fake-device delays.
 
