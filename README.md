@@ -38,10 +38,10 @@ Typical uses include:
 | Arbitrary text announcements | ✅ Supported; requires Smart Chime device password revealed in Protect UI |
 | Piper local TTS | ✅ Stable |
 | Edge TTS | ✅ Supported |
-| Content-aware resident TTS reuse | ✅ v2.1.8; zero-write replay while same-boot proof remains valid |
+| Content-aware resident TTS reuse | ✅ v2.1.8; validated same-boot replay, with the controller-resynchronization limitation below |
 | Smart Chime reboot/reconnect invalidation | ✅ v2.1.8; resident proof is revoked before unsafe reuse |
 | Reusable spoken presets | ✅ Stable |
-| Buzzer and assigned-default playback | ✅ Stable |
+| Buzzer and built-in default-tone playback | ✅ Stable; manual default playback selects built-in track 1, independently of camera ringtone assignments |
 | Exactly two service-owned dynamic TTS slots | ✅ Stable |
 | Bounded host-side TTS cache | ✅ Stable |
 | Quiet hours, priority, dedupe, bounded queues | ✅ Stable |
@@ -57,6 +57,33 @@ Typical uses include:
 | Protect event rules | 🧪 Experimental |
 | Native HA `tts.speak` media ingestion | ⏭️ Planned for a later v2.2 prerelease |
 
+## CI performance (unreleased)
+
+The CI review reduced the main reliability branch's local backend suite from 87.72 to 6.46 seconds while retaining the 100-message slot regression and both HA compatibility environments. Duplicate workflow runs and obsolete prose/implementation snapshots were removed; dependencies and Docker layers now use caches. See [CI coverage, measurements, and tradeoffs](docs/CI.md).
+
+## Unreleased reliability fixes
+
+The working branch adds the following changes; these are **not included in the published tags** above:
+
+- Cancelled Piper requests discard their connection so the next request cannot receive stale speech. Saved presets play their uploaded audio; only configured virtual presets synthesize their names.
+- Bounded, per-target priority admission and dedupe run before synthesis or slot preparation. Durable Chime reservations cover estimated sound duration, repeats, and uncertain in-flight writes across service restarts. Camera groups acquire locks consistently and lock waits have a deadline.
+- Commands have a 120-second backend deadline, including queue wait and preparation. HA playback waits up to 150 seconds; status polling keeps its 15-second timeout.
+- Failed slot startup retries every 30 seconds while preserving all ownership checks. `/health` reports degraded readiness until configured Chime slots recover.
+- Each additional Chime can reference its own password environment variable or credential file. Invalid and duplicate Chime definitions fail startup.
+- HA registry handling supports both 2026.3.2 and 2026.10.0, covered by separate CI jobs.
+- Piper voice selection and speech rate now affect generated audio. Slot-state persistence flushes file contents and directory updates before dependent device writes.
+- Resident reuse requires current inventory fingerprints; controller changes revoke trust, while matching feedback from an Announcer write preserves its prepared lease. Interrupted provisioning resumes from durable evidence and keeps readiness false until restoration finishes.
+- Preset replacement uploads and verifies the replacement before retiring the previous recording, with a durable recovery journal and explicit spare-capacity requirement. Duration metadata is tied to the selected ringtone identity.
+- Playback rejects missing catalog identities, disconnected Chimes, and missing resident content before sending a command. HA's shared announcement service supports explicit instance selection and survives another instance unloading.
+
+See [playback arbitration](docs/ARBITRATION.md), [configuration](.env.example), and [unreleased validation and rollback notes](docs/RELEASE_NOTES_UNRELEASED.md). Playback changes still need physical validation before release.
+
+## Additional reliability findings — October 2026
+
+The [REA audit](docs/validation/rea-audit-2026-10-24.md) inspected shipped Protect `7.2.105` and `7.3.70` code and reproduced additional failures offline. Protect can restore canonical audio over a dynamic speech slot without a Chime reboot. Protect can also return success after falling back to built-in track 1 when a requested ringtone is missing.
+
+The October 25 offline repairs address stale resident proof, interrupted provisioning, restart guards, preset replacement/identity, malformed optional cache data, readiness ordering, and HA service routing. [Repair validation and remaining limits](docs/validation/offline-repairs-2026-10-25.md) describe their automated coverage. The October 30–31 tests of the combined native-media candidate in [PR #47](https://github.com/bdini13/unifi-announcer/pull/47) confirmed ordered speech, WAV and HA TTS playback, and repeated speech across a backend restart on one Chime. Playback immediately after a physical reboot returned a Protect error; a later attempt passed with a listener. The original service was restored, and release gates remain open. Ordinary-preset content preflight cannot yet prove the controller's exact filename-to-slot routing, and no preflight makes a concurrent controller write atomic with playback. Native Xtensa upload-completion analysis remains incomplete.
+
 ## How playback works
 
 ```text
@@ -71,9 +98,10 @@ Dynamic text follows this path:
 
 ```text
 text
+  -> bounded priority admission + per-target dedupe
   -> Piper or Edge TTS
   -> bounded content-addressed MP3 cache on the Announcer host
-  -> validate Smart Chime identity + current boot epoch
+  -> validate Smart Chime identity + current boot epoch + inventory fingerprint
   -> select an already-resident matching UA-TTS slot when safe
        OR overwrite UA-TTS-1 / UA-TTS-2 when content is not resident
   -> Protect play-speaker using the persistent ringtone ID
@@ -82,7 +110,7 @@ text
 
 Direct Smart Chime HTTPS is used only to overwrite an **exact previously proven UniFi-Announcer-owned slot**. Playback itself remains Protect-mediated. The service never guesses a physical slot and never treats built-in, user-created, preset, ambiguous, or unknown tracks as overwrite candidates.
 
-Resident content trust is intentionally stronger than a simple filename/hash cache. v2.1.8 ties reusable content to the current physical Chime boot using direct-device uptime, persists write-ahead invalidation before physical writes, and revokes content proof on observed reconnect/lifecycle changes. If boot continuity cannot be proven, the fast path is rejected and the phrase is safely rewritten.
+Resident content trust is intentionally stronger than a simple filename/hash cache. v2.1.8 ties reusable content to the current physical Chime boot using direct-device uptime, persists write-ahead invalidation before physical writes, and revokes content proof on observed reconnect/lifecycle changes. The unreleased repairs also require matching current inventory and account for Protect as another writer. Missing continuity or content evidence rejects reuse; ambiguous ownership prevents a write.
 
 ## Observed v2.1.8 latency
 
@@ -308,6 +336,8 @@ Physical Chimes also expose queue-depth state. Logical groups intentionally do n
 
 See [Home Assistant documentation](docs/HOME_ASSISTANT.md) for the complete entity/action model and troubleshooting.
 
+Failed direct-device capability probes now retry every 30 seconds until recovery, so a transient startup error does not leave health permanently degraded. The [single-Chime reliability test](docs/validation/reliability-single-chime-2026-10-10.md) records listening results and remaining validation.
+
 ## REST examples
 
 ```bash
@@ -331,7 +361,7 @@ Buzzer:
 curl -fsS -X POST "${AUTH[@]}" "$ANNOUNCER_URL/buzzer"
 ```
 
-Assigned default:
+Built-in default tone (track 1):
 
 ```bash
 curl -fsS -X POST "${AUTH[@]}" "$ANNOUNCER_URL/play-default"
@@ -380,11 +410,14 @@ The MCP surface deliberately excludes credential retrieval, raw Protect administ
 
 ```env
 CHIMES_CONFIG='[
-  {"name":"kitchen","id":"<kitchen-chime-id>","direct_ip":"<optional-chime-ip>"},
-  {"name":"upstairs","id":"<upstairs-chime-id>"}
+  {"name":"kitchen","id":"<kitchen-chime-id>","direct_ip":"<optional-chime-ip>","password_env":"KITCHEN_CHIME_PASSWORD"},
+  {"name":"upstairs","id":"<upstairs-chime-id>","credential_file":"/data/credentials/upstairs"}
 ]'
+KITCHEN_CHIME_PASSWORD=<kitchen-device-password>
 GROUPS_CONFIG='{"downstairs":["kitchen"],"whole_house":["kitchen","upstairs"]}'
 ```
+
+The per-target credential fields require the unreleased changes above. `password_env` names an environment variable supplied to the container; `credential_file` must be readable inside the container. Omit both to use the existing global credential provider. `CHIME_ID` defines the reserved `default` target; names and physical IDs must be unique.
 
 Then target `whole_house` from REST/HA/MCP. Each physical Chime has its own bounded queue and group members execute concurrently. Content reuse is accepted only when every requested target has matching trusted content; otherwise the required targets are safely rewritten. Multi-Chime behavior has automated coverage but still requires independent physical multi-device validation.
 
@@ -407,7 +440,7 @@ GROUPS_CONFIG='{"mixed":["kitchen","family_room_camera"]}'
 
 The backend reads each configured camera from Protect bootstrap, validates the exact model/profile, transcodes the existing bounded MP3, mints a fresh controller-authorized WebSocket, sends one complete ADTS frame at a time, and closes without retrying uncertain audio. Cameras are never auto-discovered into Announcer and never join the implicit default target.
 
-Camera targets currently support **text announcements and repeats only**. Per-request volume/profile overrides, buzzer, assigned-default, and ringtone-preset operations fail before synthesis or playback. Camera volume remains device-managed.
+Camera targets currently support **text announcements and repeats only**. Per-request volume/profile overrides, buzzer, built-in default-tone, and ringtone-preset operations fail before synthesis or playback. Camera volume remains device-managed.
 
 A per-camera preparation lease prevents two simultaneous controller-minted talkback sessions from being opened for the same physical camera; another camera remains independent. Authenticated `GET /targets` refreshes configured camera capability/availability on every poll. Home Assistant keeps explicit camera and mixed-group announcement entities present while a camera is offline and toggles their availability from refreshed capability state, so a reconnect does not require entity recreation. Legacy `GET /chimes` remains unchanged.
 

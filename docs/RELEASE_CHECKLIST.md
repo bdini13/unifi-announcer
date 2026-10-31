@@ -5,7 +5,7 @@ This file defines the evidence required before a UniFi Announcer release is tagg
 ## Automated gates for the exact release commit
 
 - [ ] Core lane uses Python 3.12 and runs `python -W error -m pytest -q tests` with sanitized non-live environment values.
-- [ ] Home Assistant lane uses the pinned HA test requirements and runs `python -m pytest -q tests_ha`.
+- [ ] Home Assistant minimum and current lanes use their respective pinned HA test requirements and runs `python -m pytest -q tests_ha`.
 - [ ] `ruff check .` passes.
 - [ ] `python -m compileall -q app custom_components` passes.
 - [ ] JSON metadata validation passes for HA/HACS files.

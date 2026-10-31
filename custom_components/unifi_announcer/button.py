@@ -36,7 +36,7 @@ class UniFiAnnouncerButton(UniFiAnnouncerEntity, ButtonEntity):
         self._attr_translation_key = f"play_{kind}"
         self._attr_name = {
             "buzzer": "Play buzzer",
-            "default": "Play default ringtone",
+            "default": "Play built-in default tone",
             "preset": "Play selected preset",
         }[kind]
 

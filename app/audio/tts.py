@@ -18,6 +18,7 @@ def normalize_text(text: str) -> str:
 def canonical_cache_key(text: str, *, engine: str, voice: str, rate: str,
                         sample_rate: int, encoder_profile: str) -> str:
     dimensions = {
+        "synthesis_revision": 2,
         "text": normalize_text(text), "engine": engine, "voice": voice,
         "rate": str(rate), "sample_rate": int(sample_rate),
         "encoder_profile": encoder_profile,
@@ -73,8 +74,9 @@ class PiperTTS:
 
     def __init__(self, uri: str, *, client_factory: Callable[[str], Any] | None = None,
                  event_adapter: Callable[[Any], tuple[str, dict | None]] | None = None,
-                 timeout_seconds: float | None = None) -> None:
+                 timeout_seconds: float | None = None, voice: str = "default") -> None:
         self.uri = self._normalize_uri(uri)
+        self.voice = voice
         self._client_factory = client_factory or self._default_factory
         self._event_adapter = event_adapter or self._wyoming_event
         self._client = None
@@ -96,6 +98,7 @@ class PiperTTS:
     async def start(self) -> None:
         if self._client is None:
             client = self._client_factory(self.uri)
+            self._client = client  # Also close a partially established connection.
             self._client = await client.__aenter__()
 
     async def stop(self) -> None:
@@ -110,6 +113,15 @@ class PiperTTS:
                     async with asyncio.timeout(self.timeout_seconds):
                         await self.start()
                         return await self._synthesize_once(text)
+                except asyncio.CancelledError:
+                    # Wyoming responses have no request ID. Unread frames from
+                    # an interrupted request must never enter the next phrase.
+                    try:
+                        async with asyncio.timeout(self.timeout_seconds):
+                            await self.stop()
+                    except Exception:
+                        self._client = None
+                    raise
                 except Exception:
                     try:
                         async with asyncio.timeout(self.timeout_seconds):
@@ -122,9 +134,10 @@ class PiperTTS:
             raise RuntimeError("unreachable")
 
     async def _synthesize_once(self, text: str) -> PCMResult:
-        from wyoming.tts import Synthesize
+        from wyoming.tts import Synthesize, SynthesizeVoice
         started = time.perf_counter_ns()
-        await self._client.write_event(Synthesize(text=text).event())
+        voice = SynthesizeVoice(name=self.voice) if self.voice != "default" else None
+        await self._client.write_event(Synthesize(text=text, voice=voice).event())
         chunks: list[bytes] = []
         metadata = {"rate": 22050, "width": 2, "channels": 1}
         while True:
@@ -157,11 +170,6 @@ class PiperTTS:
             return "audio-stop", None
         return event.type, None
 
-    @staticmethod
-    def mock_connection_benchmark(requests: int) -> dict[str, int]:
-        """Deterministic structural benchmark; no network or sound is produced."""
-        return {"fresh_connections": requests,
-                "persistent_connections": 1 if requests else 0}
 
 
 class EncodedAudio(bytes):

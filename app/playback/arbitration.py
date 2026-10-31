@@ -52,12 +52,13 @@ class ArbitrationQueue:
         self._recent: dict[str, int] = {}
         self._worker: asyncio.Task | None = None
         self._active = False
+        self.admission_depth = 0
         self._active_task: asyncio.Task | None = None
         self._active_future: asyncio.Future | None = None
 
     @property
     def depth(self) -> int:
-        return len(self._heap) + int(self._active)
+        return max(self.admission_depth, len(self._heap) + int(self._active))
 
     def _ensure_worker(self) -> None:
         if self._worker is None or self._worker.done():
@@ -88,12 +89,11 @@ class ArbitrationQueue:
                     victim_future.set_result(QueueResult(QueueDisposition.DROPPED))
                 if self.metrics:
                     self.metrics.inc("queue_dropped")
-            elif request.priority != 0:
+            else:
                 if self.metrics:
                     self.metrics.inc("queue_dropped")
                 return QueueResult(QueueDisposition.DROPPED)
-            # Emergency is admitted even if the sole capacity is currently
-            # active; an in-flight playback is never interrupted.
+            # Never interrupt in-flight playback or exceed the hard cap.
         if request.dedupe_key:
             self._recent[request.dedupe_key] = now + request.dedupe_window_ms * 1_000_000
         loop = asyncio.get_running_loop()
@@ -181,9 +181,10 @@ class ChimeRuntime:
         self.capability_state: Any = capability_state
         self.queue = ArbitrationQueue(desc.name, max_depth=max_depth, metrics=metrics)
         self.probe_task: asyncio.Task | None = None
+        self.capability_retry_interval = 30.0
 
     def start(self) -> None:
-        """Start a read-only capability probe isolated to this target."""
+        """Probe this target, retrying failed reads until capability recovery."""
         if self.desc.kind == "camera":
             return
         if self.probe_task is not None:
@@ -194,18 +195,23 @@ class ChimeRuntime:
         self.probe_task = asyncio.create_task(self._probe_capabilities())
 
     async def _probe_capabilities(self) -> None:
-        try:
-            await self.direct_client.info()
-            capabilities = self.direct_client.capabilities
-            values = capabilities.to_dict() if capabilities is not None else {}
-            self.capability_state = {"status": "available", **values}
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            # Expose only the exception class: device errors can contain URLs or
-            # credential material and capability reporting is a public GET.
-            self.capability_state = {
-                "status": "unavailable", "error_type": type(exc).__name__}
+        while True:
+            try:
+                await self.direct_client.info()
+                capabilities = self.direct_client.capabilities
+                values = capabilities.to_dict() if capabilities is not None else {}
+                self.capability_state = {"status": "available", **values}
+                return
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                # Expose only the exception class: device errors can contain URLs
+                # or credentials, and capability reporting is a public GET.
+                self.capability_state = {
+                    "status": "unavailable", "error_type": type(exc).__name__}
+            # A startup failure must not permanently hide later device recovery.
+            # stop() owns cancellation, including while this delay is pending.
+            await asyncio.sleep(self.capability_retry_interval)
 
     async def stop(self) -> None:
         if self.probe_task is not None and not self.probe_task.done():

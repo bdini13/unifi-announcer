@@ -2,17 +2,24 @@ name: validate-home-assistant
 
 on:
   push:
+    branches: [main]
+    tags: ["v*"]
   pull_request:
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "17 4 * * 1"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   hacs:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: HACS validation
         uses: hacs/action@1ebf01c408f29afcb6406bd431bc98fd8cbb15aa # main, pinned 2026-08-29
@@ -21,6 +28,7 @@ jobs:
 
   hassfest:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: home-assistant/actions/hassfest@a7c616ce81ccda50150bf1595786c71b1883fabb # master, pinned 2026-08-29

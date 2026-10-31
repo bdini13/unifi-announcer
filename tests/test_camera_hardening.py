@@ -14,6 +14,55 @@ from app.playback.camera_hardening import (
 from app.playback.camera_talkback import CameraTalkbackError
 
 
+@pytest.mark.asyncio
+async def test_camera_lock_wait_has_deadline_without_releasing_owner():
+    delegate = SimpleNamespace(session_timeout=0.01, _camera=AsyncMock())
+    hardened = HardenedCameraTalkback(delegate)
+    lock = asyncio.Lock()
+    hardened._locks["camera-one"] = lock
+    await lock.acquire()
+    with pytest.raises(CameraTalkbackError, match="timed out"):
+        await asyncio.wait_for(hardened.prepare("camera-one", b"audio"), 0.2)
+    assert lock.locked()
+    delegate._camera.assert_not_awaited()
+    lock.release()
+
+
+@pytest.mark.asyncio
+async def test_reversed_camera_groups_finish_and_release_all_sessions():
+    from app.dispatcher import AnnouncementCommand
+    from test_dispatcher import _dispatcher
+    from app.playback.arbitration import ChimeDescriptor, ChimeRuntime
+
+    sessions = []
+
+    async def prepare(*args, **kwargs):
+        await asyncio.sleep(0)  # Allow competing groups to acquire their first camera.
+        session = _Prepared()
+        sessions.append(session)
+        return session
+
+    hardened = HardenedCameraTalkback(SimpleNamespace(
+        _camera=AsyncMock(return_value=_camera()), prepare=prepare))
+    targets = [ChimeRuntime(ChimeDescriptor(name, kind="camera", camera_id=name),
+                           capability_state={"status": "available"}) for name in ("A", "B")]
+    dispatcher = _dispatcher(protect=SimpleNamespace(), targets=targets)
+    dispatcher.synthesize = AsyncMock(return_value=b"audio")
+    dispatcher.camera_playback = hardened
+    dispatcher.resolve_targets = lambda name: targets if name == "AB" else targets[::-1]
+    try:
+        results = await asyncio.wait_for(asyncio.gather(*(
+            dispatcher.dispatch(AnnouncementCommand(action="announce", text="test", target=name))
+            for name in ("AB", "BA")
+        )), 0.2)
+        assert all(result.disposition == "played" for result in results)
+        assert len(sessions) == 4 and all(session.closed for session in sessions)
+        assert not any(lock.locked() for lock in hardened._locks.values())
+    finally:
+        for target in targets:
+            await target.stop()
+
+
 def _camera(**overrides):
     camera = {
         "id": "camera-one",

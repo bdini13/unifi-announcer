@@ -20,7 +20,8 @@ async def test_cache_status_and_authenticated_refresh(main_module, monkeypatch):
         denied = await client.post("/cache/ringtones/refresh")
         accepted = await client.post("/cache/ringtones/refresh", headers={"X-API-Key": "fixture-key"})
     assert status.status_code == 200
-    assert set(status.json()) == {"loaded", "entries", "last_refresh_at", "refresh_count"}
+    assert {"loaded", "entries", "last_refresh_at", "refresh_count"} <= set(status.json())
+    assert status.json()["ambiguous_entries"] == 0
     assert denied.status_code == 403
     assert accepted.status_code == 200
     refresh.assert_awaited_once()
@@ -111,7 +112,7 @@ async def test_concurrent_tts_cache_miss_synthesizes_once(main_module, monkeypat
 
 
 @pytest.mark.asyncio
-async def test_cached_preset_play_is_exactly_one_protect_http_call(main_module, monkeypatch):
+async def test_cached_preset_play_rechecks_identity_and_resident_audio(main_module, monkeypatch):
     monkeypatch.setattr(main_module, "APP_API_KEY", "configured-test-key")
     monkeypatch.setattr(main_module, "CHIME_ID", "chime-fixture")
     main_module.ringtone_index.put({"name": "fixture-tone", "id": "ringtone-fixture"})
@@ -119,6 +120,13 @@ async def test_cached_preset_play_is_exactly_one_protect_http_call(main_module, 
     main_module.protect._csrf = "fixture-csrf"
 
     with respx.mock(assert_all_called=True) as router:
+        import hashlib
+        audio = b"canonical-preset-audio"
+        router.get("https://unifi.invalid/proxy/protect/api/ringtones").respond(
+            200, json=[{"id": "ringtone-fixture", "name": "fixture-tone"}])
+        router.get("https://unifi.invalid/proxy/protect/api/ringtones/ringtone-fixture").respond(200, content=audio)
+        router.get("https://unifi.invalid/proxy/protect/api/chimes/chime-fixture").respond(
+            200, json={"state": "CONNECTED", "speakerTrackList": [{"md5": hashlib.md5(audio).hexdigest()}]})
         play = router.post(
             "https://unifi.invalid/proxy/protect/api/chimes/chime-fixture/play-speaker"
         ).mock(return_value=httpx.Response(204))
@@ -130,8 +138,8 @@ async def test_cached_preset_play_is_exactly_one_protect_http_call(main_module, 
             response = await client.post("/presets/fixture-tone/play")
 
     assert response.status_code == 200
-    # RESPX rejects any unregistered request; this one registered route was
-    # called exactly once, proving there was no list-ringtones preflight.
+    assert response.json()["disposition"] == "played"
+    # Read-only preflight now precedes exactly one playback mutation.
     assert play.call_count == 1
 
 
